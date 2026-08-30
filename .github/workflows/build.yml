@@ -58,7 +58,9 @@ jobs:
 
       - name: Enable Visual Studio environment
         if: matrix.msvc_arch
-        uses: step-security/msvc-dev-cmd@v1
+        # step-security/msvc-dev-cmd requires a paid subscription on private repos;
+        # this is the upstream action it is a drop-in replacement for.
+        uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{matrix.msvc_arch}}
 
