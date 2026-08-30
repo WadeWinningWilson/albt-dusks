@@ -24,44 +24,47 @@
 
 #include <cstring>
 
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+// ============================================
+// NEW CODE - ALBT multiplatform
+// The TARGET_PC header overload carries two IF_DUSK_ARG extras (itemGiveTag /
+// itemOriginalNo), but every published SDK link stub exports the 9-arg stock
+// symbol. Bind that one under a private name so the extras never enter the call:
+// MSVC aliases it at link time, Itanium targets take the mangled label directly
+// (clang adds Mach-O's leading underscore to asm labels itself, so one string
+// covers ELF and Mach-O alike).
+//
+// The label is not hand-written: it was read back from clang for this exact
+// signature and matched against the published stub's symbol table. Do not copy
+// the variant in tools/mods/soul-of-light - that one says _Z16 for
+// a 17-character name and spells out PK4cXyz/Pv where Itanium requires the S1_
+// and S5_ back-references, so it binds nothing off Windows.
+//
+// Declared at file scope on purpose: /alternatename below encodes a global
+// function (@@YA...), which is not what MSVC would emit inside a namespace.
+// ============================================
+#if defined(_MSC_VER)
+fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameters, const cXyz* i_pos,
+                                    int i_roomNo, const csXyz* i_angle, const cXyz* i_scale,
+                                    s8 i_argument, createFunc i_createFunc, void* i_createFuncData);
+#pragma comment(linker,     "/alternatename:?fopAcM_fastCreate_stock@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2@Z=?fopAcM_fastCreate@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2@Z")
+#else
+extern "C++" fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameters,
+                                                 const cXyz* i_pos, int i_roomNo,
+                                                 const csXyz* i_angle, const cXyz* i_scale,
+                                                 s8 i_argument, createFunc i_createFunc,
+                                                 void* i_createFuncData)
+    asm("_Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_");
 #endif
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
 
 namespace {
 
-// Current dusklight-main exports the IF_DUSK_ARG fastCreate (item-give tag extras). The SDK link
-// stub still advertises the old 9-arg import, so resolve from the loaded game binary at init.
-using FastCreateFn = fopAc_ac_c* (*)(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8,
-                                     createFunc, void*, u32, u8);
-FastCreateFn g_fastCreate = nullptr;
-
-bool resolve_fast_create() {
-    if (g_fastCreate != nullptr) {
-        return true;
-    }
-#if defined(_WIN32)
-    HMODULE exe = GetModuleHandleW(nullptr);
-    if (exe == nullptr) {
-        return false;
-    }
-    g_fastCreate = reinterpret_cast<FastCreateFn>(GetProcAddress(
-        exe, "?fopAcM_fastCreate@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2IE@Z"));
-    return g_fastCreate != nullptr;
-#else
-    g_fastCreate = &fopAcM_fastCreate;
-    return true;
-#endif
-}
-
 fopAc_ac_c* fast_create_drop(s16 procName, u32 parameters, const cXyz* pos, int roomNo,
                              const csXyz* angle, const cXyz* scale, s8 argument) {
-    if (g_fastCreate == nullptr) {
-        return nullptr;
-    }
-    return g_fastCreate(procName, parameters, pos, roomNo, angle, scale, argument, nullptr, nullptr,
-                        0, 0xFF);
+    return fopAcM_fastCreate_stock(procName, parameters, pos, roomNo, angle, scale, argument,
+                                   nullptr, nullptr);
 }
 
 u16 sOrbRecovery = 0;
@@ -519,10 +522,6 @@ ModResult albw_soul_of_light_build_panel(UiElementHandle panel, ModError*) {
 }
 
 ModResult albw_soul_of_light_init(ModError*) {
-    if (!resolve_fast_create()) {
-        svc_log->error(mod_ctx, "fopAcM_fastCreate not found in host binary");
-        return MOD_ERROR;
-    }
     if (mods::hook::add_pre<DeadInit>(on_dead_pre) != MOD_OK ||
         mods::hook::add_post<DeadInit>(on_dead_post) != MOD_OK)
     {
