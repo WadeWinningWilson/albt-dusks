@@ -1,0 +1,242 @@
+#include "boss_hp_hud.h"
+
+#include "albw_common.h"
+#include "albw_game.h"
+#include "boss_refinement.h"
+#include "config_vars.h"
+
+#include "d/d_attention.h"
+#include "d/d_com_inf_game.h"
+#include "f_op/f_op_actor.h"
+#include "f_pc/f_pc_name.h"
+#include "m_Do/m_Do_graphic.h"
+#include "JSystem/J2DGraph/J2DGrafContext.h"
+#include "JSystem/J2DGraph/J2DOrthoGraph.h"
+#include "JSystem/J2DGraph/J2DPicture.h"
+#include "JSystem/J2DGraph/J2DTextBox.h"
+#include "JSystem/JKernel/JKRArchive.h"
+#include "JSystem/JKernel/JKRHeap.h"
+#include "JSystem/JUtility/TColor.h"
+
+namespace {
+
+static constexpr f32 kBarWidthFrac = 0.58f;
+static constexpr f32 kBarHeightFrac = 0.016f;
+static constexpr f32 kBarTopFrac = 0.908f;
+static constexpr f32 kBarBorder = 1.0f;
+static constexpr f32 kNameFontFrac = 0.028f;
+static constexpr f32 kNameGap = 3.0f;
+static const char* kBlockBti = "tt_block8x8.bti";
+
+static J2DPicture* sBlock = nullptr;
+static J2DTextBox* sName = nullptr;
+
+const s16 kBossNames[] = {
+    fpcNm_B_BQ_e,  fpcNm_B_GM_e,  fpcNm_E_GM_e,  fpcNm_NPC_KN_e, fpcNm_B_ZANT_e, fpcNm_E_FM_e,
+    fpcNm_B_DS_e,  fpcNm_B_DR_e,  fpcNm_B_OB_e,  fpcNm_B_YO_e,   fpcNm_B_GND_e,
+    fpcNm_B_MGN_e, fpcNm_E_HZELDA_e,
+};
+
+bool isBossProfile(s16 profName) {
+    for (s16 name : kBossNames) {
+        if (name == profName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const char* bossDisplayName(s16 profName) {
+    switch (profName) {
+    case fpcNm_B_BQ_e:
+        return "Twilit Parasite DIABABA";
+    case fpcNm_B_GM_e:
+    case fpcNm_E_GM_e:
+        return "Twilit Arachnid Armogohma";
+    case fpcNm_NPC_KN_e:
+        return "Hero of Time";
+    case fpcNm_B_ZANT_e:
+        return "Usurper King Zant";
+    case fpcNm_E_FM_e:
+        return "Twilit Igniter FYRUS";
+    case fpcNm_B_DS_e:
+        return "Twilit Fossil Stallord";
+    case fpcNm_B_DR_e:
+        return "Twilit Dragon Argorok";
+    case fpcNm_B_OB_e:
+        return "Twilit Aquatic Morpheel";
+    case fpcNm_B_YO_e:
+        return "Twilit Ice Mass Blizzeta";
+    case fpcNm_B_GND_e:
+        return "Dark Lord Ganondorf";
+    case fpcNm_B_MGN_e:
+        return "Dark Beast Ganon";
+    case fpcNm_E_HZELDA_e:
+        return "Possessed Zelda";
+    default:
+        return nullptr;
+    }
+}
+
+bool ensureResources() {
+    if (sBlock == nullptr) {
+        JKRArchive* arc = g_dComIfG_gameInfo.play.getMsgArchive(5);
+        if (arc == nullptr) {
+            return false;
+        }
+        ResTIMG* timg = static_cast<ResTIMG*>(arc->getResource('TIMG', kBlockBti));
+        if (timg == nullptr) {
+            return false;
+        }
+        sBlock = JKR_NEW J2DPicture(timg);
+        if (sBlock == nullptr) {
+            return false;
+        }
+    }
+    if (sName == nullptr) {
+        sName = JKR_NEW J2DTextBox();
+        if (sName == nullptr) {
+            return false;
+        }
+        sName->setFont(mDoExt_getMesgFont());
+    }
+    return true;
+}
+
+void drawRect(f32 x, f32 y, f32 w, f32 h, u8 r, u8 g, u8 b, u8 a = 255) {
+    if (w <= 0.0f || h <= 0.0f) {
+        return;
+    }
+    sBlock->setBlackWhite(JUtility::TColor(0, 0, 0, 0), JUtility::TColor(r, g, b, a));
+    sBlock->setAlpha(a);
+    sBlock->draw(x, y, w, h, false, false, false);
+}
+
+fopAc_ac_c* lockOnBossTarget() {
+    dAttention_c* attn = albw_game::attention();
+    if (attn == nullptr) {
+        return nullptr;
+    }
+    fopAc_ac_c* lock = attn->LockonTarget(0);
+    if (lock == nullptr || !fopAcM_IsActor(lock)) {
+        return nullptr;
+    }
+    if (!isBossProfile(fopAcM_GetName(lock))) {
+        return nullptr;
+    }
+    if (lock->health <= 0) {
+        return nullptr;
+    }
+    return lock;
+}
+
+}  // namespace
+
+void albw_boss_hp_hud_draw() {
+    if (!albw_cfg_bool(g_boss_hp_bars, false)) {
+        return;
+    }
+
+    fopAc_ac_c* boss = lockOnBossTarget();
+    if (boss == nullptr) {
+        return;
+    }
+
+    const s16 profName = fopAcM_GetName(boss);
+    const char* name = bossDisplayName(profName);
+    if (name == nullptr) {
+        return;
+    }
+
+    s16 current = boss->health;
+    s16 maxHp = boss->field_0x560 > 0 ? boss->field_0x560 : boss->health;
+    f32 fillRatio = 0.0f;
+    bool haveFill = false;
+
+    if (profName == fpcNm_B_GM_e || profName == fpcNm_E_GM_e) {
+        dAlbwBoss_ArmogohmaBarState st{};
+        if (dAlbwBoss_armogohmaQueryHealthBar(&st) && st.visible) {
+            fillRatio = st.fillRatio;
+            current = st.current;
+            maxHp = st.max;
+            haveFill = true;
+        }
+    } else {
+        int qCur = 0;
+        int qMax = 0;
+        bool queried = false;
+        if (profName == fpcNm_B_BQ_e) {
+            queried = dAlbwBoss_diababaQueryHealthBar(&qCur, &qMax);
+        } else if (profName == fpcNm_B_ZANT_e) {
+            queried = dAlbwBoss_zantQueryHealthBar(&qCur, &qMax);
+        } else if (profName == fpcNm_E_FM_e) {
+            queried = dAlbwBoss_fyrusQueryHealthBar(&qCur, &qMax);
+        }
+        if (queried && qMax > 0 && qCur > 0) {
+            current = static_cast<s16>(qCur);
+            maxHp = static_cast<s16>(qMax);
+        }
+    }
+
+    if (!haveFill) {
+        if (maxHp <= 0 || current <= 0) {
+            return;
+        }
+        fillRatio = static_cast<f32>(current) / static_cast<f32>(maxHp);
+    }
+
+    if (fillRatio <= 0.0f || !ensureResources()) {
+        return;
+    }
+
+    J2DGrafContext* gfx = g_dComIfG_gameInfo.play.getCurrentGrafPort();
+    if (gfx == nullptr) {
+        return;
+    }
+
+    const f32 minX = mDoGph_gInf_c::getMinXF();
+    const f32 minY = mDoGph_gInf_c::getMinYF();
+    const f32 scrW = mDoGph_gInf_c::getWidthF();
+    const f32 scrH = mDoGph_gInf_c::getHeightF();
+
+    J2DOrthoGraph* ortho = static_cast<J2DOrthoGraph*>(gfx);
+    ortho->setOrtho(minX, minY, scrW, scrH, -1.0f, 1.0f);
+    ortho->setup2D();
+    ortho->setPort();
+
+    const f32 barW = scrW * kBarWidthFrac;
+    const f32 barH = scrH * kBarHeightFrac;
+    const f32 barX = minX + (scrW - barW) * 0.5f;
+    const f32 barY = minY + scrH * kBarTopFrac;
+    const f32 fontSz = scrH * kNameFontFrac;
+    const f32 nameY = barY - kNameGap - fontSz;
+
+    f32 fill = fillRatio;
+    if (fill > 1.0f) {
+        fill = 1.0f;
+    }
+    const f32 fillW = barW * fill;
+
+    drawRect(barX - kBarBorder, barY - kBarBorder, barW + kBarBorder * 2.0f,
+             barH + kBarBorder * 2.0f, 32, 32, 36, 255);
+    drawRect(barX, barY, barW, barH, 18, 18, 22, 168);
+    drawRect(barX, barY, fillW, barH, 176, 8, 8, 255);
+
+    sName->setFontSize(fontSz, fontSz);
+    sName->setString(name);
+    // Fork-style black outline (8-neighbor) then white fill.
+    sName->setCharColor(0xFF000000);
+    sName->setGradColor(0xFF000000);
+    for (int ox = -1; ox <= 1; ++ox) {
+        for (int oy = -1; oy <= 1; ++oy) {
+            if (ox == 0 && oy == 0) {
+                continue;
+            }
+            sName->draw(barX + static_cast<f32>(ox), nameY + static_cast<f32>(oy), barW,
+                        HBIND_CENTER);
+        }
+    }
+    sName->setCharColor(0xFFFFFFFF);
+    sName->setGradColor(0xFFFFFFFF);
+    sName->draw(barX, nameY, barW, HBIND_CENTER);
+}

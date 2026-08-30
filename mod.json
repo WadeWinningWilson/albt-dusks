@@ -1,7 +1,7 @@
 {
-  "id": "com.example.my_mod",
-  "name": "My Mod",
-  "version": "1.0.0",
-  "author": "You",
-  "description": "An example Dusklight mod"
+  "id": "dev.albt.albw",
+  "name": "A Link Between Twilight Full Plugin",
+  "version": "0.1.0",
+  "author": "ALBT",
+  "description": "Full ALBT plugin for stock Dusklight (multiplatform: Windows amd64 + Linux x86_64 in one bundle). P3 meter (partial), stick-cycle lock-on, region HP/damage, Soul of Light (owns wallet half), enemy death rupees. Standalone feature dusks remain separate — do not load both."
 }

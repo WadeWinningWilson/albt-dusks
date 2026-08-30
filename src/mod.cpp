@@ -1,46 +1,210 @@
-#include "mods/hook.hpp"
+// A Link Between Twilight — collective mod (dev.albt.albw).
+// Standalone feature dusks (dev.albt.*) remain separate products; do not load both.
+
+#include "albw_common.h"
+#include "albw_settings_ui.h"
+#include "albw_stage.h"
+#include "config_vars.h"
+#include "focused_arts.h"
+#include "flurry_rush.h"
+#include "hold_a_crawl.h"
+#include "lockout.h"
+#include "mail.h"
+#include "meter.h"
+#include "quick_swap.h"
+#include "quick_equip.h"
+#include "extra_item_slot.h"
+#include "extra_item_slot_hooks.h"
+#include "z_item_hud.h"
+#include "parry_hooks.h"
+#include "wolf_arts.h"
+#include "wolf_combat.h"
+#include "modules.h"
+#include "shield_mod.h"
+#include "boss_refinement_hooks.h"
+#include "rental_shop.h"
+
 #include "mods/service.hpp"
+#include "mods/svc/config.h"
 #include "mods/svc/hook.h"
 #include "mods/svc/log.h"
-
-// Game includes
-#include "d/d_item_data.h"
-#include "f_op/f_op_actor_mng.h"
+#include "mods/svc/ui.h"
 
 DEFINE_MOD();
-
 IMPORT_SERVICE(LogService, svc_log);
 IMPORT_SERVICE(HookService, svc_hook);
+// Host may ship config@1.0 (Mods panel only) or @1.1+ (Settings → ALBT tab).
+IMPORT_SERVICE_VERSION(ConfigService, svc_config, 0);
+IMPORT_SERVICE(UiService, svc_ui);
 
-// Example game hook: turn heart drops into green rupees.
-DEFINE_HOOK(fopAcM_createItem, CreateItem);
+namespace {
 
-static HookAction on_create_item_pre(ModContext*, void* args, void*, void*) {
-    int& itemNo = mods::arg_ref<int>(args, 1);
-    if (itemNo == dItemNo_HEART_e) {
-        itemNo = dItemNo_GREEN_RUPEE_e;
+ModResult register_all_config(ModError* error) {
+    if (albw_register_bool("meter", true, &g_meter_enabled) != MOD_OK ||
+        albw_register_bool("stick_cycle", true, &g_stick_cycle) != MOD_OK ||
+        albw_register_int("hp_normal", 1, &g_hp_normal) != MOD_OK ||
+        albw_register_int("hp_midboss", 1, &g_hp_midboss) != MOD_OK ||
+        albw_register_int("hp_boss", 1, &g_hp_boss) != MOD_OK ||
+        albw_register_int("hp_final", 1, &g_hp_final) != MOD_OK ||
+        albw_register_bool("region_hp", false, &g_region_hp) != MOD_OK ||
+        albw_register_bool("region_damage", false, &g_region_damage) != MOD_OK ||
+        albw_register_bool("region_mult", true, &g_region_mult) != MOD_OK ||
+        albw_register_bool("region_mult_rupees", true, &g_region_mult_rupees) != MOD_OK ||
+        albw_register_bool("recovery_orb", true, &g_recovery_orb) != MOD_OK ||
+        albw_register_bool("kill_rupees", true, &g_kill_rupees) != MOD_OK ||
+        albw_register_bool("manual_shield", false, &g_manual_shield) != MOD_OK ||
+        albw_register_bool("shield_parry", false, &g_shield_parry) != MOD_OK ||
+        albw_register_bool("shield_durability", false, &g_shield_durability) != MOD_OK ||
+        albw_register_bool("focused_arts", false, &g_focused_arts) != MOD_OK ||
+        albw_register_bool("flurry_rush", false, &g_flurry_rush) != MOD_OK ||
+        albw_register_bool("wolf_combat", false, &g_wolf_combat) != MOD_OK ||
+        albw_register_bool("wolf_arts_dev_test", false, &g_wolf_arts_dev_test) != MOD_OK ||
+        albw_register_bool("hold_a_crawl", false, &g_hold_a_crawl) != MOD_OK ||
+        albw_register_bool("extra_item_slot_enabled", false, &g_extra_item_slot_enabled) != MOD_OK ||
+        albw_register_bool("extra_item_slot_quick_swap", false, &g_extra_item_slot_quick_swap) != MOD_OK ||
+        albw_register_int("extra_item_slot_mode", 0, &g_extra_item_slot_mode) != MOD_OK ||
+        albw_register_bool("extra_item_slot", false, &g_extra_item_slot_legacy) != MOD_OK ||
+        albw_register_bool("quick_equip_wheel", false, &g_quick_equip_wheel) != MOD_OK ||
+        albw_register_bool("postman_mail", true, &g_postman_mail) != MOD_OK ||
+        albw_register_bool("postman_mail_test", false, &g_postman_mail_test) != MOD_OK ||
+        albw_register_bool("parry_master", false, &g_parry_master) != MOD_OK ||
+        albw_register_bool("boss_hp_bars", false, &g_boss_hp_bars) != MOD_OK ||
+        albw_register_bool("boss_refinement", false, &g_boss_refinement) != MOD_OK ||
+        albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
+        albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
+        albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
+        albw_register_int("parry_icons_mode", 0, &g_parry_icons_mode) != MOD_OK ||
+        albw_register_int("shield_hud_visibility", 0, &g_shield_hud_visibility) != MOD_OK)
+    {
+        if (error != nullptr) {
+            error->code = MOD_ERROR;
+        }
+        svc_log->error(mod_ctx, "failed to register config");
+        return MOD_ERROR;
     }
-    return HOOK_CONTINUE;
+    return MOD_OK;
 }
 
+ModResult register_gameplay_settings() {
+    // Fork ALBW tab names/sections; extras remain in the Mods panel for now.
+    if (albw_register_gameplay_bool(
+            "Systems", "Soul of Light",
+            "After Talo is rescued, dying halves your rupees and leaves a Soul of Light at the "
+            "death spot to recover part of them. Off keeps your wallet unchanged and spawns "
+            "nothing. Item strip and meter refill on death are unaffected.",
+            g_recovery_orb) != MOD_OK)
+    {
+        svc_log->warn(mod_ctx, "Settings ALBT tab unavailable (host config v1.1+ required)");
+        return MOD_OK;
+    }
+    albw_register_gameplay_bool(
+        "Systems", "Enemy Death Rupees",
+        "Credit rupees directly to your wallet when enemies die and when boss fights end. "
+        "Vanilla drop tables (hearts, jars, ground rupees) are unchanged.",
+        g_kill_rupees);
+    albw_register_gameplay_bool(
+        "Quality of Life", "Stick Cycle Lock-on",
+        "While Z-targeting, right stick left/right cycles between nearby enemies that are "
+        "in combat with you instead of manually rotating the lock-on camera.",
+        g_stick_cycle);
+    albw_register_gameplay_bool(
+        "Systems", "Manual Shielding",
+        "Hold ZR (R2) with a shield equipped to raise guard without Z-target lock-on. When on, "
+        "Z-target guard also requires holding ZR.",
+        g_manual_shield);
+    albw_register_gameplay_bool(
+        "Systems", "Shield Parry & Bash Charges",
+        "LoP-style perfect guard window after raising shield; bash charge economy on blocks and "
+        "shield bashes. Disables vanilla R-bash in favor of ZR+B when enabled.",
+        g_shield_parry);
+    albw_register_gameplay_bool(
+        "Systems", "Shield Durability",
+        "Shields take durability damage on blocks; break empties the slot and marks it rental-"
+        "eligible. Off by default.",
+        g_shield_durability);
+    return MOD_OK;
+}
+
+}  // namespace
+
 extern "C" {
-MOD_EXPORT ModResult mod_initialize(ModError*) {
-    // Installs a pre hook on fopAcM_createItem.
-    ModResult result = mods::hook_add_pre<CreateItem>(svc_hook, on_create_item_pre);
-    if (result != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to install on_create_item_pre");
-        return result;
+
+MOD_EXPORT ModResult mod_initialize(ModError* error) {
+    if (register_all_config(error) != MOD_OK) {
+        return MOD_ERROR;
+    }
+    albw_extra_item_slot_migrate_legacy_config();
+    albw_extra_item_slot_sync_bools_from_mode();
+    register_gameplay_settings();
+
+    if (albw_meter_init(error) != MOD_OK || albw_lockout_init(error) != MOD_OK ||
+        albw_shield_init(error) != MOD_OK ||
+        albw_focused_arts_init(error) != MOD_OK ||
+        albw_flurry_init(error) != MOD_OK ||
+        albw_wolf_combat_init(error) != MOD_OK ||
+        albw_wolf_arts_init(error) != MOD_OK ||
+        albw_hold_a_crawl_init(error) != MOD_OK ||
+        albw_extra_item_slot_init(error) != MOD_OK ||
+        albw_extra_item_slot_hooks_init(error) != MOD_OK ||
+        albw_z_item_hud_hooks_init(error) != MOD_OK ||
+        albw_quick_swap_init(error) != MOD_OK ||
+        albw_quick_equip_init(error) != MOD_OK ||
+        albw_mail_init(error) != MOD_OK ||
+        albw_parry_master_init(error) != MOD_OK ||
+        albw_boss_refinement_init(error) != MOD_OK ||
+        albw_rental_shop_init(error) != MOD_OK ||
+        albw_stick_cycle_init(error) != MOD_OK ||
+        albw_region_hp_init(error) != MOD_OK || albw_soul_of_light_init(error) != MOD_OK ||
+        albw_enemy_rupees_init(error) != MOD_OK)
+    {
+        return MOD_ERROR;
     }
 
-    svc_log->info(mod_ctx, "my_mod initialized");
+    if (albw_settings_ui_register_panel(error) != MOD_OK) {
+        svc_log->warn(mod_ctx, "mods panel unavailable; config keys still work");
+    }
+
+    svc_log->info(mod_ctx, "dev.albt.albw ready (collective; standalones ship separately)");
     return MOD_OK;
 }
 
 MOD_EXPORT ModResult mod_update(ModError*) {
+    albw_extra_item_slot_config_tick();
+    albw_stage_tick();
+    albw_mail_update();
+    albw_quick_swap_tick();
+    albw_quick_equip_tick();
+    albw_wolf_arts_tick();
+    albw_focused_arts_tick();
+    albw_flurry_tick();
+    albw_rental_shop_tick();
+    albw_meter_update();
     return MOD_OK;
 }
 
-MOD_EXPORT ModResult mod_shutdown(ModError*) {
+MOD_EXPORT ModResult mod_shutdown(ModError* error) {
+    albw_enemy_rupees_shutdown(error);
+    albw_soul_of_light_shutdown(error);
+    albw_region_hp_shutdown(error);
+    albw_stick_cycle_shutdown(error);
+    albw_rental_shop_shutdown(error);
+    albw_mail_shutdown(error);
+    albw_parry_master_shutdown(error);
+    albw_boss_refinement_shutdown(error);
+    albw_extra_item_slot_hooks_shutdown(error);
+    albw_z_item_hud_hooks_shutdown(error);
+    albw_extra_item_slot_shutdown(error);
+    albw_quick_equip_shutdown(error);
+    albw_quick_swap_shutdown(error);
+    albw_hold_a_crawl_shutdown(error);
+    albw_wolf_arts_shutdown(error);
+    albw_wolf_combat_shutdown(error);
+    albw_flurry_shutdown(error);
+    albw_focused_arts_shutdown(error);
+    albw_shield_shutdown(error);
+    albw_meter_shutdown(error);
+    albw_lockout_shutdown(error);
     return MOD_OK;
 }
+
 }

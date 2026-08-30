@@ -1,0 +1,27 @@
+# Cross-compile Game ABI 2 mods to linux-x86_64 from Windows via Zig.
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+if (NOT ZIG)
+    set(ZIG "zig")
+endif ()
+
+set(CMAKE_C_COMPILER "${ZIG}")
+set(CMAKE_CXX_COMPILER "${ZIG}")
+set(CMAKE_C_COMPILER_ARG1 "cc")
+set(CMAKE_CXX_COMPILER_ARG1 "c++")
+set(CMAKE_C_FLAGS_INIT "-target x86_64-linux-gnu")
+set(CMAKE_CXX_FLAGS_INIT "-target x86_64-linux-gnu")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-target x86_64-linux-gnu -Wl,--allow-shlib-undefined")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-target x86_64-linux-gnu -Wl,--allow-shlib-undefined")
+set(CMAKE_MODULE_LINKER_FLAGS_INIT "-target x86_64-linux-gnu -Wl,--allow-shlib-undefined")
+
+set(CMAKE_C_COMPILER_ID Clang)
+set(CMAKE_CXX_COMPILER_ID Clang)
+set(CMAKE_C_COMPILER_VERSION 19.0)
+set(CMAKE_CXX_COMPILER_VERSION 19.0)
+set(CMAKE_C_COMPILER_FRONTEND_VARIANT GNU)
+set(CMAKE_CXX_COMPILER_FRONTEND_VARIANT GNU)
+set(CMAKE_C_COMPILER_WORKS TRUE)
+set(CMAKE_CXX_COMPILER_WORKS TRUE)

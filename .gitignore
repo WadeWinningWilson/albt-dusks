@@ -3,3 +3,7 @@
 /dusklight/
 .idea/
 .DS_Store
+
+# Build products and downloaded tools — CI produces release artifacts itself.
+/dist/
+/tools/bin/

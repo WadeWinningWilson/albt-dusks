@@ -1,0 +1,43 @@
+#pragma once
+
+#include "mods/svc/config.h"
+
+extern ConfigVarHandle g_meter_enabled;
+
+extern ConfigVarHandle g_stick_cycle;
+extern ConfigVarHandle g_hp_normal;
+extern ConfigVarHandle g_hp_midboss;
+extern ConfigVarHandle g_hp_boss;
+extern ConfigVarHandle g_hp_final;
+extern ConfigVarHandle g_region_hp;
+extern ConfigVarHandle g_region_damage;
+extern ConfigVarHandle g_region_mult;
+extern ConfigVarHandle g_region_mult_rupees;
+extern ConfigVarHandle g_recovery_orb;
+extern ConfigVarHandle g_kill_rupees;
+
+extern ConfigVarHandle g_manual_shield;
+extern ConfigVarHandle g_shield_parry;
+extern ConfigVarHandle g_shield_durability;
+extern ConfigVarHandle g_focused_arts;
+extern ConfigVarHandle g_flurry_rush;
+extern ConfigVarHandle g_wolf_combat;
+extern ConfigVarHandle g_wolf_arts_dev_test;
+extern ConfigVarHandle g_hold_a_crawl;
+extern ConfigVarHandle g_extra_item_slot_enabled;
+extern ConfigVarHandle g_extra_item_slot_quick_swap;
+extern ConfigVarHandle g_extra_item_slot_mode;
+extern ConfigVarHandle g_extra_item_slot_legacy;
+extern ConfigVarHandle g_quick_equip_wheel;
+extern ConfigVarHandle g_postman_mail;
+extern ConfigVarHandle g_postman_mail_test;
+
+extern ConfigVarHandle g_parry_master;
+extern ConfigVarHandle g_boss_hp_bars;
+extern ConfigVarHandle g_boss_refinement;
+extern ConfigVarHandle g_postman_rental;
+extern ConfigVarHandle g_master_quest;
+
+extern ConfigVarHandle g_lop_hud_mode;
+extern ConfigVarHandle g_parry_icons_mode;
+extern ConfigVarHandle g_shield_hud_visibility;

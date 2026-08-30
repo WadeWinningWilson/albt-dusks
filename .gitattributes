@@ -1,2 +1,7 @@
 # Bundles are byte-compared across platform builds; keep text files LF everywhere.
 * text=auto eol=lf
+
+# ...except Windows batch scripts: cmd.exe token-splits an LF-only .bat/.cmd.
+# These are dev scripts, never bundle content, so they do not affect byte-compare.
+*.bat text eol=crlf
+*.cmd text eol=crlf

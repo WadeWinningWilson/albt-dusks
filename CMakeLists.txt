@@ -1,20 +1,73 @@
 cmake_minimum_required(VERSION 3.26)
-project(my_mod CXX)
+project(albw CXX)
 
-# The Dusklight version to build against: a release tag (e.g. "v1.5.0") or a commit SHA.
-if (NOT DUSKLIGHT_VERSION)
-    set(DUSKLIGHT_VERSION "8caab1a6ba4aad5513bc9fe402a76dce53964e9c")
+# Prefer an existing main checkout (dusklight-main). Never point at the ALBT fork.
+if (NOT DUSKLIGHT_DIR AND EXISTS "../dusklight-main/sdk")
+    set(DUSKLIGHT_DIR "../dusklight-main" CACHE PATH "Path to stock Dusklight (main)")
 endif ()
-# Fetches the Dusklight sources into ./dusklight and provides DUSKLIGHT_DIR.
-# Use -DDUSKLIGHT_DIR= to point at an existing Dusklight checkout.
+
+if (NOT DUSKLIGHT_VERSION)
+    set(DUSKLIGHT_VERSION "a775418c667f748724c24283b9bad62ebe2dc48b")
+endif ()
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchDusklight.cmake")
 add_subdirectory("${DUSKLIGHT_DIR}/sdk" dusklight-sdk EXCLUDE_FROM_ALL)
 
-add_mod(my_mod
-        FEATURES game          # remove for service/asset-only mods; add webgpu for GfxService
-        SOURCES src/mod.cpp
+add_mod(albt_full_plugin
+        FEATURES game
+        SOURCES
+            src/mod.cpp
+            src/albw_common.cpp
+            src/albw_l1_input.cpp
+            src/albw_settings_ui.cpp
+            src/albw_stage.cpp
+            src/config_vars.cpp
+            src/meter.cpp
+            src/lockout.cpp
+            src/shield.cpp
+            src/shield_adapt.cpp
+            src/shield_game.cpp
+            src/shield_hooks.cpp
+            src/stick_cycle.cpp
+            src/region_table.cpp
+            src/region_hp.cpp
+            src/soul_of_light.cpp
+            src/enemy_rupees.cpp
+            src/wolf_combat.cpp
+            src/wolf_charge_hud.cpp
+            src/hold_a_crawl.cpp
+            src/quick_swap.cpp
+            src/quick_equip.cpp
+            src/extra_item_slot.cpp
+            src/extra_item_slot_hooks.cpp
+            src/z_item_hud.cpp
+            src/mail.cpp
+            src/mail_hooks.cpp
+            src/focused_arts.cpp
+            src/sim_time_scale.cpp
+            src/flurry_rush.cpp
+            src/flurry_hooks.cpp
+            src/wolf_arts.cpp
+            src/parry_master.cpp
+            src/parry_hooks.cpp
+            src/albw_combat.cpp
+            src/boss_hp_hud.cpp
+            src/boss_refinement.cpp
+            src/boss_refinement_hooks.cpp
+            src/rental_eligibility.cpp
+            src/rental_shop.cpp
+            src/rental_ui_text.cpp
+            src/rental_dialogue.cpp
+            src/rental_postman_hooks.cpp
+            src/rental_shop_ui.cpp
+            src/oocoo.cpp
+            src/mq_hearts.cpp
+            src/outfit.cpp
         MOD_JSON mod.json
-        RES_DIR res            # mod resources, including icon.png and banner.png
-        OVERLAY_DIR overlay    # game file overlays; remove if unused
-        TEXTURES_DIR textures  # texture replacements; remove if unused
+        RES_DIR res
+        OVERLAY_DIR overlay
+        TEXTURES_DIR textures
 )
+if (MSVC)
+    target_link_options(albt_full_plugin PRIVATE "/PDBALTPATH:%_PDB%")
+endif ()
