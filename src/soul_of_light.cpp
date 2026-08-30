@@ -29,9 +29,10 @@
 // The TARGET_PC header overload carries two IF_DUSK_ARG extras (itemGiveTag /
 // itemOriginalNo), but every published SDK link stub exports the 9-arg stock
 // symbol. Bind that one under a private name so the extras never enter the call:
-// MSVC aliases it at link time, Itanium targets take the mangled label directly
-// (clang adds Mach-O's leading underscore to asm labels itself, so one string
-// covers ELF and Mach-O alike).
+// MSVC aliases it at link time, Itanium targets take the mangled label directly.
+// clang uses an asm label VERBATIM and does not apply the platform symbol
+// prefix, so Mach-O needs the extra leading underscore spelled out - ELF and
+// Mach-O cannot share one string.
 //
 // The label is not hand-written: it was read back from clang for this exact
 // signature and matched against the published stub's symbol table. Do not copy
@@ -42,6 +43,13 @@
 // Declared at file scope on purpose: /alternatename below encodes a global
 // function (@@YA...), which is not what MSVC would emit inside a namespace.
 // ============================================
+// Mach-O prefixes every symbol with '_'; ELF does not.
+#if defined(__APPLE__)
+#define ALBT_FASTCREATE_STOCK_LABEL "__Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_"
+#else
+#define ALBT_FASTCREATE_STOCK_LABEL "_Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_"
+#endif
+
 #if defined(_MSC_VER)
 fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameters, const cXyz* i_pos,
                                     int i_roomNo, const csXyz* i_angle, const cXyz* i_scale,
@@ -53,7 +61,7 @@ extern "C++" fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameter
                                                  const csXyz* i_angle, const cXyz* i_scale,
                                                  s8 i_argument, createFunc i_createFunc,
                                                  void* i_createFuncData)
-    asm("_Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_");
+    asm(ALBT_FASTCREATE_STOCK_LABEL);
 #endif
 // ============================================
 // NEW CODE ENDS HERE
