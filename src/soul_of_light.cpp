@@ -26,42 +26,28 @@
 
 // ============================================
 // NEW CODE - ALBT multiplatform
-// The TARGET_PC header overload carries two IF_DUSK_ARG extras (itemGiveTag /
-// itemOriginalNo), but every published SDK link stub exports the 9-arg stock
-// symbol. Bind that one under a private name so the extras never enter the call:
-// MSVC aliases it at link time, Itanium targets take the mangled label directly.
-// clang uses an asm label VERBATIM and does not apply the platform symbol
-// prefix, so Mach-O needs the extra leading underscore spelled out - ELF and
-// Mach-O cannot share one string.
+// fopAcM_fastCreate must be resolved at RUNTIME on every platform, never linked.
 //
-// The label is not hand-written: it was read back from clang for this exact
-// signature and matched against the published stub's symbol table. Do not copy
-// the variant in tools/mods/soul-of-light - that one says _Z16 for
-// a 17-character name and spells out PK4cXyz/Pv where Itanium requires the S1_
-// and S5_ back-references, so it binds nothing off Windows.
+// The shipping game exports only the TARGET_PC overload carrying the two
+// IF_DUSK_ARG extras (itemGiveTag / itemOriginalNo) - verified against
+// dusklight.exe, which has ...@Z2IE@Z and does NOT have the 9-arg ...@Z2@Z.
+// The published SDK link stub still advertises the old 9-arg import, so ANY
+// link-time reference is wrong: aliasing the 9-arg name builds clean and then
+// fails at load with ERROR_PROC_NOT_FOUND, and taking &fopAcM_fastCreate leaves
+// an 11-arg undefined symbol the stub cannot satisfy.
 //
-// Declared at file scope on purpose: /alternatename below encodes a global
-// function (@@YA...), which is not what MSVC would emit inside a namespace.
+// Resolving by name at runtime creates no import-table entry, so it sidesteps
+// the stale stub on all eight platforms. Mangled names are per-ABI; the Itanium
+// one was read back from clang for this signature. dlsym() takes the name
+// without Mach-O's leading underscore, so one string covers ELF and Mach-O.
 // ============================================
-// Mach-O prefixes every symbol with '_'; ELF does not.
-#if defined(__APPLE__)
-#define ALBT_FASTCREATE_STOCK_LABEL "__Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_"
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#define ALBT_FASTCREATE_SYMBOL                                                                         "?fopAcM_fastCreate@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2IE@Z"
 #else
-#define ALBT_FASTCREATE_STOCK_LABEL "_Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_"
-#endif
-
-#if defined(_MSC_VER)
-fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameters, const cXyz* i_pos,
-                                    int i_roomNo, const csXyz* i_angle, const cXyz* i_scale,
-                                    s8 i_argument, createFunc i_createFunc, void* i_createFuncData);
-#pragma comment(linker,     "/alternatename:?fopAcM_fastCreate_stock@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2@Z=?fopAcM_fastCreate@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2@Z")
-#else
-extern "C++" fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameters,
-                                                 const cXyz* i_pos, int i_roomNo,
-                                                 const csXyz* i_angle, const cXyz* i_scale,
-                                                 s8 i_argument, createFunc i_createFunc,
-                                                 void* i_createFuncData)
-    asm(ALBT_FASTCREATE_STOCK_LABEL);
+#include <dlfcn.h>
+#define ALBT_FASTCREATE_SYMBOL "_Z17fopAcM_fastCreatesjPK4cXyziPK5csXyzS1_aPFiPvES5_jh"
 #endif
 // ============================================
 // NEW CODE ENDS HERE
@@ -69,10 +55,34 @@ extern "C++" fopAc_ac_c* fopAcM_fastCreate_stock(s16 i_procName, u32 i_parameter
 
 namespace {
 
+using FastCreateFn = fopAc_ac_c* (*)(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8,
+                                     createFunc, void*, u32, u8);
+FastCreateFn g_fastCreate = nullptr;
+
+bool resolve_fast_create() {
+    if (g_fastCreate != nullptr) {
+        return true;
+    }
+#if defined(_WIN32)
+    HMODULE exe = GetModuleHandleW(nullptr);
+    if (exe == nullptr) {
+        return false;
+    }
+    g_fastCreate =
+        reinterpret_cast<FastCreateFn>(GetProcAddress(exe, ALBT_FASTCREATE_SYMBOL));
+#else
+    g_fastCreate = reinterpret_cast<FastCreateFn>(dlsym(RTLD_DEFAULT, ALBT_FASTCREATE_SYMBOL));
+#endif
+    return g_fastCreate != nullptr;
+}
+
 fopAc_ac_c* fast_create_drop(s16 procName, u32 parameters, const cXyz* pos, int roomNo,
                              const csXyz* angle, const cXyz* scale, s8 argument) {
-    return fopAcM_fastCreate_stock(procName, parameters, pos, roomNo, angle, scale, argument,
-                                   nullptr, nullptr);
+    if (g_fastCreate == nullptr) {
+        return nullptr;
+    }
+    return g_fastCreate(procName, parameters, pos, roomNo, angle, scale, argument, nullptr, nullptr,
+                        0, 0xFF);
 }
 
 u16 sOrbRecovery = 0;
@@ -530,6 +540,10 @@ ModResult albw_soul_of_light_build_panel(UiElementHandle panel, ModError*) {
 }
 
 ModResult albw_soul_of_light_init(ModError*) {
+    if (!resolve_fast_create()) {
+        svc_log->error(mod_ctx, "fopAcM_fastCreate not found in host binary");
+        return MOD_ERROR;
+    }
     if (mods::hook::add_pre<DeadInit>(on_dead_pre) != MOD_OK ||
         mods::hook::add_post<DeadInit>(on_dead_post) != MOD_OK)
     {
