@@ -188,13 +188,16 @@ static bool deityRowEligible() {
            dComIfGs_getWalletSize() == 3 /* COLOSSAL_WALLET (fork d_save.h:66) */;
 }
 
-// Storage status lines, verbatim from fork d_albw_rental.cpp:270-275.
+// Storage description line, verbatim from fork d_albw_rental.cpp:270.
 static constexpr const char* kStorageStoreDesc =
     "Do you want to store this for later? A storage fee will apply upon its return.";
-static constexpr const char* kStorageStoreOkMsg =
-    "Stored safely with the Postman.\nYou can retrieve it anytime for 100 rupees.";
-static constexpr const char* kStorageRetrieveOkMsg =
-    "Returned to your active wardrobe.\nThank you for your patronage!";
+
+// The fork also has kStorageStoreOkMsg / kStorageRetrieveOkMsg (d_albw_rental.cpp
+// :272-275), shown via sStatusMsg on a successful store/retrieve. This shop has
+// no status-message system, so there is nowhere to display them - they are
+// deliberately NOT carried here rather than sitting as constants the compiler
+// drops, which would look like ported content but reach nothing. Port them
+// alongside a status-message system if one lands.
 
 static const ALBWRentalEntry kItems[] = {
     {"Slingshot", (u8)dItemNo_PACHINKO_e, SLOT_23, 15,
