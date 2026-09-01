@@ -59,6 +59,12 @@
 #define ALBT_SYM_CC_AT_CHECK                                                                       \
     ALBT_SYM("?cc_at_check@@YAPEAVfopAc_ac_c@@PEAV1@PEAUdCcU_AtInfo@@@Z",                          \
              "_Z11cc_at_checkP10fopAc_ac_cP11dCcU_AtInfo")
+// fopAcM_create(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, u32, u8)
+#define ALBT_SYM_FOPACM_CREATE                                                                         ALBT_SYM("?fopAcM_create@@YAIFIPEBUcXyz@@HPEBVcsXyz@@0CIE@Z",                                                "_Z13fopAcM_createsjPK4cXyziPK5csXyzS1_ajh")
+
+// dComIfG_resLoad(request_of_phase_process_class*, const char*)
+#define ALBT_SYM_RES_LOAD                                                                              ALBT_SYM("?dComIfG_resLoad@@YAHPEAUrequest_of_phase_process_class@@PEBD@Z",                                  "_Z15dComIfG_resLoadP30request_of_phase_process_classPKc")
+
 // ============================================
 // NEW CODE ENDS HERE
 // ============================================

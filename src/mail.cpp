@@ -2,6 +2,7 @@
 // NEW CODE — ALBW Port — Junior Postman onboarding mail (Phase 0).
 // ============================================
 #include "global.h"
+#include "albw_symbols.h"
 
 #include "mail.h"
 #include "mail_hooks.h"
@@ -51,7 +52,7 @@ bool ensure_fopAcM_create() {
         return false;
     }
     void* addr = nullptr;
-    if (svc_hook->resolve(mod_ctx, "?fopAcM_create@@YAIFIPEBUcXyz@@HPEBVcsXyz@@0CIE@Z", &addr,
+    if (svc_hook->resolve(mod_ctx, ALBT_SYM_FOPACM_CREATE, &addr,
                           nullptr) != MOD_OK ||
         addr == nullptr)
     {

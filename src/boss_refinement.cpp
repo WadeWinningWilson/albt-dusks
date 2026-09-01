@@ -1,4 +1,5 @@
 #include "boss_refinement.h"
+#include "albw_symbols.h"
 
 #include "albw_common.h"
 #include "albw_game.h"
@@ -42,7 +43,7 @@ bool ensure_fopAcM_create() {
         return false;
     }
     void* addr = nullptr;
-    if (svc_hook->resolve(mod_ctx, "?fopAcM_create@@YAIFIPEBUcXyz@@HPEBVcsXyz@@0CIE@Z", &addr,
+    if (svc_hook->resolve(mod_ctx, ALBT_SYM_FOPACM_CREATE, &addr,
                           nullptr) != MOD_OK ||
         addr == nullptr)
     {
@@ -61,7 +62,7 @@ bool ensure_res_load() {
     }
     void* addr = nullptr;
     // int dComIfG_resLoad(request_of_phase_process_class*, char const*)
-    if (svc_hook->resolve(mod_ctx, "?dComIfG_resLoad@@YAHPEAUrequest_of_phase_process_class@@PEBD@Z",
+    if (svc_hook->resolve(mod_ctx, ALBT_SYM_RES_LOAD,
                           &addr, nullptr) != MOD_OK ||
         addr == nullptr)
     {

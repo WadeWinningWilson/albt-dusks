@@ -1,6 +1,7 @@
 // Port of fork daNpc_Post_c rental blocks (bitSW 0x42) + F_SP103 room-1 spawn.
 
 #include "rental_postman_hooks.h"
+#include "albw_symbols.h"
 
 #include "albw_common.h"
 #include "albw_game.h"
@@ -69,7 +70,7 @@ bool ensure_fopAcM_create() {
         return false;
     }
     void* addr = nullptr;
-    if (svc_hook->resolve(mod_ctx, "?fopAcM_create@@YAIFIPEBUcXyz@@HPEBVcsXyz@@0CIE@Z", &addr,
+    if (svc_hook->resolve(mod_ctx, ALBT_SYM_FOPACM_CREATE, &addr,
                           nullptr) != MOD_OK ||
         addr == nullptr)
     {
