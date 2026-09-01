@@ -97,6 +97,17 @@ u8   dComIfGp_isHeapLockFlag()    { return g_dComIfG_gameInfo.play.isHeapLockFla
 u8   dComIfGp_isPauseFlag()       { return g_dComIfG_gameInfo.play.isPauseFlag(); }
 void dComIfGp_setOxygenCount(s32 oxygen) { g_dComIfG_gameInfo.play.setOxygenCount(oxygen); }
 
+// ---- oil / warp / touch ------------------------------------------------------
+u16 dComIfGs_getMaxOil() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getMaxOil();
+}
+u16 dComIfGs_getOil() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getOil();
+}
+u8 dMeter2Info_getWarpStatus() { return g_meter2_info.getWarpStatus(); }
+bool dMeter2Info_isTouchKeyCheck(int i_status) { return g_meter2_info.isTouchKeyCheck(i_status); }
+u8 dMeter2Info_getRentalBombBag() { return g_meter2_info.getRentalBombBag(); }
+
 // ---- item wheel textures -----------------------------------------------------
 u8 dComIfGs_getSelectItemIndex(int i_no) {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectItemIndex(i_no);
