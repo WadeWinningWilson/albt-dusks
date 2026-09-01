@@ -38,12 +38,24 @@
 
 namespace {
 
-// Mirrors of the TU-local daE_FM_ACTION / texture-anim enums in d_a_e_fm.cpp.
-// boss_refinement.cpp already mirrors the action values (see its note at :704);
-// these are the texture-anim slots the down path switches between.
+// ============================================
+// Mirrors of the TU-local enums in d_a_e_fm.cpp. Both are declaration-order
+// enums with no explicit values except ACTION_DOWN, so the indices below are
+// read straight off the fork's declarations (d_a_e_fm.cpp:158 and :178) - NOT
+// inferred. mPlayTexAnmNo indexes mpFmBrk[]/mpFmBtk[], so a wrong value here is
+// an out-of-slot animation, which is what crashed the first cut of this file.
+//
+//   enum daE_FM_ACTION { NORMAL, FIGHT_RUN, N_FIGHT, F_FIGHT, DAMAGE_RUN,
+//                        ANIMAL, FIRE, STOP, ACTION_DOWN = 9, A_DOWN,
+//                        START, END, ... }
+//   enum { TEXANM_FM, TEXANM_ATTACK, TEXANM_PUTOUT, TEXANM_PUTOUT_WAIT,
+//          TEXANM_ANIMAL, TEXANM_OP_DEMO, TEXANM_HANG_WAIT, ... }
+// ============================================
+constexpr s16 kActionNormal = 0;
+
 constexpr u8 kTexAnmFm = 0;
-constexpr u8 kTexAnmAnimal = 1;
-constexpr u8 kTexAnmPutOutWait = 2;
+constexpr u8 kTexAnmPutOutWait = 3;
+constexpr u8 kTexAnmAnimal = 4;
 
 DEFINE_HOOK_SYMBOL("daE_FM_Create", int(fopAc_ac_c*), FmCreate);
 DEFINE_HOOK_SYMBOL("daE_FM_Execute", int(e_fm_class*), FmExecute);
@@ -120,18 +132,35 @@ void on_down_post(ModContext*, void* args, void*, void*) {
     if (fm == nullptr || !dAlbwBoss_fyrusStayHollow()) {
         return;
     }
-    // :2405 - hollow keeps the fire-out flag and leaves BGM alone.
-    if (fm->field_0x792 == 1 && s_down.f792 == 0) {
-        fm->field_0x792 = s_down.f792;
-    }
-    // :2388 / :2428 - hollow never lights the animal or fire texture. Where the
-    // fork's else-branch selects PUTOUT_WAIT, apply that instead of reverting.
-    if (fm->mPlayTexAnmNo != s_down.texAnm) {
-        if (s_down.texAnm == kTexAnmFm || fm->mPlayTexAnmNo == kTexAnmFm) {
-            fm->mPlayTexAnmNo = kTexAnmPutOutWait;
-        } else if (fm->mPlayTexAnmNo == kTexAnmAnimal) {
+    // The fork guards three blocks with !fyrusStayHollow(), each in a distinct
+    // mMode arm of e_fm_down's switch. Branch on the mMode recorded BEFORE
+    // vanilla ran, so the same arm is identified rather than inferred from the
+    // resulting field values.
+    switch (s_down.mode) {
+    case 3:
+        // fork :2388 - hollow does not light the animal texture.
+        if (fm->mPlayTexAnmNo == kTexAnmAnimal && s_down.texAnm != kTexAnmAnimal) {
             fm->mPlayTexAnmNo = s_down.texAnm;
         }
+        break;
+    case 4:
+        // fork :2405 - hollow keeps the fire-out flag clear and leaves BGM alone.
+        if (fm->field_0x792 == 1 && s_down.f792 == 0) {
+            fm->field_0x792 = s_down.f792;
+        }
+        // fork :2428 - the else-branch selects PUTOUT_WAIT instead of FM.
+        if (fm->mPlayTexAnmNo == kTexAnmFm && s_down.texAnm != kTexAnmFm) {
+            fm->mPlayTexAnmNo = kTexAnmPutOutWait;
+            if (fm->mpFmBrk[kTexAnmPutOutWait] != nullptr) {
+                fm->mpFmBrk[kTexAnmPutOutWait]->setFrame(0.0f);
+            }
+            if (fm->mpFmBtk[kTexAnmPutOutWait] != nullptr) {
+                fm->mpFmBtk[kTexAnmPutOutWait]->setFrame(0.0f);
+            }
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -172,7 +201,7 @@ void on_fight_run_post(ModContext*, void* args, void*, void*) {
         return;
     }
     if (dAlbwBoss_fyrusGolemKidsLoose()) {
-        fm->mAction = 1;  // ACTION_NORMAL
+        fm->mAction = kActionNormal;
         fm->mMode = 0;
         fm->speedF = 0.0f;
         return;
