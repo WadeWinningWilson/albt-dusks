@@ -77,6 +77,7 @@ add_mod(albt_full_plugin
             src/alink_compat.cpp
             src/albw_fork_compat.cpp
             src/albw_gameinfo_compat.cpp
+            src/colossal_wallet.cpp
         MOD_JSON mod.json
         RES_DIR res
         OVERLAY_DIR overlay

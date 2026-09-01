@@ -62,6 +62,10 @@ u8 dComIfGs_getWalletSize() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getWalletSize();
 }
 
+void dComIfGs_setWalletSize(u8 i_size) {
+    g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().setWalletSize(i_size);
+}
+
 // ---- equipment ---------------------------------------------------------------
 u8 dComIfGs_getSelectEquipClothes() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectEquip(COLLECT_CLOTHING);

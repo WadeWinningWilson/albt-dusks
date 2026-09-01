@@ -5,6 +5,7 @@
 #include "albw_settings_ui.h"
 #include "albw_stage.h"
 #include "config_vars.h"
+#include "colossal_wallet.h"
 #include "focused_arts.h"
 #include "flurry_rush.h"
 #include "hold_a_crawl.h"
@@ -170,7 +171,8 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_rental_shop_init(error) != MOD_OK ||
         albw_stick_cycle_init(error) != MOD_OK ||
         albw_region_hp_init(error) != MOD_OK || albw_soul_of_light_init(error) != MOD_OK ||
-        albw_enemy_rupees_init(error) != MOD_OK)
+        albw_enemy_rupees_init(error) != MOD_OK ||
+        albw_colossal_wallet_init(error) != MOD_OK)
     {
         return MOD_ERROR;
     }
@@ -192,6 +194,7 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     albw_wolf_arts_tick();
     albw_focused_arts_tick();
     albw_flurry_tick();
+    albw_colossal_wallet_tick();
     albw_rental_shop_tick();
     albw_meter_update();
     return MOD_OK;
