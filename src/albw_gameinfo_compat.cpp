@@ -58,6 +58,10 @@ void dComIfGs_setRupee(u16 i_rupees) {
     g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().setRupee(i_rupees);
 }
 
+u8 dComIfGs_getWalletSize() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getWalletSize();
+}
+
 // ---- equipment ---------------------------------------------------------------
 u8 dComIfGs_getSelectEquipClothes() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectEquip(COLLECT_CLOTHING);

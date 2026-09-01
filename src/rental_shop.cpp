@@ -59,6 +59,7 @@ enum VisibleKind {
     VISIBLE_SUMO_OUTFIT,  // fork d_albw_rental.cpp:311 - sumo store/retrieve row
     VISIBLE_POTION_CAPACITY,  // fork d_albw_rental.cpp:304
     VISIBLE_SHADE_REFUGE,     // fork d_albw_rental.cpp:310
+    VISIBLE_DEITY,            // fork d_albw_rental.cpp:313
 };
 
 struct ALBWRentalEntry {
@@ -160,6 +161,28 @@ static constexpr int kSwordCount = sizeof(kSwords) / sizeof(kSwords[0]);
 // ALBW Port: Sumo Outfit shop price (a model-swap state, not a native clothes
 // item). fork d_albw_rental.cpp:317.
 static constexpr int kSumoOutfitPrice = 50;
+
+// Deity Armor: 5000r per session (repurchased after each death-strip).
+// fork d_albw_rental.cpp:320.
+static constexpr int kDeityArmorPrice = 5000;
+
+// ============================================
+// NEW CODE - ALBW Port (Deity row eligibility)
+// fork d_albw_rental.cpp:325: Magic Armor stripped at least once (permanent
+// rental-eligible bit) AND the Colossal Wallet held.
+//
+// LIMITATION, stated rather than hidden: COLOSSAL_WALLET is wallet tier 3, which
+// the fork ADDS (stock's enum stops at GIANT_WALLET = 2). Its auto-grant lives in
+// the fork's item table + a modified dSv_player_status_a_c::getRupeeMax, neither
+// of which is ported. So on stock this predicate is reachable but currently never
+// true, and the row renders as "?????" - which is exactly what the fork shows a
+// player without the Colossal Wallet. It becomes purchasable once that feature
+// lands; nothing here fakes eligibility.
+// ============================================
+static bool deityRowEligible() {
+    return albw_rental_is_eligible((u8)dItemNo_ARMOR_e) &&
+           dComIfGs_getWalletSize() == 3 /* COLOSSAL_WALLET (fork d_save.h:66) */;
+}
 
 // Storage status lines, verbatim from fork d_albw_rental.cpp:270-275.
 static constexpr const char* kStorageStoreDesc =
@@ -586,6 +609,11 @@ void rebuildVisibleList() {
         appendVisible(VISIBLE_SUMO_OUTFIT, -1, true);
     }
 
+    // fork d_albw_rental.cpp:842 - Deity row shows (????? or eligible) until owned.
+    if (cat == CAT_ARMOR && !dComIfGs_isItemFirstBit((u8)dItemNo_DEITY_ARMOR_e)) {
+        appendVisible(VISIBLE_DEITY, -1, deityRowEligible());
+    }
+
     if (cat == CAT_UPGRADES) {
         if (albw_mq_is_enabled()) {
             appendVisible(VISIBLE_MQ_HEART, -1, albw_mq_can_purchase_heart_shop());
@@ -759,6 +787,26 @@ void tryPurchase(int visIdx) {
             sJustFailedPurchase = true;
             return;
         }
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
+        rebuildVisibleList();
+        return;
+    }
+
+    // fork d_albw_rental.cpp:1219
+    if (row.kind == VISIBLE_DEITY) {
+        if (!deityRowEligible()) {
+            return;
+        }
+        const u16 rupees = getRupees();
+        if (rupees < (u16)kDeityArmorPrice) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        setRupees((u16)(rupees - (u16)kDeityArmorPrice));
+        albw_game::on_item_first_bit((u8)dItemNo_DEITY_ARMOR_e);
+        dAlbwOutfit_recordOwnedByItemNo((u8)dItemNo_DEITY_ARMOR_e);
         sPurchasedThisSession = true;
         sJustPurchased = true;
         rebuildActivePages();
@@ -1189,6 +1237,15 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
             pub.desc = dAlbwPotion_getCapacityShopDesc();
             pub.itemNo = (u8)dItemNo_RED_BOTTLE_e;
             pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_DEITY) {
+            // fork d_albw_rental.cpp:1814
+            pub.name = "Deity Armor";
+            pub.price = row.purchasable ? kDeityArmorPrice : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = "Oooh a priceless treasure. but perhaps far too "
+                       "expensive for you!";
+            pub.itemNo = (u8)dItemNo_DEITY_ARMOR_e;
+            pub.showNameWhenSoldOut = false;  // "?????" until eligible
         } else if (row.kind == VISIBLE_SHADE_REFUGE) {
             // fork d_albw_rental.cpp
             pub.name = dShadeRefuge_getServiceName();
