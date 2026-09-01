@@ -29,6 +29,7 @@
 #include "d/d_com_inf_game.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_meter2_info.h"
+#include "JSystem/J2DGraph/J2DPicture.h"
 
 #if TARGET_PC
 
@@ -95,6 +96,21 @@ u8   dComIfGp_getMesgStatus()     { return g_dComIfG_gameInfo.play.getMesgStatus
 u8   dComIfGp_isHeapLockFlag()    { return g_dComIfG_gameInfo.play.isHeapLockFlag(); }
 u8   dComIfGp_isPauseFlag()       { return g_dComIfG_gameInfo.play.isPauseFlag(); }
 void dComIfGp_setOxygenCount(s32 oxygen) { g_dComIfG_gameInfo.play.setOxygenCount(oxygen); }
+
+// ---- item wheel textures -----------------------------------------------------
+u8 dComIfGs_getSelectItemIndex(int i_no) {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectItemIndex(i_no);
+}
+int dMeter2Info_readItemTexture(u8 i_itemNo, void* i_texBuf1, J2DPicture* i_pic1, void* i_texBuf2,
+                                J2DPicture* i_pic2, void* i_texBuf3, J2DPicture* i_pic3,
+                                void* i_texBuf4, J2DPicture* i_pic4, int param_9) {
+    return g_meter2_info.readItemTexture(i_itemNo, i_texBuf1, i_pic1, i_texBuf2, i_pic2, i_texBuf3,
+                                         i_pic3, i_texBuf4, i_pic4, param_9);
+}
+void dMeter2Info_setItemColor(u8 i_itemNo, J2DPicture* i_pic1, J2DPicture* i_pic2,
+                              J2DPicture* i_pic3, J2DPicture* i_pic4) {
+    g_meter2_info.setItemColor(i_itemNo, i_pic1, i_pic2, i_pic3, i_pic4);
+}
 
 // ---- events / meter window ---------------------------------------------------
 BOOL dComIfGp_event_runCheck() {

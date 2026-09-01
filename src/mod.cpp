@@ -8,6 +8,7 @@
 #include "colossal_wallet.h"
 #include "clothes_pipeline.h"
 #include "menu_window_ext.h"
+#include "menu_ring_ext.h"
 #include "focused_arts.h"
 #include "flurry_rush.h"
 #include "hold_a_crawl.h"
@@ -179,7 +180,8 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_enemy_rupees_init(error) != MOD_OK ||
         albw_colossal_wallet_init(error) != MOD_OK ||
         albw_clothes_pipeline_init(error) != MOD_OK ||
-        albw_menu_window_ext_init(error) != MOD_OK)
+        albw_menu_window_ext_init(error) != MOD_OK ||
+        albw_menu_ring_ext_init(error) != MOD_OK)
     {
         return MOD_ERROR;
     }

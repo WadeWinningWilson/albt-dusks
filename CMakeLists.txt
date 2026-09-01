@@ -83,6 +83,7 @@ add_mod(albt_full_plugin
             src/menu_ext_status.cpp
             src/menu_ext_members.cpp
             src/menu_window_ext.cpp
+            src/menu_ring_ext.cpp
         MOD_JSON mod.json
         RES_DIR res
         OVERLAY_DIR overlay
