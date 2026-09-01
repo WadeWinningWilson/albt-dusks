@@ -80,6 +80,7 @@ add_mod(albt_full_plugin
             src/colossal_wallet.cpp
             src/clothes_pipeline.cpp
             src/ext_quick_equip.cpp
+            src/menu_ext_status.cpp
         MOD_JSON mod.json
         RES_DIR res
         OVERLAY_DIR overlay

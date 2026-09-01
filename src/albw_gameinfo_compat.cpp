@@ -95,6 +95,11 @@ u8   dComIfGp_isHeapLockFlag()    { return g_dComIfG_gameInfo.play.isHeapLockFla
 u8   dComIfGp_isPauseFlag()       { return g_dComIfG_gameInfo.play.isPauseFlag(); }
 void dComIfGp_setOxygenCount(s32 oxygen) { g_dComIfG_gameInfo.play.setOxygenCount(oxygen); }
 
+// ---- graphics ----------------------------------------------------------------
+J2DGrafContext* dComIfGp_getCurrentGrafPort() {
+    return albw_game::current_graf_port();
+}
+
 // ---- archive / resource control ---------------------------------------------
 int dComIfG_deleteObjectResMain(const char* i_arcName) {
     return g_dComIfG_gameInfo.mResControl.deleteObjectRes(i_arcName);
