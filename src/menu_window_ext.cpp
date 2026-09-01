@@ -73,6 +73,7 @@ constexpr u8 kStockProcMax   = 0x22;  // stock's last enum: INSECT_AGITHA_CLOSE
 
 DEFINE_HOOK(&dMw_c::_execute, MwExecute);
 DEFINE_HOOK(&dMw_c::collect_move_proc, MwCollectMove);
+DEFINE_HOOK(&dMw_c::_delete, MwDelete);
 
 // ---- the fork's ext_status_* procs, as free functions (fork :1275-1334) -----
 
@@ -213,6 +214,18 @@ HookAction on_mw_collect_move_pre(ModContext*, void* args, void*, void*) {
     return HOOK_CONTINUE;
 }
 
+// dMw_c is created and destroyed per pause session (stock dMw_Create /
+// dMw_Delete), so its address changes between opens. Without this the side-table
+// slot stayed claimed by a dead instance and the table filled after a few pauses.
+void on_mw_delete_post(ModContext*, void* args, void*, void*) {
+    auto* mw = mods::arg<dMw_c*>(args, 0);
+    if (mw == nullptr) {
+        return;
+    }
+    ext_status_delete(mw);   // page is owned by us; never leak it with the window
+    albw_mw_release(mw);
+}
+
 bool install(ModError* error, const char* name, ModResult r) {
     if (r != MOD_OK) {
         if (svc_log != nullptr) svc_log->error(mod_ctx, name);
@@ -228,7 +241,9 @@ ModResult albw_menu_window_ext_init(ModError* error) {
     if (!install(error, "MwExecuteExtStatus",
                  mods::hook_add_pre<MwExecute>(svc_hook, on_mw_execute_pre)) ||
         !install(error, "MwCollectMoveExtStatus",
-                 mods::hook_add_pre<MwCollectMove>(svc_hook, on_mw_collect_move_pre)))
+                 mods::hook_add_pre<MwCollectMove>(svc_hook, on_mw_collect_move_pre)) ||
+        !install(error, "MwDeleteReleaseExtStatus",
+                 mods::hook_add_post<MwDelete>(svc_hook, on_mw_delete_post)))
     {
         return MOD_ERROR;
     }
