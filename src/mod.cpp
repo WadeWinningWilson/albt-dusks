@@ -23,6 +23,7 @@
 #include "shield_mod.h"
 #include "boss_refinement_hooks.h"
 #include "diababa.h"
+#include "fyrus.h"
 #include "lop_hud.h"
 #include "rental_shop.h"
 
@@ -155,6 +156,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_parry_master_init(error) != MOD_OK ||
         albw_boss_refinement_init(error) != MOD_OK ||
         albw_diababa_init(error) != MOD_OK ||
+        albw_fyrus_init(error) != MOD_OK ||
         albw_lop_hud_init(error) != MOD_OK ||
         albw_rental_shop_init(error) != MOD_OK ||
         albw_stick_cycle_init(error) != MOD_OK ||
@@ -196,6 +198,7 @@ MOD_EXPORT ModResult mod_shutdown(ModError* error) {
     albw_parry_master_shutdown(error);
     albw_boss_refinement_shutdown(error);
     albw_diababa_shutdown(error);
+    albw_fyrus_shutdown(error);
     albw_lop_hud_shutdown(error);
     albw_extra_item_slot_hooks_shutdown(error);
     albw_z_item_hud_hooks_shutdown(error);

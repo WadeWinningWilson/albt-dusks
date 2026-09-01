@@ -56,6 +56,7 @@ add_mod(albt_full_plugin
             src/lop_item_belt.cpp
             src/boss_refinement.cpp
             src/diababa.cpp
+            src/fyrus.cpp
             src/boss_refinement_hooks.cpp
             src/rental_eligibility.cpp
             src/rental_shop.cpp

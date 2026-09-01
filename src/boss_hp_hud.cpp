@@ -137,53 +137,51 @@ void albw_boss_hp_hud_draw() {
         return;
     }
 
-    fopAc_ac_c* boss = lockOnBossTarget();
-    if (boss == nullptr) {
-        return;
+    // ============================================
+    // NEW CODE - ALBW Port (fork dAlbwBossHpHud_draw)
+    // Pick the active boss by POLLING each query in priority order, exactly as
+    // the fork does. It never consults dAttention_c: arenas never coexist, so
+    // whichever query reports a live pool owns the bar.
+    //
+    // The previous version started from attn->LockonTarget(0) and returned early
+    // without a lock, so the bar only appeared while Z-targeting - which is why
+    // Fyrus showed nothing. That was a mod-side shortcut, not fork behaviour.
+    //
+    // Fill is a normalised fillRatio, not raw {current,max}: Armogohma's query
+    // composites both phases into fillRatio itself, and the early-out is
+    // fillRatio <= 0 so a half-full composite bar (phase 1 empty at 0.5) is
+    // never hidden.
+    // ============================================
+    f32 fillRatio = 0.0f;
+    const char* name = nullptr;
+
+    dAlbwBoss_ArmogohmaBarState bar{};
+    if (dAlbwBoss_armogohmaQueryHealthBar(&bar) && bar.visible && bar.fillRatio > 0.0f) {
+        fillRatio = bar.fillRatio;
+        name = bossDisplayName(fpcNm_B_GM_e);
+    } else {
+        int sCur = 0;
+        int sMax = 0;
+        if (dAlbwBoss_diababaQueryHealthBar(&sCur, &sMax) && sMax > 0 && sCur > 0) {
+            fillRatio = static_cast<f32>(sCur) / static_cast<f32>(sMax);
+            name = bossDisplayName(fpcNm_B_BQ_e);
+        } else if (dAlbwBoss_zantQueryHealthBar(&sCur, &sMax) && sMax > 0 && sCur > 0) {
+            fillRatio = static_cast<f32>(sCur) / static_cast<f32>(sMax);
+            name = bossDisplayName(fpcNm_B_ZANT_e);
+        } else if (dAlbwBoss_fyrusQueryHealthBar(&sCur, &sMax) && sMax > 0 && sCur > 0) {
+            fillRatio = static_cast<f32>(sCur) / static_cast<f32>(sMax);
+            name = bossDisplayName(fpcNm_E_FM_e);
+        }
+        // Fork also polls dShadeBoss_queryHealthBar between Diababa and Zant;
+        // the shade arc is not ported to this mod, so that link is absent.
     }
 
-    const s16 profName = fopAcM_GetName(boss);
-    const char* name = bossDisplayName(profName);
     if (name == nullptr) {
         return;
     }
-
-    s16 current = boss->health;
-    s16 maxHp = boss->field_0x560 > 0 ? boss->field_0x560 : boss->health;
-    f32 fillRatio = 0.0f;
-    bool haveFill = false;
-
-    if (profName == fpcNm_B_GM_e || profName == fpcNm_E_GM_e) {
-        dAlbwBoss_ArmogohmaBarState st{};
-        if (dAlbwBoss_armogohmaQueryHealthBar(&st) && st.visible) {
-            fillRatio = st.fillRatio;
-            current = st.current;
-            maxHp = st.max;
-            haveFill = true;
-        }
-    } else {
-        int qCur = 0;
-        int qMax = 0;
-        bool queried = false;
-        if (profName == fpcNm_B_BQ_e) {
-            queried = dAlbwBoss_diababaQueryHealthBar(&qCur, &qMax);
-        } else if (profName == fpcNm_B_ZANT_e) {
-            queried = dAlbwBoss_zantQueryHealthBar(&qCur, &qMax);
-        } else if (profName == fpcNm_E_FM_e) {
-            queried = dAlbwBoss_fyrusQueryHealthBar(&qCur, &qMax);
-        }
-        if (queried && qMax > 0 && qCur > 0) {
-            current = static_cast<s16>(qCur);
-            maxHp = static_cast<s16>(qMax);
-        }
-    }
-
-    if (!haveFill) {
-        if (maxHp <= 0 || current <= 0) {
-            return;
-        }
-        fillRatio = static_cast<f32>(current) / static_cast<f32>(maxHp);
-    }
+    // ============================================
+    // NEW CODE ENDS HERE
+    // ============================================
 
     if (fillRatio <= 0.0f || !ensureResources()) {
         return;
