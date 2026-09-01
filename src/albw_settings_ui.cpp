@@ -20,10 +20,12 @@ static const char* kExtraItemSlotHelp =
     "<b>Extra + Quick Swap</b>: physical <b>L1 / LB</b> opens the item wheel (not L2 "
     "z-target); D-pad Up/Right/Down cycle sword, shield, and outfit. Midna stays on Left.";
 
+// Names match the fork setting game.lopHud (LopHudMode Off / VanillaHearts /
+// HealthBar) so the mod and the fork describe the same feature.
 static const char* kLopHudModes[] = {
-    "Off (bash icons at rupee)",
-    "Bash icons at Midna/cross",
-    "Bash icons at Midna (HP-bar stub)",
+    "Off",
+    "Vanilla Hearts",
+    "Health Bar",
 };
 
 static const char* kParryIconModes[] = {

@@ -62,6 +62,26 @@ inline void set_event_reg(u16 reg, u8 value) {
     g_dComIfG_gameInfo.info.getEvent().setEventReg(reg, value);
 }
 
+inline u16 life() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getLife();
+}
+
+inline bool is_pause_flag() {
+    return g_dComIfG_gameInfo.play.isPauseFlag() != 0;
+}
+
+inline J2DGrafContext* current_graf_port() {
+    return g_dComIfG_gameInfo.play.getCurrentGrafPort();
+}
+
+inline JKRArchive* item_icon_archive() {
+    return g_dComIfG_gameInfo.play.getItemIconArchive();
+}
+
+inline JKRArchive* collect_res_archive() {
+    return g_dComIfG_gameInfo.play.getCollectResArchive();
+}
+
 inline u16 max_life_gauge() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getMaxLife();
 }
