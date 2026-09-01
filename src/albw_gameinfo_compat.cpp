@@ -76,6 +76,14 @@ u8 dComIfGs_getSelectEquipSword() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectEquip(COLLECT_SWORD);
 }
 
+// ---- inventory ---------------------------------------------------------------
+u8 dComIfGs_getItem(int i_slotNo, bool i_checkCombo) {
+    return g_dComIfG_gameInfo.info.getPlayer().getItem().getItem(i_slotNo, i_checkCombo);
+}
+u8 dComIfGs_getLineUpItem(int i_slotNo) {
+    return g_dComIfG_gameInfo.info.getPlayer().getItem().getLineUpItem(i_slotNo);
+}
+
 // ---- play-state --------------------------------------------------------------
 fopAc_ac_c* dComIfGp_getPlayer(int idx) { return g_dComIfG_gameInfo.play.getPlayer(idx); }
 daPy_py_c*  dComIfGp_getLinkPlayer() {

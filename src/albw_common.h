@@ -2,6 +2,7 @@
 
 #include "mods/svc/config.h"
 #include "mods/svc/hook.h"
+#include "mods/svc/host.h"
 #include "mods/svc/log.h"
 #include "mods/svc/ui.h"
 
@@ -10,6 +11,9 @@ extern const LogService* svc_log;
 extern const HookService* svc_hook;
 extern const ConfigService* svc_config;
 extern const UiService* svc_ui;
+// Used to publish the quick-equip socket registry so other mods can claim
+// slots (host.h:55-71 publish_service / get_service).
+extern const HostService* svc_host;
 
 bool albw_cfg_bool(ConfigVarHandle var, bool fallback);
 int albw_cfg_int(ConfigVarHandle var, int fallback);

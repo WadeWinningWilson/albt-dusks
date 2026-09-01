@@ -41,6 +41,7 @@ ConfigVarHandle g_dpad_quick_swap = 0;
 ConfigVarHandle g_sumo_outfit_fists = 0;
 ConfigVarHandle g_wardrobe_recovery_debug = 0;
 ConfigVarHandle g_cap_wear = 0;
+ConfigVarHandle g_soulbound_potion = 0;
 
 ConfigVarHandle g_lop_hud_mode = 0;
 ConfigVarHandle g_parry_icons_mode = 0;

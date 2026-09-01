@@ -48,6 +48,7 @@ struct CompatGameSettings {
     CompatVar<bool>        sumoOutfitFists;
     CompatVar<bool>        showWardrobeRecoveryDebug;
     CompatVar<bool>        outfitStats;
+    CompatVar<bool>        albwSoulboundRedPotion;
 };
 
 struct CompatSettings {
@@ -66,6 +67,7 @@ inline CompatSettings getSettings() {
     s.game.sumoOutfitFists.value          = albw_cfg_bool(g_sumo_outfit_fists, false);
     s.game.showWardrobeRecoveryDebug.value = albw_cfg_bool(g_wardrobe_recovery_debug, false);
     s.game.outfitStats.value               = albw_cfg_bool(g_outfit_stats, false);
+    s.game.albwSoulboundRedPotion.value    = albw_cfg_bool(g_soulbound_potion, false);
     return s;
 }
 

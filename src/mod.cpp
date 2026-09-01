@@ -41,6 +41,7 @@ IMPORT_SERVICE(HookService, svc_hook);
 // Host may ship config@1.0 (Mods panel only) or @1.1+ (Settings → ALBT tab).
 IMPORT_SERVICE_VERSION(ConfigService, svc_config, 0);
 IMPORT_SERVICE(UiService, svc_ui);
+IMPORT_SERVICE(HostService, svc_host);
 
 namespace {
 
@@ -84,6 +85,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("sumo_outfit_fists", false, &g_sumo_outfit_fists) != MOD_OK ||
         albw_register_bool("wardrobe_recovery_debug", false, &g_wardrobe_recovery_debug) != MOD_OK ||
         albw_register_int("cap_wear", 0, &g_cap_wear) != MOD_OK ||
+        albw_register_bool("soulbound_potion", false, &g_soulbound_potion) != MOD_OK ||
         albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
         albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
