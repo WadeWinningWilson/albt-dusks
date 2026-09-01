@@ -62,6 +62,35 @@ inline void set_event_reg(u16 reg, u8 value) {
     g_dComIfG_gameInfo.info.getEvent().setEventReg(reg, value);
 }
 
+// ---- inventory / bottles (fork d_com_inf_game.cpp one-liners) ----
+inline u8 get_item(int slotNo, int checkCombo = 1) {
+    return g_dComIfG_gameInfo.info.getPlayer().getItem().getItem(slotNo, checkCombo);
+}
+
+inline void set_item(int slotNo, u8 itemNo) {
+    g_dComIfG_gameInfo.info.getPlayer().getItem().setItem(slotNo, itemNo);
+}
+
+inline u8 get_bottle_num(int bottleIdx) {
+    return g_dComIfG_gameInfo.info.getPlayer().getItemRecord().getBottleNum(bottleIdx);
+}
+
+inline void set_bottle_num(int bottleIdx, u8 bottleNum) {
+    g_dComIfG_gameInfo.info.getPlayer().getItemRecord().setBottleNum(bottleIdx, bottleNum);
+}
+
+inline void add_bottle_num(int bottleIdx, int num) {
+    g_dComIfG_gameInfo.info.getPlayer().getItemRecord().addBottleNum(bottleIdx, num);
+}
+
+inline u8 get_select_item_index(int no) {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectItemIndex(no);
+}
+
+inline void on_item_first_bit(u8 itemNo) {
+    g_dComIfG_gameInfo.info.getPlayer().getGetItem().onFirstBit(itemNo);
+}
+
 inline u8 clear_count() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerInfo().getClearCount();
 }
