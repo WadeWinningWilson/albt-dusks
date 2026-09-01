@@ -53,11 +53,6 @@ bool s_lifeHidden = false;
 // exec() carries the ring-vs-main status; draw() does not, so keep the last one.
 u32 s_lastExecStatus = 0;
 bool s_lastExecStatusValid = false;
-// Vanilla rupee position, captured before we first move it, so turning the
-// layout off can put it back without waiting for a rupee-count change.
-bool s_rupeeHomeValid = false;
-f32 s_rupeeHomeX = 0.0f;
-f32 s_rupeeHomeY = 0.0f;
 
 void draw_item_belt(dMeter2Draw_c* d);  // defined below, used by on_draw_post
 void draw_fa_meter(dMeter2Draw_c* d);   // defined below, used by on_draw_post
@@ -304,18 +299,13 @@ void apply_lop_rupee(dMeter2Draw_c* d) {
     if (d->mpRupeeKeyParent == nullptr || d->mpRupeeKeyParent->getPanePtr() == nullptr) {
         return;
     }
-    if (!s_rupeeHomeValid) {
-        // Vanilla's own drawRupee ends in this paneTrans; snapshot it once so the
-        // Off path can restore exactly, rather than recomputing vanilla's math.
-        s_rupeeHomeX = g_drawHIO.mRupeeKeyPosX;
-        s_rupeeHomeY = g_drawHIO.mRupeeKeyPosY;
-        s_rupeeHomeValid = true;
-    }
+    // When the layout is OFF, do not touch the wallet at all - vanilla's own
+    // drawRupee owns it, and it sets scale and paneTrans together. Re-applying a
+    // transform from here decoupled from that scale made the shield row (which
+    // measures mpRupeeParent[0] geometry for its spacing) read a stale size and
+    // stretch its icons off screen. The fork only ever adjusts the wallet while
+    // mLopHudActive is set.
     if (!s_active) {
-        f32 hx = s_rupeeHomeX;
-        f32 hy = s_rupeeHomeY;
-        anchor_hud_scale(d->mpRupeeKeyParent, Corner::BottomRight, &hx, &hy);
-        d->mpRupeeKeyParent->paneTrans(hx, hy);
         return;
     }
     if (!s_rupeeYCached && d->mpLifeParent != nullptr &&
