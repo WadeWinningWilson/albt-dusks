@@ -2,6 +2,7 @@
 // Dom Rod confuse AI deferred (requires per-enemy actor hooks on stock host).
 
 #include "global.h"
+#include "albw_symbols.h"
 
 #include "SSystem/SComponent/c_cc_d.h"
 #include "SSystem/SComponent/c_lib.h"
@@ -340,7 +341,7 @@ DEFINE_HOOK(&daNbomb_c::procWait, NbombWait);
 DEFINE_HOOK(&daNbomb_c::procInsectMove, NbombInsectMove);
 DEFINE_HOOK(&daNbomb_c::procExplodeInit, NbombExplodeInit);
 DEFINE_HOOK(&daNbomb_c::execute, NbombExecute);
-DEFINE_HOOK_SYMBOL("?fopAcM_fastCreate@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2IE@Z",
+DEFINE_HOOK_SYMBOL(ALBT_SYM_FASTCREATE,
                    fopAc_ac_c*(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, createFunc,
                                void*, u32, u8),
                    FastCreate);

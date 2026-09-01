@@ -1,4 +1,5 @@
 #include "quick_equip.h"
+#include "albw_symbols.h"
 
 #include "albw_common.h"
 #include "albw_game.h"
@@ -79,7 +80,7 @@ void open_item_wheel(bool quickSession) {
     s_forceUpOnce = true;
 }
 
-DEFINE_HOOK_SYMBOL("?dComIfGs_setSelectItemIndex@@YAXHE@Z", void(int, u8), SetSelectItemIndex);
+DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_SELECT_ITEM_INDEX, void(int, u8), SetSelectItemIndex);
 
 HookAction on_set_select_item_index_pre(ModContext*, void* args, void*, void*) {
     if (!s_session || !feature_on()) {

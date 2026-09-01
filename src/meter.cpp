@@ -3,6 +3,7 @@
 // External mod only; does not modify the ALBT fork tree.
 
 #include "global.h"
+#include "albw_symbols.h"
 
 #include "SSystem/SComponent/c_cc_d.h"
 #include "d/actor/d_a_arrow.h"
@@ -146,8 +147,8 @@ static u8 player_save_max_magic() {
 }
 
 DEFINE_HOOK(&dMeter2_c::moveKantera, MoveKantera);
-DEFINE_HOOK_SYMBOL("?dComIfGp_setItemMagicCount@@YAXF@Z", void(s16), SetItemMagicCount);
-DEFINE_HOOK_SYMBOL("?fopAcM_fastCreate@@YAPEAVfopAc_ac_c@@FIPEBUcXyz@@HPEBVcsXyz@@0CP6AHPEAX@Z2IE@Z",
+DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_ITEM_MAGIC_COUNT, void(s16), SetItemMagicCount);
+DEFINE_HOOK_SYMBOL(ALBT_SYM_FASTCREATE,
                    fopAc_ac_c*(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, createFunc,
                                void*, u32, u8),
                    MeterFastCreate);

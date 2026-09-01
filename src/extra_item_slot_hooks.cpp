@@ -1,4 +1,5 @@
 #include "extra_item_slot_hooks.h"
+#include "albw_symbols.h"
 
 #include "extra_item_slot.h"
 #include "quick_equip.h"
@@ -55,7 +56,7 @@ DEFINE_HOOK(dMw_UP_TRIGGER, MwUpTrigger);
 DEFINE_HOOK(dMw_DOWN_TRIGGER, MwDownTrigger);
 DEFINE_HOOK(dMw_LEFT_TRIGGER, MwLeftTrigger);
 DEFINE_HOOK(dMw_RIGHT_TRIGGER, MwRightTrigger);
-DEFINE_HOOK_SYMBOL("?dComIfGp_setSelectItem@@YAXH@Z", void(int), SetSelectItem);
+DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_SELECT_ITEM, void(int), SetSelectItem);
 DEFINE_HOOK(&dMenu_Ring_c::setActiveCursor, RingSetActiveCursor);
 
 bool quick_swap_suppresses_dpad() {

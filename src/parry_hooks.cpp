@@ -1,4 +1,5 @@
 #include "parry_hooks.h"
+#include "albw_symbols.h"
 
 #include "albw_common.h"
 #include "config_vars.h"
@@ -25,7 +26,7 @@
 namespace {
 
 DEFINE_HOOK(&daPy_py_c::setPlayerDamage, SetPlayerDamage);
-DEFINE_HOOK_SYMBOL("cc_at_check", fopAc_ac_c*(fopAc_ac_c*, dCcU_AtInfo*), CcAtCheck);
+DEFINE_HOOK_SYMBOL(ALBT_SYM_CC_AT_CHECK, fopAc_ac_c*(fopAc_ac_c*, dCcU_AtInfo*), CcAtCheck);
 DEFINE_HOOK(&dMeter2_c::moveKantera, MoveKanteraParry);
 DEFINE_HOOK(&dGameover_c::_create, GameoverCreate);
 
