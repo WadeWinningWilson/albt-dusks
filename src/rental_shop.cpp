@@ -11,6 +11,8 @@
 #include "rental_postman_hooks.h"
 #include "shield_game.h"
 #include "sword_atp.h"
+#include "potion.h"
+#include "shade_refuge.h"
 #include "outfit.h"
 #include "wardrobe.h"
 #include "sumo_test.h"
@@ -55,6 +57,8 @@ enum VisibleKind {
     VISIBLE_FA_TIER,
     VISIBLE_SWORD_ATP,  // fork d_albw_rental.cpp:303
     VISIBLE_SUMO_OUTFIT,  // fork d_albw_rental.cpp:311 - sumo store/retrieve row
+    VISIBLE_POTION_CAPACITY,  // fork d_albw_rental.cpp:304
+    VISIBLE_SHADE_REFUGE,     // fork d_albw_rental.cpp:310
 };
 
 struct ALBWRentalEntry {
@@ -152,6 +156,10 @@ static const ALBWSwordEntry kSwords[] = {
       "This one seems to be emanating power…wait doesn't this look just like..?" },
 };
 static constexpr int kSwordCount = sizeof(kSwords) / sizeof(kSwords[0]);
+
+// ALBW Port: Sumo Outfit shop price (a model-swap state, not a native clothes
+// item). fork d_albw_rental.cpp:317.
+static constexpr int kSumoOutfitPrice = 50;
 
 // Storage status lines, verbatim from fork d_albw_rental.cpp:270-275.
 static constexpr const char* kStorageStoreDesc =
@@ -486,6 +494,13 @@ bool categoryHasContent(ALBWShopCategory cat) {
         }
     }
     if (cat == CAT_UPGRADES) {
+        // fork d_albw_rental.cpp:486
+        if (dAlbwPotion_shouldShowCapacityShopRow()) {
+            return true;
+        }
+        if (dShadeRefuge_canShowInShop()) {
+            return true;
+        }
         if (albw_oocoo_can_show_in_shop()) {
             return true;
         }
@@ -566,13 +581,27 @@ void rebuildVisibleList() {
         }
     }
 
+    // fork d_albw_rental.cpp:765 - sumo purchase row on the Armor page.
+    if (cat == CAT_ARMOR && dAlbwSumoTest_isShopEligible()) {
+        appendVisible(VISIBLE_SUMO_OUTFIT, -1, true);
+    }
+
     if (cat == CAT_UPGRADES) {
         if (albw_mq_is_enabled()) {
             appendVisible(VISIBLE_MQ_HEART, -1, albw_mq_can_purchase_heart_shop());
             appendVisible(VISIBLE_MQ_METER, -1, albw_mq_can_purchase_meter_shop());
         }
+        // fork d_albw_rental.cpp:712
+        if (dAlbwPotion_shouldShowCapacityShopRow()) {
+            appendVisible(VISIBLE_POTION_CAPACITY, -1, dAlbwPotion_canPurchaseCapacityShop());
+        }
         if (dFocusedArts_shouldShowShopTierRow()) {
             appendVisible(VISIBLE_FA_TIER, -1, dFocusedArts_canPurchaseShopTier());
+        }
+        // fork d_albw_rental.cpp:853 - "Return to Last Shade Watcher" sits
+        // directly ABOVE Oocoo on the Upgrades & Services page.
+        if (dShadeRefuge_canShowInShop()) {
+            appendVisible(VISIBLE_SHADE_REFUGE, -1, true);
         }
         if (albw_oocoo_can_show_in_shop()) {
             appendVisible(VISIBLE_OOCOO, -1, true);
@@ -698,6 +727,55 @@ void tryPurchase(int visIdx) {
     // wardrobe store/retrieve path instead of the rupee flow.
     if (row.storageStore || row.storageRetrieve) {
         tryStorageAction(visIdx);
+        return;
+    }
+
+    // fork d_albw_rental.cpp:1086
+    if (row.kind == VISIBLE_POTION_CAPACITY) {
+        const int price = dAlbwPotion_getCapacityShopPrice();
+        const u16 rupees = getRupees();
+        if (price <= 0) {
+            return;
+        }
+        if (rupees < (u16)price) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        if (!dAlbwPotion_tryPurchaseCapacityShop()) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        setRupees((u16)(rupees - (u16)price));
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
+        rebuildVisibleList();
+        return;
+    }
+
+    // fork d_albw_rental.cpp:1263
+    if (row.kind == VISIBLE_SHADE_REFUGE) {
+        if (!dShadeRefuge_tryPurchaseReturn()) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
+        rebuildVisibleList();
+        return;
+    }
+
+    // fork d_albw_rental.cpp:1241
+    if (row.kind == VISIBLE_SUMO_OUTFIT) {
+        if (!dAlbwSumoTest_tryPurchaseShop()) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
+        rebuildVisibleList();
         return;
     }
 
@@ -1103,6 +1181,42 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
             pub.itemNo = (u8)dItemNo_BEE_CHILD_e;
             pub.isOocooService = true;
             pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_POTION_CAPACITY) {
+            // fork d_albw_rental.cpp:1735
+            pub.name = dAlbwPotion_getCapacityShopName();
+            pub.price = row.purchasable ? dAlbwPotion_getCapacityShopPrice() : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = dAlbwPotion_getCapacityShopDesc();
+            pub.itemNo = (u8)dItemNo_RED_BOTTLE_e;
+            pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_SHADE_REFUGE) {
+            // fork d_albw_rental.cpp
+            pub.name = dShadeRefuge_getServiceName();
+            pub.price = dShadeRefuge_getServicePrice();
+            pub.purchasable = true;
+            pub.desc = dShadeRefuge_getServiceDesc();
+            pub.itemNo = 0xff;
+            pub.showNameWhenSoldOut = false;
+        } else if (row.kind == VISIBLE_SUMO_OUTFIT) {
+            // fork d_albw_rental.cpp:1794
+            pub.name = "Sumo Outfit";
+            pub.isStorageStore = row.storageStore;
+            pub.isStorageRetrieve = row.storageRetrieve;
+            pub.purchasable = row.purchasable;
+            pub.showNameWhenSoldOut = false;
+            pub.itemNo = 0xff;
+            if (row.storageStore) {
+                pub.price = 0;
+                pub.desc = kStorageStoreDesc;
+            } else if (row.storageRetrieve) {
+                pub.price = kAlbwWardrobeStorageRetrievePrice;
+                pub.desc = "Sir. I understand this is your home, but I must ask "
+                           "that you undress elsewhere.";
+            } else {
+                pub.price = kSumoOutfitPrice;
+                pub.desc = "Sir. I understand this is your home, but I must ask "
+                           "that you undress elsewhere.";
+            }
         } else if (row.kind == VISIBLE_SWORD_ATP) {
             // fork d_albw_rental.cpp:1723
             const int swordId = row.catalogIdx;
