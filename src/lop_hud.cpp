@@ -50,9 +50,18 @@ bool s_healthBar = false;
 bool s_anchorValid = false;
 Vec s_anchor = {0.0f, 0.0f, 0.0f};
 bool s_lifeHidden = false;
+// exec() carries the ring-vs-main status; draw() does not, so keep the last one.
+u32 s_lastExecStatus = 0;
+bool s_lastExecStatusValid = false;
+// Vanilla rupee position, captured before we first move it, so turning the
+// layout off can put it back without waiting for a rupee-count change.
+bool s_rupeeHomeValid = false;
+f32 s_rupeeHomeX = 0.0f;
+f32 s_rupeeHomeY = 0.0f;
 
 void draw_item_belt(dMeter2Draw_c* d);  // defined below, used by on_draw_post
 void draw_fa_meter(dMeter2Draw_c* d);   // defined below, used by on_draw_post
+void apply_lop_button_ring(dMeter2Draw_c* d, u32 i_status);  // defined below
 
 void hide_pane(CPaneMgr* p) {
     if (p != nullptr && p->getPanePtr() != nullptr) {
@@ -292,9 +301,21 @@ bool s_rupeeYCached = false;
 f32 s_rupeeYOffset = 0.0f;
 
 void apply_lop_rupee(dMeter2Draw_c* d) {
-    if (!s_active || d->mpRupeeKeyParent == nullptr ||
-        d->mpRupeeKeyParent->getPanePtr() == nullptr)
-    {
+    if (d->mpRupeeKeyParent == nullptr || d->mpRupeeKeyParent->getPanePtr() == nullptr) {
+        return;
+    }
+    if (!s_rupeeHomeValid) {
+        // Vanilla's own drawRupee ends in this paneTrans; snapshot it once so the
+        // Off path can restore exactly, rather than recomputing vanilla's math.
+        s_rupeeHomeX = g_drawHIO.mRupeeKeyPosX;
+        s_rupeeHomeY = g_drawHIO.mRupeeKeyPosY;
+        s_rupeeHomeValid = true;
+    }
+    if (!s_active) {
+        f32 hx = s_rupeeHomeX;
+        f32 hy = s_rupeeHomeY;
+        anchor_hud_scale(d->mpRupeeKeyParent, Corner::BottomRight, &hx, &hy);
+        d->mpRupeeKeyParent->paneTrans(hx, hy);
         return;
     }
     if (!s_rupeeYCached && d->mpLifeParent != nullptr &&
@@ -320,6 +341,19 @@ HookAction on_draw_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
     refresh_mode();
+    // ============================================
+    // Positioning runs EVERY FRAME from here, not from the drawRupee / exec
+    // post-hooks alone. The fork forces a redraw on toggle by setting
+    // draw_rupee / draw_cross / the mDoStatus family, but those are locals and
+    // private members a mod cannot reach - so a hook that only fires on the
+    // game's own redraw cadence would leave the wallet and button ring parked
+    // in their vanilla spots until an unrelated change happened to trigger one.
+    // Re-applying paneTrans per frame is idempotent and cadence-independent.
+    // ============================================
+    if (s_lastExecStatusValid) {
+        apply_lop_button_ring(d, s_lastExecStatus);
+    }
+    apply_lop_rupee(d);
     compute_anchor(d);
     apply_health_bar_life(d);
     // Fork gates this on dusk settings game.enableTouchControls (touch builds keep
@@ -741,7 +775,9 @@ void on_exec_post(ModContext*, void* args, void*, void*) {
     // exec() runs before draw(), so refresh state here too - otherwise the very
     // first frame after a toggle would position the ring from stale state.
     refresh_mode();
-    apply_lop_button_ring(d, mods::arg<u32>(args, 1));
+    s_lastExecStatus = mods::arg<u32>(args, 1);
+    s_lastExecStatusValid = true;
+    apply_lop_button_ring(d, s_lastExecStatus);
 }
 
 DEFINE_HOOK(&dMeter2Draw_c::drawRupee, LopDrawRupee);
