@@ -21,6 +21,29 @@ void albw_wolf_spend_charge(u8 amount);
 bool dAlbwWolfArts_isHowlUnlocked();
 bool dAlbwWolfArts_isArmUnlocked();
 
+// ============================================
+// NEW CODE - ALBW Port (wolf-arts shop surface)
+// These are already DEFINED at file scope in wolf_combat.cpp:682-806; they were
+// simply never declared, so the shop could not call them. No new behaviour.
+// ============================================
+bool        dAlbwWolfArts_shouldShowHowlShopRow();
+int         dAlbwWolfArts_getHowlShopPrice();
+const char* dAlbwWolfArts_getHowlShopName();
+const char* dAlbwWolfArts_getHowlShopDesc();
+bool        dAlbwWolfArts_tryPurchaseHowl();
+
+bool        dAlbwWolfArts_shouldShowArmShopRow();
+int         dAlbwWolfArts_getArmShopPrice();
+const char* dAlbwWolfArts_getArmShopName();
+const char* dAlbwWolfArts_getArmShopDesc();
+bool        dAlbwWolfArts_tryPurchaseArm();
+
+bool        dAlbwWolfArts_shouldShowChargeShopRow();
+int         dAlbwWolfArts_getChargeShopPrice();
+const char* dAlbwWolfArts_getChargeShopName();
+const char* dAlbwWolfArts_getChargeShopDesc();
+bool        dAlbwWolfArts_tryPurchaseChargeUpgrade();
+
 bool dAlbwWolfStun_isTwilightEnemy(s16 i_name);
 void dAlbwWolfStun_apply(fopAc_ac_c* i_enemy);
 void dAlbwWolfStun_applyHold(fopAc_ac_c* i_enemy);

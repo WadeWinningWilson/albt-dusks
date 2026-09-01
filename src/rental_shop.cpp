@@ -13,6 +13,7 @@
 #include "sword_atp.h"
 #include "potion.h"
 #include "shade_refuge.h"
+#include "wolf_combat.h"
 #include "outfit.h"
 #include "wardrobe.h"
 #include "sumo_test.h"
@@ -60,6 +61,9 @@ enum VisibleKind {
     VISIBLE_POTION_CAPACITY,  // fork d_albw_rental.cpp:304
     VISIBLE_SHADE_REFUGE,     // fork d_albw_rental.cpp:310
     VISIBLE_DEITY,            // fork d_albw_rental.cpp:313
+    VISIBLE_WOLF_HOWL,        // fork d_albw_rental.cpp:306
+    VISIBLE_MIDNA_ARM,        // fork d_albw_rental.cpp:307
+    VISIBLE_WOLF_CHARGE,      // fork d_albw_rental.cpp:308
 };
 
 struct ALBWRentalEntry {
@@ -524,6 +528,11 @@ bool categoryHasContent(ALBWShopCategory cat) {
         if (dShadeRefuge_canShowInShop()) {
             return true;
         }
+        // fork d_albw_rental.cpp:730/:740/:752
+        if (dAlbwWolfArts_shouldShowHowlShopRow() || dAlbwWolfArts_shouldShowArmShopRow() ||
+            dAlbwWolfArts_shouldShowChargeShopRow()) {
+            return true;
+        }
         if (albw_oocoo_can_show_in_shop()) {
             return true;
         }
@@ -626,6 +635,19 @@ void rebuildVisibleList() {
         if (dFocusedArts_shouldShowShopTierRow()) {
             appendVisible(VISIBLE_FA_TIER, -1, dFocusedArts_canPurchaseShopTier());
         }
+        // fork d_albw_rental.cpp:730 - Wolf Howl art unlock (state purchase).
+        if (dAlbwWolfArts_shouldShowHowlShopRow()) {
+            appendVisible(VISIBLE_WOLF_HOWL, -1, true);
+        }
+        // fork d_albw_rental.cpp:740 - "Midna's Grasp" arm art unlock.
+        if (dAlbwWolfArts_shouldShowArmShopRow()) {
+            appendVisible(VISIBLE_MIDNA_ARM, -1, true);
+        }
+        // fork d_albw_rental.cpp:752 - 3rd wolf charge pip (after Master Sword).
+        if (dAlbwWolfArts_shouldShowChargeShopRow()) {
+            appendVisible(VISIBLE_WOLF_CHARGE, -1, true);
+        }
+
         // fork d_albw_rental.cpp:853 - "Return to Last Shade Watcher" sits
         // directly ABOVE Oocoo on the Upgrades & Services page.
         if (dShadeRefuge_canShowInShop()) {
@@ -787,6 +809,36 @@ void tryPurchase(int visIdx) {
             sJustFailedPurchase = true;
             return;
         }
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
+        rebuildVisibleList();
+        return;
+    }
+
+    // fork d_albw_rental.cpp:1137 / :1187 / :1162 - all three are state
+    // purchases with the same shape: price check, then the unlock call.
+    if (row.kind == VISIBLE_WOLF_HOWL || row.kind == VISIBLE_MIDNA_ARM ||
+        row.kind == VISIBLE_WOLF_CHARGE) {
+        const int price = row.kind == VISIBLE_WOLF_HOWL   ? dAlbwWolfArts_getHowlShopPrice()
+                          : row.kind == VISIBLE_MIDNA_ARM ? dAlbwWolfArts_getArmShopPrice()
+                                                          : dAlbwWolfArts_getChargeShopPrice();
+        if (price <= 0) {
+            return;
+        }
+        const u16 rupees = getRupees();
+        if (rupees < (u16)price) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        const bool ok = row.kind == VISIBLE_WOLF_HOWL   ? dAlbwWolfArts_tryPurchaseHowl()
+                        : row.kind == VISIBLE_MIDNA_ARM ? dAlbwWolfArts_tryPurchaseArm()
+                                                        : dAlbwWolfArts_tryPurchaseChargeUpgrade();
+        if (!ok) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        setRupees((u16)(rupees - (u16)price));
         sPurchasedThisSession = true;
         sJustPurchased = true;
         rebuildActivePages();
@@ -1236,6 +1288,33 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
             pub.purchasable = row.purchasable;
             pub.desc = dAlbwPotion_getCapacityShopDesc();
             pub.itemNo = (u8)dItemNo_RED_BOTTLE_e;
+            pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_WOLF_HOWL) {
+            // fork d_albw_rental.cpp:1758
+            pub.name = dAlbwWolfArts_getHowlShopName();
+            pub.price = row.purchasable ? dAlbwWolfArts_getHowlShopPrice() : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = dAlbwWolfArts_getHowlShopDesc();
+            pub.itemNo = 0xFD;               // fallback icon until wolf_howl.png
+            pub.customIconName = "wolf_howl";
+            pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_MIDNA_ARM) {
+            // fork d_albw_rental.cpp:1770
+            pub.name = dAlbwWolfArts_getArmShopName();
+            pub.price = row.purchasable ? dAlbwWolfArts_getArmShopPrice() : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = dAlbwWolfArts_getArmShopDesc();
+            pub.itemNo = 0xFD;               // fallback icon until midna_arm.png
+            pub.customIconName = "midna_arm";
+            pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_WOLF_CHARGE) {
+            // fork d_albw_rental.cpp:1782
+            pub.name = dAlbwWolfArts_getChargeShopName();
+            pub.price = row.purchasable ? dAlbwWolfArts_getChargeShopPrice() : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = dAlbwWolfArts_getChargeShopDesc();
+            pub.itemNo = 0xFD;
+            pub.customIconName = "wolf_howl";  // reuse wolf silhouette until dedicated art
             pub.showNameWhenSoldOut = true;
         } else if (row.kind == VISIBLE_DEITY) {
             // fork d_albw_rental.cpp:1814
