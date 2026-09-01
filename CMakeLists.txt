@@ -68,7 +68,15 @@ add_mod(albt_full_plugin
             src/mq_hearts.cpp
             src/sword_atp.cpp
             src/potion.cpp
+            src/shade_refuge.cpp
+            src/outfit_stats.cpp
             src/outfit.cpp
+            src/outfit_debug.cpp
+            src/sumo_test.cpp
+            src/wardrobe.cpp
+            src/alink_compat.cpp
+            src/albw_fork_compat.cpp
+            src/albw_gameinfo_compat.cpp
         MOD_JSON mod.json
         RES_DIR res
         OVERLAY_DIR overlay

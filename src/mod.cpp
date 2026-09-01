@@ -73,6 +73,15 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("parry_master", false, &g_parry_master) != MOD_OK ||
         albw_register_bool("boss_hp_bars", false, &g_boss_hp_bars) != MOD_OK ||
         albw_register_bool("boss_refinement", false, &g_boss_refinement) != MOD_OK ||
+        albw_register_bool("shade_refuge", false, &g_shade_refuge) != MOD_OK ||
+        albw_register_bool("outfit_stats", false, &g_outfit_stats) != MOD_OK ||
+        // Outfit cluster - fork host settings with no stock equivalent (see
+        // albw_dusk_compat.h). cap_wear is an int choice: 0=Off 1=None 2=Green
+        // 3=Red 4=Blue, matching fork dusk::CapWearMode.
+        albw_register_bool("dpad_quick_swap", false, &g_dpad_quick_swap) != MOD_OK ||
+        albw_register_bool("sumo_outfit_fists", false, &g_sumo_outfit_fists) != MOD_OK ||
+        albw_register_bool("wardrobe_recovery_debug", false, &g_wardrobe_recovery_debug) != MOD_OK ||
+        albw_register_int("cap_wear", 0, &g_cap_wear) != MOD_OK ||
         albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
         albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||

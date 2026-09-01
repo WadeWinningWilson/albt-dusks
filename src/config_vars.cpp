@@ -35,6 +35,12 @@ ConfigVarHandle g_boss_hp_bars = 0;
 ConfigVarHandle g_boss_refinement = 0;
 ConfigVarHandle g_postman_rental = 0;
 ConfigVarHandle g_master_quest = 0;
+ConfigVarHandle g_shade_refuge = 0;
+ConfigVarHandle g_outfit_stats = 0;
+ConfigVarHandle g_dpad_quick_swap = 0;
+ConfigVarHandle g_sumo_outfit_fists = 0;
+ConfigVarHandle g_wardrobe_recovery_debug = 0;
+ConfigVarHandle g_cap_wear = 0;
 
 ConfigVarHandle g_lop_hud_mode = 0;
 ConfigVarHandle g_parry_icons_mode = 0;

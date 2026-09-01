@@ -1381,6 +1381,15 @@ bool install(ModError* error, const char* name, ModResult r) {
     return true;
 }
 
+
+// ============================================
+// NEW CODE - ALBT multiplatform
+// Fork-named recovery-rate accessors for the ported wardrobe module
+// (fork d_meter2.cpp:384 / :388). Both read this meter's live rates.
+// ============================================
+int albw_meter_normal_recovery_rate() { return kRecoverPer100ms; }
+int albw_meter_lockout_recovery_rate() { return lockout_recovery_rate(); }
+
 }  // namespace albw_meter_impl
 
 bool albw_meter_is_enabled() {

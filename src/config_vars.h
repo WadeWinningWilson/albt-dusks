@@ -37,6 +37,14 @@ extern ConfigVarHandle g_boss_hp_bars;
 extern ConfigVarHandle g_boss_refinement;
 extern ConfigVarHandle g_postman_rental;
 extern ConfigVarHandle g_master_quest;
+extern ConfigVarHandle g_shade_refuge;
+extern ConfigVarHandle g_outfit_stats;
+// Outfit cluster (outfit / sumo_test / wardrobe) - fork host settings that have
+// no stock equivalent; see albw_dusk_compat.h.
+extern ConfigVarHandle g_dpad_quick_swap;
+extern ConfigVarHandle g_sumo_outfit_fists;
+extern ConfigVarHandle g_wardrobe_recovery_debug;
+extern ConfigVarHandle g_cap_wear;
 
 extern ConfigVarHandle g_lop_hud_mode;
 extern ConfigVarHandle g_parry_icons_mode;

@@ -21,6 +21,7 @@
 #include "config_vars.h"
 #include "extra_item_slot.h"
 #include "outfit.h"
+#include "outfit_debug.h"
 #include "shield_game.h"
 
 namespace {
@@ -209,28 +210,76 @@ void cycle_next_outfit() {
     if (player == nullptr || player->checkWolf()) {
         return;
     }
-    if (player->getClothesChangeWaitTimer() != 0) {
-        return;
-    }
-    if (albw_outfit_is_swap_blocked()) {
+
+    // Block the swap in slow/heavy "scripted movement" states (iron boots, depowered
+    // Magic Armor, ...) where the clothes-change rebuild launches Link.  Play the parry
+    // "not allowed" SFX instead of the switch jingle.  Sumo owns the predicate.
+    if (dAlbwOutfit_isSwapBlockedState()) {
         Z2GetAudioMgr()->seStart(Z2SE_SY_ITEM_USE_CANCEL, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
+        dAlbwOutfit_debugLog("cycle blocked: heavy/slow movement state");
         return;
     }
 
-    const AlbwOutfitKind current = albw_outfit_get_active();
-    const AlbwOutfitKind next = albw_outfit_get_next_owned(current);
+    // Do not queue a new target mid-reload - leaving sumo (or any clothes change)
+    // while FLG2/save disagree is the documented crash window (Quick-Sumo Work.md).
+    if (dAlbwOutfit_isSwapInProgress()) {
+        Z2GetAudioMgr()->seStart(Z2SE_SY_ITEM_USE_CANCEL, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
+        dAlbwOutfit_debugLog("cycle blocked: swap in progress");
+        return;
+    }
+
+    const dAlbwOutfitKind current = dAlbwOutfit_getActive();
+    const dAlbwOutfitKind next = dAlbwOutfit_getNextOwned(current);
     if (next == current) {
+        dAlbwOutfit_debugLog("cycle no-op cur=%d next=%d clothTmr=%d", (int)current, (int)next,
+                             player->getClothesChangeWaitTimer());
         return;
     }
-    if (!albw_outfit_equip(next)) {
+
+    if (!dAlbwOutfit_equip(next)) {
+        dAlbwOutfit_debugLog("cycle queued cur=%d next=%d", (int)current, (int)next);
         return;
     }
+
+    dAlbwOutfit_debugLog("cycle ok cur=%d next=%d", (int)current, (int)next);
 
     Z2GetAudioMgr()->seStart(Z2SE_SY_ITEM_SET_X, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
     dMeter2Info_set2DVibration();
 }
 
 }  // namespace
+
+// ============================================
+// NEW CODE - ALBT multiplatform
+// Fork-named entry points onto the shield helpers already ported above, for the
+// ported wardrobe module. The impls live in the anonymous namespace, so these
+// external-linkage wrappers are required (a header decl alone links-errors).
+//   dMeter2_isShieldItem        fork d_meter2.cpp:1022
+//   dMeter2_shieldIsOwned       fork d_meter2.cpp:1054
+//   dMeter2_equipOwnedShield    fork d_meter2.cpp (ported as equip_owned_shield)
+//   dMeter2_applyEquippedShield fork d_meter2.cpp - re-expressed over the same
+//                               mod primitives equip_owned_shield already uses,
+//                               including the itemNo==NONE unequip branch.
+// ============================================
+bool albw_shield_is_item(u8 itemNo) { return shield_is_item(itemNo); }
+bool albw_shield_is_owned(u8 itemNo) { return shield_is_owned(itemNo); }
+bool albw_shield_equip_owned(u8 itemNo) { return equip_owned_shield(itemNo); }
+
+void albw_shield_apply_equipped(u8 itemNo) {
+    if (itemNo == dItemNo_NONE_e) {
+        if (albw_game::select_equip_shield() != dItemNo_NONE_e) {
+            albw_shield_game::set_shield(dItemNo_NONE_e, false);
+        }
+        return;
+    }
+    if (!shield_is_item(itemNo)) {
+        return;
+    }
+    set_collect_shield_for_item(itemNo);
+    if (albw_game::select_equip_shield() != itemNo) {
+        albw_shield_game::set_shield(itemNo, false);
+    }
+}
 
 void albw_quick_swap_tick() {
     if (!can_use_quick_swap()) {

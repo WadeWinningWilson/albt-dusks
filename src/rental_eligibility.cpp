@@ -163,6 +163,15 @@ void stripRentalItemOnDeath(u8 itemNo) {
 
 }  // namespace
 
+// ============================================
+// NEW CODE - ALBT multiplatform
+// Fork-named entry point onto playerOwnsRentalItem() for the ported outfit
+// cluster (fork d_meter2.cpp:902 dMeter2_playerOwnsRentalItem). The impl lives
+// in the anonymous namespace above, so it needs this external-linkage wrapper -
+// a header declaration alone would compile and then fail at link.
+// ============================================
+bool albw_rental_player_owns_item(u8 itemNo) { return playerOwnsRentalItem(itemNo); }
+
 bool albw_rental_postman_unlocked() {
     return albw_game::is_event_bit(kPostmanUnlockFlag);
 }

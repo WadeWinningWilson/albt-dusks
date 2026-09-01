@@ -91,6 +91,26 @@ inline void on_item_first_bit(u8 itemNo) {
     g_dComIfG_gameInfo.info.getPlayer().getGetItem().onFirstBit(itemNo);
 }
 
+inline u16 get_rupee() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getRupee();
+}
+
+inline void set_rupee(u16 rupees) {
+    g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().setRupee(rupees);
+}
+
+inline void set_life(u16 life) {
+    g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().setLife(life);
+}
+
+inline void set_restart_room(const cXyz& position, s16 angle, s8 roomNo) {
+    g_dComIfG_gameInfo.info.getRestart().setRoom(position, angle, roomNo);
+}
+
+inline void set_restart_room_param(u32 param) {
+    g_dComIfG_gameInfo.info.getRestart().setRoomParam(param);
+}
+
 inline u8 clear_count() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerInfo().getClearCount();
 }
