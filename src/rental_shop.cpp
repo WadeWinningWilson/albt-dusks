@@ -1286,10 +1286,16 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
         } else if (row.kind == VISIBLE_FA_TIER) {
             const int tier = dFocusedArts_getNextShopTierIndex();
             pub.name = dFocusedArts_getShopTierName(tier);
-            pub.price = dFocusedArts_getNextShopTierPrice();
+            // fork d_albw_rental.cpp:1749-1753. The icon id is the makimono
+            // shop sentinel 0xFD, NOT a real item - rental_shop_ui.cpp:213
+            // already maps it to ni_item_icon_makimono.bti. Passing a real item
+            // id here (this was dItemNo_LV1_SOUP_e) sent the icon lookup down the
+            // ordinary item path, which is why the Focused Arts scroll rendered
+            // broken while every letter/item row was fine.
+            pub.price = row.purchasable ? dFocusedArts_getNextShopTierPrice() : 0;
             pub.purchasable = row.purchasable;
             pub.desc = dFocusedArts_getShopTierDesc(tier);
-            pub.itemNo = (u8)dItemNo_LV1_SOUP_e;
+            pub.itemNo = 0xFD;
             pub.showNameWhenSoldOut = true;
         } else {
             // fork d_albw_rental.cpp:1845. Storage rows carry catalogIdx < 0, so
