@@ -609,7 +609,10 @@ HookAction on_move_rupee_pre(ModContext*, void*, void*, void*) {
     const bool lopOn = active();
     if (s_rupeeWasOn != lopOn) {
         s_rupeeWasOn = lopOn;
-        s_rupeeYCached = false;  // re-measure the offset for the new layout
+        // NOTE: do NOT invalidate s_rupeeYCached here. The fork measures this
+        // once and holds it forever (d_meter2_draw.cpp:3382, "held so it
+        // doesn't oscillate frame to frame"). Re-measuring after the pane has
+        // already moved shrinks the delta and the layout drifts.
     }
     return HOOK_CONTINUE;
 }
@@ -618,7 +621,10 @@ HookAction on_move_button_cross_pre(ModContext*, void*, void*, void*) {
     const bool lopOn = active();
     if (s_crossWasOn != lopOn) {
         s_crossWasOn = lopOn;
-        s_btnLiftCached = false;  // re-measure the ring lift for the new layout
+        // NOTE: do NOT invalidate s_btnLiftCached here - same reason as the
+        // wallet offset above (fork d_meter2_draw.cpp:781, measured once and
+        // held). Re-measuring from an already-lowered ring shrinks the lift
+        // while kLopButtonRaiseY stays constant, so the ring creeps upward.
     }
     return HOOK_CONTINUE;
 }

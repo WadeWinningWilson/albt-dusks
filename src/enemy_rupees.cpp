@@ -12,6 +12,7 @@
 #include "d/actor/d_a_obj_bemos.h"
 #include "d/d_cc_uty.h"
 #include "d/d_com_inf_game.h"
+#include "d/d_pane_class.h"
 #include "d/d_meter2.h"
 #include "d/d_meter2_draw.h"
 #include "d/d_meter2_info.h"
@@ -469,8 +470,37 @@ void drawPopup() {
     const f32 digitW = g_drawHIO.mRupeeCountScale * 32.0f;
     const f32 digitH = digitW;
     const f32 advance = digitW * 0.6f;
-    f32 posX = g_drawHIO.mRupeePosX - advance * 6.5f;
-    const f32 centerY = g_drawHIO.mRupeePosY;
+
+    // ============================================
+    // NEW CODE - ALBW Port
+    // Anchor to the LIVE rupee pane, not the fixed HIO position - port of the
+    // fork's dMeter2Draw_c::getRupeeAnchorCenter (d_meter2_draw.cpp). The wallet
+    // moves (the LoP layout relocates it to the top-right corner), and a popup
+    // pinned to g_drawHIO.mRupeePos* would be left behind at the vanilla spot.
+    // HIO stays the fallback, exactly as the fork does it.
+    // ============================================
+    f32 anchorX = g_drawHIO.mRupeePosX;
+    f32 anchorY = g_drawHIO.mRupeePosY;
+    {
+        // g_meter2_info, not dMeter2Info_getMeterClass(): the accessor is
+        // DUSK_NOINLINE and absent from the Windows stub (same rule as
+        // albw_game.h). The data global is exported.
+        dMeter2_c* meter = g_meter2_info.getMeterClass();
+        dMeter2Draw_c* meterDraw = (meter != NULL) ? meter->getMeterDrawPtr() : NULL;
+        if (meterDraw != NULL && meterDraw->mpRupeeParent[0] != NULL &&
+            meterDraw->mpRupeeParent[0]->getPanePtr() != NULL)
+        {
+            const Vec c = meterDraw->mpRupeeParent[0]->getGlobalVtxCenter(false, 0);
+            anchorX = c.x;
+            anchorY = c.y;
+        }
+    }
+    // ============================================
+    // NEW CODE ENDS HERE
+    // ============================================
+
+    f32 posX = anchorX - advance * 6.5f;
+    const f32 centerY = anchorY;
 
     int digits[kPopupMaxDigits];
     int digitCount = 0;
