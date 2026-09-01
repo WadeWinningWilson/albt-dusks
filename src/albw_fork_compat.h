@@ -66,6 +66,20 @@ bool dMeter2_isALBWArmorDepleted();                // fork d_meter2.cpp:696
 int  dMeter2_getALBWNormalRecoveryRate();          // fork d_meter2.cpp:384
 int  dMeter2_getALBWLockoutRecoveryRate();         // fork d_meter2.cpp:388
 
+// ---- 14. stricmp ------------------------------------------------------------
+// The fork's sumo module includes dusk/extras.h, which for non-MSVC targets
+// DECLARES stricmp/strnicmp (fork include/dusk/extras.h:8-11) and relies on the
+// MSL extras implementation inside the game binary. A mod cannot link against
+// that, and only MSVC's CRT ships stricmp - which is why the six non-Windows CI
+// jobs failed on it while both Windows jobs passed.
+//
+// POSIX strcasecmp has stricmp's exact semantics, so this is a rename, not a
+// reimplementation. Guarded exactly the way the fork guards its declaration.
+#ifndef _MSC_VER
+int stricmp(const char* str1, const char* str2);
+int strnicmp(const char* str1, const char* str2, int n);
+#endif
+
 // ============================================
 // NEW CODE ENDS HERE
 // ============================================

@@ -10,7 +10,7 @@ if not exist "%ZIG%" (
   echo Zig is missing. Expected tools\tools\zig\zig.exe
   exit /b 1
 )
-%CMAKE% -S "%ROOT%." -B "%BUILD%" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_MAKE_PROGRAM=%NINJA% -DCMAKE_TOOLCHAIN_FILE="%ROOT%cmake\linux-x86_64-zig.cmake" -DZIG=%ZIG%
+%CMAKE% -S "%ROOT%." -B "%BUILD%" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_MAKE_PROGRAM=%NINJA% -DCMAKE_TOOLCHAIN_FILE="%ROOT%cmake\linux-x86_64-zig.cmake" -DZIG="%ZIG%"
 if errorlevel 1 exit /b 1
 %CMAKE% --build "%BUILD%"
 exit /b %ERRORLEVEL%

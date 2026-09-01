@@ -85,6 +85,15 @@ bool dMeter2_isALBWArmorDepleted() { return albw_meter_impl::g_armor_depleted; }
 int  dMeter2_getALBWNormalRecoveryRate() { return albw_meter_impl::albw_meter_normal_recovery_rate(); }
 int  dMeter2_getALBWLockoutRecoveryRate() { return albw_meter_impl::albw_meter_lockout_recovery_rate(); }
 
+// ---- 14. stricmp (non-MSVC only; MSVC's CRT already has it) ------------------
+#ifndef _MSC_VER
+#include <strings.h>
+int stricmp(const char* str1, const char* str2) { return strcasecmp(str1, str2); }
+int strnicmp(const char* str1, const char* str2, int n) {
+    return strncasecmp(str1, str2, static_cast<size_t>(n));
+}
+#endif
+
 #endif  // TARGET_PC
 
 // ============================================
