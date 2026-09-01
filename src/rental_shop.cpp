@@ -11,6 +11,11 @@
 #include "rental_postman_hooks.h"
 #include "shield_game.h"
 #include "sword_atp.h"
+#include "outfit.h"
+#include "wardrobe.h"
+#include "sumo_test.h"
+#include "albw_fork_compat.h"
+#include "albw_dusk_compat.h"
 
 #include "d/d_com_inf_game.h"
 #include "d/d_item_data.h"
@@ -38,6 +43,7 @@ enum ALBWShopCategory {
     CAT_ARMOR,
     CAT_UPGRADES,
     CAT_SWORD_ATP,  // Master Quest per-sword Atp upgrades (fork d_albw_rental.cpp:78)
+    CAT_SWORDS,     // Quick Swap wardrobe storage (fork d_albw_rental.cpp:77)
     CAT_COUNT,
 };
 
@@ -48,6 +54,7 @@ enum VisibleKind {
     VISIBLE_MQ_METER,
     VISIBLE_FA_TIER,
     VISIBLE_SWORD_ATP,  // fork d_albw_rental.cpp:303
+    VISIBLE_SUMO_OUTFIT,  // fork d_albw_rental.cpp:311 - sumo store/retrieve row
 };
 
 struct ALBWRentalEntry {
@@ -68,8 +75,11 @@ struct PageDef {
 
 struct VisibleEntry {
     VisibleKind kind;
-    int catalogIdx;
+    int catalogIdx;       // fork: kItemsIdx
+    u8 rowItemNo;         // item id when catalogIdx < 0 (storage rows)
     bool purchasable;
+    bool storageStore;
+    bool storageRetrieve;
 };
 
 constexpr int kVisibleListMax = 48;
@@ -102,16 +112,54 @@ VisibleEntry sVisibleList[kVisibleListMax] = {};
 int sVisibleCount = 0;
 dALBWVisibleEntry sPubList[kVisibleListMax] = {};
 
-// Fork tab order minus the deferred Swords page (that one is Quick-Swap
-// wardrobe storage and needs d_albw_wardrobe, which is not ported).
+// Fork tab order, verbatim (fork d_albw_rental.cpp:88): Items -> Swords ->
+// Sword Upgrades -> Shields -> Armor -> Upgrades. The Swords page is Quick-Swap
+// wardrobe storage; it was deferred while d_albw_wardrobe was unported.
 static const PageDef kPages[] = {
     {CAT_ITEMS, "Items"},
+    {CAT_SWORDS, "Swords"},
     {CAT_SWORD_ATP, "Sword Upgrades"},
     {CAT_SHIELDS, "Shields"},
     {CAT_ARMOR, "Armor"},
     {CAT_UPGRADES, "Upgrades & Services"},
 };
 static constexpr int kPageCount = sizeof(kPages) / sizeof(kPages[0]);
+
+// ============================================
+// NEW CODE - ALBW Port (Quick-Swap wardrobe sword catalogue)
+// Verbatim from fork d_albw_rental.cpp:247-269.
+// ============================================
+struct ALBWSwordEntry {
+    const char* name;
+    u8 itemNo;
+    const char* desc;
+};
+
+static const ALBWSwordEntry kSwords[] = {
+    { "Wooden Sword",
+      (u8)dItemNo_WOOD_STICK_e,
+      "Is this a toy or a sword? I must say it was best suited as a gift you gave "
+      "that boy earlier!" },
+    { "Ordon Sword",
+      (u8)dItemNo_SWORD_e,
+      "Surely crafted by this town's best swordsman. The man who was here earlier "
+      "told me to send you his regards." },
+    { "Master Sword",
+      (u8)dItemNo_MASTER_SWORD_e,
+      "I'm quite honored you would even trust me with this!" },
+    { "Light Sword",
+      (u8)dItemNo_LIGHT_SWORD_e,
+      "This one seems to be emanating power…wait doesn't this look just like..?" },
+};
+static constexpr int kSwordCount = sizeof(kSwords) / sizeof(kSwords[0]);
+
+// Storage status lines, verbatim from fork d_albw_rental.cpp:270-275.
+static constexpr const char* kStorageStoreDesc =
+    "Do you want to store this for later? A storage fee will apply upon its return.";
+static constexpr const char* kStorageStoreOkMsg =
+    "Stored safely with the Postman.\nYou can retrieve it anytime for 100 rupees.";
+static constexpr const char* kStorageRetrieveOkMsg =
+    "Returned to your active wardrobe.\nThank you for your patronage!";
 
 static const ALBWRentalEntry kItems[] = {
     {"Slingshot", (u8)dItemNo_PACHINKO_e, SLOT_23, 15,
@@ -236,10 +284,206 @@ bool itemRowVisible(const ALBWRentalEntry& e) {
     return e.isClothes || !playerOwns(e);
 }
 
+
+// ============================================
+// NEW CODE - ALBW Port (Quick-Swap wardrobe storage rows)
+// Ported from fork d_albw_rental.cpp; the fork line for each function is cited
+// above it. The only edit is the field rename kItemsIdx -> catalogIdx, which is
+// what this shop already calls that member.
+// ============================================
+
+// fork d_albw_rental.cpp:537
+static bool appendVisibleRow(const VisibleEntry& row) {
+    if (sVisibleCount >= kVisibleListMax) {
+        return false;
+    }
+    sVisibleList[sVisibleCount++] = row;
+    return true;
+}
+
+// fork d_albw_rental.cpp:548
+static dAlbwOutfitKind outfitKindForItemNo(u8 itemNo) {
+    switch (itemNo) {
+    case (u8)dItemNo_WEAR_CASUAL_e: return D_ALBW_OUTFIT_ORDON;
+    case (u8)dItemNo_WEAR_KOKIRI_e: return D_ALBW_OUTFIT_HEROS;
+    case (u8)dItemNo_WEAR_ZORA_e:   return D_ALBW_OUTFIT_ZORA;
+    case (u8)dItemNo_ARMOR_e:       return D_ALBW_OUTFIT_MAGIC;
+    case (u8)dItemNo_DEITY_ARMOR_e: return D_ALBW_OUTFIT_DEITY;
+    default:                        return D_ALBW_OUTFIT_COUNT;
+    }
+}
+
+// fork d_albw_rental.cpp:559
+static bool appendStorageRowsForItem(u8 itemNo, const char* desc) {
+    if (!dusk::isDpadQuickSwapEnabled() || !dAlbwWardrobe_isStorableItemNo(itemNo)) {
+        return false;
+    }
+    if (dAlbwWardrobe_isStoredItemNo(itemNo)) {
+        VisibleEntry row{};
+        row.kind             = VISIBLE_ITEM;
+        row.catalogIdx       = -1;
+        row.rowItemNo        = itemNo;
+        row.purchasable      = true;
+        row.storageRetrieve  = true;
+        return appendVisibleRow(row);
+    }
+    if (dMeter2_isShieldItem(itemNo)) {
+        if (!dMeter2_shieldIsOwned(itemNo)) {
+            return false;
+        }
+    } else if (dComIfGs_isItemFirstBit(itemNo)) {
+        // swords and other first-bit items
+    } else {
+        const dAlbwOutfitKind kind = outfitKindForItemNo(itemNo);
+        if (kind >= D_ALBW_OUTFIT_COUNT || !dAlbwOutfit_isOwned(kind)) {
+            return false;
+        }
+    }
+    VisibleEntry row{};
+    row.kind            = VISIBLE_ITEM;
+    row.catalogIdx      = -1;
+    row.rowItemNo       = itemNo;
+    row.purchasable     = true;
+    row.storageStore    = true;
+    (void)desc;
+    return appendVisibleRow(row);
+}
+
+// fork d_albw_rental.cpp:594
+static bool appendStorageRowsForOutfit(dAlbwOutfitKind kind) {
+    if (!dusk::isDpadQuickSwapEnabled() || !dAlbwWardrobe_isStorableOutfit(kind)) {
+        return false;
+    }
+    if (kind == D_ALBW_OUTFIT_SUMO) {
+        if (dAlbwWardrobe_isStoredOutfit(kind)) {
+            VisibleEntry row{};
+            row.kind            = VISIBLE_SUMO_OUTFIT;
+            row.purchasable     = true;
+            row.storageRetrieve = true;
+            return appendVisibleRow(row);
+        }
+        if (!dAlbwOutfit_isOwned(kind)) {
+            return false;
+        }
+        VisibleEntry row{};
+        row.kind         = VISIBLE_SUMO_OUTFIT;
+        row.purchasable  = true;
+        row.storageStore = true;
+        return appendVisibleRow(row);
+    }
+
+    int itemNo = -1;
+    switch (kind) {
+    case D_ALBW_OUTFIT_ORDON: itemNo = dItemNo_WEAR_CASUAL_e; break;
+    case D_ALBW_OUTFIT_HEROS: itemNo = dItemNo_WEAR_KOKIRI_e; break;
+    case D_ALBW_OUTFIT_ZORA:  itemNo = dItemNo_WEAR_ZORA_e; break;
+    case D_ALBW_OUTFIT_MAGIC: itemNo = dItemNo_ARMOR_e; break;
+    case D_ALBW_OUTFIT_DEITY: itemNo = dItemNo_DEITY_ARMOR_e; break;
+    default: break;
+    }
+    if (itemNo < 0) {
+        return false;
+    }
+    return appendStorageRowsForItem(static_cast<u8>(itemNo), nullptr);
+}
+
+// fork d_albw_rental.cpp:900
+static const ALBWRentalEntry* rentalEntryForItemNo(u8 itemNo) {
+    for (int i = 0; i < kItemCount; ++i) {
+        if (kItems[i].itemNo == itemNo) {
+            return &kItems[i];
+        }
+    }
+    return nullptr;
+}
+
+// fork d_albw_rental.cpp:909
+static const char* swordNameForItemNo(u8 itemNo) {
+    for (int i = 0; i < kSwordCount; ++i) {
+        if (kSwords[i].itemNo == itemNo) {
+            return kSwords[i].name;
+        }
+    }
+    return "Sword";
+}
+
+// fork d_albw_rental.cpp:918
+static const char* swordDescForItemNo(u8 itemNo) {
+    for (int i = 0; i < kSwordCount; ++i) {
+        if (kSwords[i].itemNo == itemNo) {
+            return kSwords[i].desc;
+        }
+    }
+    return nullptr;
+}
+
+// fork d_albw_rental.cpp:934
+static const char* outfitStorageNameForItemNo(u8 itemNo) {
+    switch (itemNo) {
+    case (u8)dItemNo_ARMOR_e:       return "Magic Armor";
+    case (u8)dItemNo_DEITY_ARMOR_e: return "Deity Armor";
+    default:                        return nullptr;
+    }
+}
+
+// fork d_albw_rental.cpp:942
+static const char* outfitStorageDescForItemNo(u8 itemNo) {
+    switch (itemNo) {
+    case (u8)dItemNo_ARMOR_e:
+        return "Your enchanted armor, kept safe here. A modest fee to return it.";
+    case (u8)dItemNo_DEITY_ARMOR_e:
+        return "A fearsome power, held in trust. Yours to reclaim.";
+    default:
+        return nullptr;
+    }
+}
+
+// fork d_albw_rental.cpp:953
+static u8 visibleRowItemNo(const VisibleEntry& row) {
+    if (row.catalogIdx >= 0) {
+        return kItems[row.catalogIdx].itemNo;
+    }
+    return row.rowItemNo;
+}
+
+// fork d_albw_rental.cpp:462
+static bool isClothesWearItemNo(u8 itemNo) {
+    return itemNo == (u8)dItemNo_WEAR_CASUAL_e ||
+           itemNo == (u8)dItemNo_WEAR_KOKIRI_e ||
+           itemNo == (u8)dItemNo_WEAR_ZORA_e;
+}
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
+
 bool categoryHasContent(ALBWShopCategory cat) {
     // fork d_albw_rental.cpp:504
     if (cat == CAT_SWORD_ATP && dAlbwSwordAtp_pageHasVisibleRows()) {
         return true;
+    }
+    // fork d_albw_rental.cpp:496
+    if (cat == CAT_SWORDS && dusk::isDpadQuickSwapEnabled()) {
+        for (int i = 0; i < kSwordCount; ++i) {
+            const u8 itemNo = kSwords[i].itemNo;
+            if (dAlbwWardrobe_isStoredItemNo(itemNo) || dAlbwWardrobe_isActiveSword(itemNo)) {
+                return true;
+            }
+        }
+    }
+    // fork d_albw_rental.cpp:513 - Armor keep-alive for rows that live OUTSIDE
+    // kItems[] and so are invisible to the loop below.
+    if (cat == CAT_ARMOR) {
+        if (dAlbwSumoTest_isShopEligible()) {
+            return true;  // sumo purchase row
+        }
+        if (dusk::isDpadQuickSwapEnabled()) {
+            for (int k = 0; k < D_ALBW_OUTFIT_COUNT; ++k) {
+                const dAlbwOutfitKind kind = static_cast<dAlbwOutfitKind>(k);
+                if (dAlbwWardrobe_isStoredOutfit(kind) || dAlbwOutfit_isOwned(kind)) {
+                    return true;  // a Retrieve (stored) or Store (owned) row builds
+                }
+            }
+        }
     }
     if (cat == CAT_UPGRADES) {
         if (albw_oocoo_can_show_in_shop()) {
@@ -305,6 +549,20 @@ void rebuildVisibleList() {
                 continue;
             }
             appendVisible(VISIBLE_SWORD_ATP, swordId, dAlbwSwordAtp_canPurchase(swordId));
+        }
+    }
+
+    // fork d_albw_rental.cpp - Swords page is entirely Quick-Swap storage rows.
+    if (cat == CAT_SWORDS) {
+        for (int i = 0; i < kSwordCount; ++i) {
+            appendStorageRowsForItem(kSwords[i].itemNo, kSwords[i].desc);
+        }
+    }
+
+    // fork d_albw_rental.cpp - outfit storage rows live on the Armor page.
+    if (cat == CAT_ARMOR) {
+        for (int k = 0; k < D_ALBW_OUTFIT_COUNT; ++k) {
+            appendStorageRowsForOutfit(static_cast<dAlbwOutfitKind>(k));
         }
     }
 
@@ -382,12 +640,64 @@ void grantClothes(u8 itemNo) {
     }
 }
 
+// fork d_albw_rental.cpp:960
+static void tryStorageAction(int visIdx) {
+    if (visIdx < 0 || visIdx >= sVisibleCount) {
+        return;
+    }
+    const VisibleEntry& row = sVisibleList[visIdx];
+    if (!row.storageStore && !row.storageRetrieve) {
+        return;
+    }
+
+    char err[96] = {};
+    bool ok      = false;
+    if (row.kind == VISIBLE_SUMO_OUTFIT) {
+        if (row.storageStore) {
+            ok = dAlbwWardrobe_tryStoreOutfit(D_ALBW_OUTFIT_SUMO, err, static_cast<int>(sizeof(err)));
+        } else {
+            ok = dAlbwWardrobe_tryRetrieveOutfit(D_ALBW_OUTFIT_SUMO, err, static_cast<int>(sizeof(err)));
+        }
+    } else {
+        const u8 itemNo = visibleRowItemNo(row);
+        if (row.storageStore) {
+            ok = dAlbwWardrobe_tryStoreItemNo(itemNo, err, static_cast<int>(sizeof(err)));
+        } else {
+            ok = dAlbwWardrobe_tryRetrieveItemNo(itemNo, err, static_cast<int>(sizeof(err)));
+        }
+    }
+
+    if (!ok) {
+        // fork d_albw_rental.cpp:1017 puts the wardrobe's reason in sStatusMsg.
+        // This shop has no status-message system (see the note at tryPurchase),
+        // so the row reports through sJustFailedPurchase like every other row -
+        // but the reason is logged rather than dropped on the floor.
+        if (svc_log != nullptr && err[0] != 0) {
+            svc_log->info(mod_ctx, err);
+        }
+        sJustFailedPurchase = true;
+        return;
+    }
+
+    sPurchasedThisSession = true;
+    sJustPurchased        = row.storageRetrieve;
+    rebuildActivePages();
+    rebuildVisibleList();
+}
+
 void tryPurchase(int visIdx) {
     if (visIdx < 0 || visIdx >= sVisibleCount) {
         return;
     }
     const VisibleEntry& row = sVisibleList[visIdx];
     if (!row.purchasable) {
+        return;
+    }
+
+    // fork d_albw_rental.cpp - storage rows are not purchases; they route to the
+    // wardrobe store/retrieve path instead of the rupee flow.
+    if (row.storageStore || row.storageRetrieve) {
+        tryStorageAction(visIdx);
         return;
     }
 
@@ -811,19 +1121,56 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
             pub.itemNo = (u8)dItemNo_LV1_SOUP_e;
             pub.showNameWhenSoldOut = true;
         } else {
-            const ALBWRentalEntry& e = kItems[row.catalogIdx];
-            if (row.purchasable) {
-                pub.name = e.name;
-                pub.price = e.price;
-                pub.desc = e.desc;
-                pub.itemNo = e.itemNo;
+            // fork d_albw_rental.cpp:1845. Storage rows carry catalogIdx < 0, so
+            // the entry is looked up by item id instead of indexed directly -
+            // indexing kItems[-1] here was an out-of-bounds read.
+            const u8 itemNo = visibleRowItemNo(row);
+            const ALBWRentalEntry* rental =
+                row.catalogIdx >= 0 ? &kItems[row.catalogIdx] : rentalEntryForItemNo(itemNo);
+            pub.isStorageStore    = row.storageStore;
+            pub.isStorageRetrieve = row.storageRetrieve;
+            pub.purchasable       = row.purchasable;
+
+            if (row.storageStore || row.storageRetrieve) {
+                const char* outfitName = outfitStorageNameForItemNo(itemNo);
+                if (rental != nullptr) {
+                    pub.name = rental->name;
+                } else if (outfitName != nullptr) {
+                    pub.name = outfitName;  // Magic/Deity storage row (no kItems entry)
+                } else {
+                    pub.name = swordNameForItemNo(itemNo);
+                }
+                pub.itemNo = itemNo;
+                if (row.storageStore) {
+                    pub.price = 0;
+                    pub.desc  = kStorageStoreDesc;
+                } else {
+                    pub.price = dAlbwWardrobe_retrievePriceForItemNo(itemNo);
+                    if (rental != nullptr) {
+                        pub.desc = rental->desc;
+                    } else {
+                        const char* outfitDesc = outfitStorageDescForItemNo(itemNo);
+                        pub.desc = outfitDesc != nullptr ? outfitDesc : swordDescForItemNo(itemNo);
+                    }
+                }
+            } else if (rental != nullptr) {
+                if (row.purchasable) {
+                    pub.name = rental->name;
+                    pub.price = rental->price;
+                    pub.desc = rental->desc;
+                    pub.itemNo = rental->itemNo;
+                } else {
+                    pub.name = "?????";
+                    pub.price = rental->price;
+                    pub.desc = nullptr;
+                    pub.itemNo = 0xff;
+                }
             } else {
                 pub.name = "?????";
-                pub.price = e.price;
+                pub.price = 0;
                 pub.desc = nullptr;
                 pub.itemNo = 0xff;
             }
-            pub.purchasable = row.purchasable;
         }
     }
     if (outCount != nullptr) {
