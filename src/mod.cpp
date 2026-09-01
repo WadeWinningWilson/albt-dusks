@@ -7,6 +7,7 @@
 #include "config_vars.h"
 #include "colossal_wallet.h"
 #include "clothes_pipeline.h"
+#include "menu_window_ext.h"
 #include "focused_arts.h"
 #include "flurry_rush.h"
 #include "hold_a_crawl.h"
@@ -86,6 +87,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("wardrobe_recovery_debug", false, &g_wardrobe_recovery_debug) != MOD_OK ||
         albw_register_int("cap_wear", 0, &g_cap_wear) != MOD_OK ||
         albw_register_bool("soulbound_potion", false, &g_soulbound_potion) != MOD_OK ||
+        albw_register_bool("ext_status_page", false, &g_ext_status_page) != MOD_OK ||
         albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
         albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
@@ -176,7 +178,8 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_region_hp_init(error) != MOD_OK || albw_soul_of_light_init(error) != MOD_OK ||
         albw_enemy_rupees_init(error) != MOD_OK ||
         albw_colossal_wallet_init(error) != MOD_OK ||
-        albw_clothes_pipeline_init(error) != MOD_OK)
+        albw_clothes_pipeline_init(error) != MOD_OK ||
+        albw_menu_window_ext_init(error) != MOD_OK)
     {
         return MOD_ERROR;
     }

@@ -28,6 +28,7 @@
 #include "albw_game.h"
 #include "d/d_com_inf_game.h"
 #include "d/actor/d_a_player.h"
+#include "d/d_meter2_info.h"
 
 #if TARGET_PC
 
@@ -94,6 +95,17 @@ u8   dComIfGp_getMesgStatus()     { return g_dComIfG_gameInfo.play.getMesgStatus
 u8   dComIfGp_isHeapLockFlag()    { return g_dComIfG_gameInfo.play.isHeapLockFlag(); }
 u8   dComIfGp_isPauseFlag()       { return g_dComIfG_gameInfo.play.isPauseFlag(); }
 void dComIfGp_setOxygenCount(s32 oxygen) { g_dComIfG_gameInfo.play.setOxygenCount(oxygen); }
+
+// ---- events / meter window ---------------------------------------------------
+BOOL dComIfGp_event_runCheck() {
+    return g_dComIfG_gameInfo.play.getEvent()->runCheck();
+}
+dMw_c* dMeter2Info_getMenuWindowClass() {
+    return g_meter2_info.getMenuWindowClass();
+}
+void dMeter2Info_setWindowStatus(u8 i_status) {
+    g_meter2_info.setWindowStatus(i_status);
+}
 
 // ---- graphics ----------------------------------------------------------------
 J2DGrafContext* dComIfGp_getCurrentGrafPort() {

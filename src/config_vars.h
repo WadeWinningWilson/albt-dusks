@@ -46,6 +46,7 @@ extern ConfigVarHandle g_sumo_outfit_fists;
 extern ConfigVarHandle g_wardrobe_recovery_debug;
 extern ConfigVarHandle g_cap_wear;
 extern ConfigVarHandle g_soulbound_potion;
+extern ConfigVarHandle g_ext_status_page;
 
 extern ConfigVarHandle g_lop_hud_mode;
 extern ConfigVarHandle g_parry_icons_mode;
