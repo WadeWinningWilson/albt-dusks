@@ -1,6 +1,3 @@
-// Ported VERBATIM from the fork's include/d/d_albw_outfit_stats.h.
-// TARGET_PC guards kept intact. ABI translations only, noted inline.
-
 #ifndef D_ALBW_OUTFIT_STATS_H
 #define D_ALBW_OUTFIT_STATS_H
 
@@ -11,7 +8,7 @@
 // ============================================
 #if TARGET_PC
 
-#include "outfit.h"  // fork path: d/d_albw_outfit.h
+#include "outfit.h"
 #include "dolphin/types.h"
 
 class daAlink_c;

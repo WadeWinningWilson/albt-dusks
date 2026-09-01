@@ -1,16 +1,8 @@
-// Ported VERBATIM from the fork's src/d/d_albw_outfit_stats.cpp.
-// TARGET_PC guards kept intact. ABI translations only, noted inline.
-
 // ============================================
 // NEW CODE — ALBW Port (Outfit Stats)
 // See include/d/d_albw_outfit_stats.h and docs/Outfit Stats.md.
 // ============================================
-#include "helpers/string.hpp"  // TEXT_SPAN - must precede d_save.h
 #include "outfit_stats.h"
-#include "albw_common.h"
-#include "albw_game.h"
-#include "config_vars.h"
-#include "outfit.h"
 
 #if TARGET_PC
 
@@ -18,8 +10,7 @@
 #include "d/actor/d_a_alink.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_item_data.h"
-// fork: dusk/settings.h for game.outfitStats - host settings are unreachable
-// from a mod, so the gate reads the mod's own outfit_stats key.
+#include "albw_dusk_compat.h"
 
 namespace {
 
@@ -47,7 +38,7 @@ f32 receivedMultForKind(dAlbwOutfitKind kind, bool zoraWaterBuff) {
 }  // namespace
 
 bool dAlbwOutfitStats_isEnabled() {
-    return albw_cfg_bool(g_outfit_stats, false);
+    return dusk::getSettings().game.outfitStats.getValue();
 }
 
 dAlbwOutfitKind dAlbwOutfitStats_getActiveOutfitKind() {
@@ -82,11 +73,11 @@ bool dAlbwOutfitStats_isSumoOffensiveKitActive() {
         return false;
     }
 
-    if (albw_game::select_equip_sword() != dItemNo_WOOD_STICK_e) {
+    if (dComIfGs_getSelectEquipSword() != dItemNo_WOOD_STICK_e) {
         return false;
     }
 
-    return albw_game::select_equip_shield() == dItemNo_NONE_e;
+    return dComIfGs_getSelectEquipShield() == dItemNo_NONE_e;
 }
 
 bool dAlbwOutfitStats_allowsWoodHiddenSkills() {

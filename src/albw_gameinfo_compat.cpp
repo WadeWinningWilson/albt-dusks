@@ -62,6 +62,8 @@ void dComIfGs_setRupee(u16 i_rupees) {
 u8 dComIfGs_getSelectEquipClothes() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectEquip(COLLECT_CLOTHING);
 }
+// dComIfGs_getSelectEquipShield is already defined in shield_game.cpp:25 -
+// the mod established this same compat pattern there. Not duplicated here.
 u8 dComIfGs_getSelectEquipSword() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectEquip(COLLECT_SWORD);
 }

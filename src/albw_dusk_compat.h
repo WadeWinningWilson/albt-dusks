@@ -47,6 +47,7 @@ struct CompatGameSettings {
     CompatVar<CapWearMode> capWear;
     CompatVar<bool>        sumoOutfitFists;
     CompatVar<bool>        showWardrobeRecoveryDebug;
+    CompatVar<bool>        outfitStats;
 };
 
 struct CompatSettings {
@@ -64,6 +65,7 @@ inline CompatSettings getSettings() {
         static_cast<CapWearMode>(albw_cfg_int(g_cap_wear, static_cast<int>(CapWearMode::Off)));
     s.game.sumoOutfitFists.value          = albw_cfg_bool(g_sumo_outfit_fists, false);
     s.game.showWardrobeRecoveryDebug.value = albw_cfg_bool(g_wardrobe_recovery_debug, false);
+    s.game.outfitStats.value               = albw_cfg_bool(g_outfit_stats, false);
     return s;
 }
 
