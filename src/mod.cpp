@@ -6,6 +6,7 @@
 #include "albw_stage.h"
 #include "config_vars.h"
 #include "colossal_wallet.h"
+#include "clothes_pipeline.h"
 #include "focused_arts.h"
 #include "flurry_rush.h"
 #include "hold_a_crawl.h"
@@ -172,7 +173,8 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_stick_cycle_init(error) != MOD_OK ||
         albw_region_hp_init(error) != MOD_OK || albw_soul_of_light_init(error) != MOD_OK ||
         albw_enemy_rupees_init(error) != MOD_OK ||
-        albw_colossal_wallet_init(error) != MOD_OK)
+        albw_colossal_wallet_init(error) != MOD_OK ||
+        albw_clothes_pipeline_init(error) != MOD_OK)
     {
         return MOD_ERROR;
     }

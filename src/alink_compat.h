@@ -13,6 +13,10 @@ void dAlbwAlink_resyncClothesEpoch();
 void dAlbwAlink_invalidateClothesEpoch();
 void dAlbwAlink_requestClothesRemount();
 bool dAlbwAlink_nativeCapResolved();
+
+// True when the clothes models were built in the CURRENT arc epoch (the arc
+// heap has not been freed under them). fork d_a_alink.cpp:21536.
+bool dAlbwAlink_clothesEpochInSync();
 void dAlbwAlink_abortStuckClothesChange(daAlink_c* link);
 
 // True once the abort path has fired at least once (a stuck clothes swap was

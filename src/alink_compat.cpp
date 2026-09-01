@@ -40,6 +40,7 @@
 #include <os.h>
 #include "alink_compat.h"
 #include "albw_common.h"
+#include "clothes_pipeline.h"
 #include "config_vars.h"
 #include "global.h"
 
@@ -63,13 +64,18 @@ bool s_forceClothesRemount = false;
 
 void dAlbwAlink_resyncClothesEpoch() { s_clothesModelEpoch = s_arcEpoch; }
 
+bool dAlbwAlink_clothesEpochInSync() { return s_clothesModelEpoch == s_arcEpoch; }
+
 void dAlbwAlink_invalidateClothesEpoch() { ++s_arcEpoch; }
 
 // fork d_a_alink.cpp:184 - latches s_albwForceClothesRemount so the next clothes
 // settle rebuilds in place after a Custom Models winner change. Stock has no
 // Custom Models system (albw_dusk_compat.h: overlay_generation() is constant), so
 // nothing can ever raise this condition; the latch is kept faithful anyway.
-void dAlbwAlink_requestClothesRemount() { s_forceClothesRemount = true; }
+void dAlbwAlink_requestClothesRemount() {
+    s_forceClothesRemount = true;
+    albw_clothes_request_remount();
+}
 
 // fork d_a_alink.cpp:177 - "true when the last native changeLink resolved the
 // requested Cap Wear cap/topknot (false on fallback to the outfit's native hat)".
@@ -108,15 +114,11 @@ bool dAlbwAlink_nativeCapResolved() {
 // tripped on stock's own clothes pipeline - a real condition worth surfacing, not
 // swallowing. Log it loudly every time; do NOT fake a recovery we cannot perform.
 void dAlbwAlink_abortStuckClothesChange(daAlink_c* link) {
-    (void)link;
     s_sawStuck = true;
-    if (svc_log != nullptr) {
-        svc_log->warn(mod_ctx,
-                      "albw: outfit watchdog tripped (stuck clothes change). The fork's "
-                      "alternate-heap abort path is not ported, so no recovery was performed - "
-                      "Link's model may stay hidden until the next stage load.");
-    }
-    dAlbwAlink_resyncClothesEpoch();
+    // The fork alt-heap pipeline IS ported now (clothes_pipeline.cpp), so this
+    // performs the fork real recovery instead of only reporting that it could
+    // not. Kept as a forwarder so the ported outfit module calls the fork name.
+    albw_clothes_abort_stuck(link);
 }
 
 bool dAlbwAlink_sawStuckClothesChange() { return s_sawStuck; }
