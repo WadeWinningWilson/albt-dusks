@@ -10,6 +10,7 @@
 #include "rental_eligibility.h"
 #include "rental_postman_hooks.h"
 #include "shield_game.h"
+#include "sword_atp.h"
 
 #include "d/d_com_inf_game.h"
 #include "d/d_item_data.h"
@@ -36,6 +37,7 @@ enum ALBWShopCategory {
     CAT_SHIELDS,
     CAT_ARMOR,
     CAT_UPGRADES,
+    CAT_SWORD_ATP,  // Master Quest per-sword Atp upgrades (fork d_albw_rental.cpp:78)
     CAT_COUNT,
 };
 
@@ -45,6 +47,7 @@ enum VisibleKind {
     VISIBLE_MQ_HEART,
     VISIBLE_MQ_METER,
     VISIBLE_FA_TIER,
+    VISIBLE_SWORD_ATP,  // fork d_albw_rental.cpp:303
 };
 
 struct ALBWRentalEntry {
@@ -99,9 +102,11 @@ VisibleEntry sVisibleList[kVisibleListMax] = {};
 int sVisibleCount = 0;
 dALBWVisibleEntry sPubList[kVisibleListMax] = {};
 
-// Fork tab order minus deferred Swords / Sword Upgrades.
+// Fork tab order minus the deferred Swords page (that one is Quick-Swap
+// wardrobe storage and needs d_albw_wardrobe, which is not ported).
 static const PageDef kPages[] = {
     {CAT_ITEMS, "Items"},
+    {CAT_SWORD_ATP, "Sword Upgrades"},
     {CAT_SHIELDS, "Shields"},
     {CAT_ARMOR, "Armor"},
     {CAT_UPGRADES, "Upgrades & Services"},
@@ -232,6 +237,10 @@ bool itemRowVisible(const ALBWRentalEntry& e) {
 }
 
 bool categoryHasContent(ALBWShopCategory cat) {
+    // fork d_albw_rental.cpp:504
+    if (cat == CAT_SWORD_ATP && dAlbwSwordAtp_pageHasVisibleRows()) {
+        return true;
+    }
     if (cat == CAT_UPGRADES) {
         if (albw_oocoo_can_show_in_shop()) {
             return true;
@@ -288,6 +297,16 @@ void rebuildVisibleList() {
     sVisibleCount = 0;
     std::memset(sVisibleList, 0, sizeof(sVisibleList));
     const ALBWShopCategory cat = currentCategory();
+
+    // fork d_albw_rental.cpp:696 - one row per possessed sword, gated on MQ.
+    if (cat == CAT_SWORD_ATP && albw_mq_is_enabled()) {
+        for (int swordId = 0; swordId < kAlbwSwordAtpCount; ++swordId) {
+            if (!dAlbwSwordAtp_isSwordPossessed(swordId)) {
+                continue;
+            }
+            appendVisible(VISIBLE_SWORD_ATP, swordId, dAlbwSwordAtp_canPurchase(swordId));
+        }
+    }
 
     if (cat == CAT_UPGRADES) {
         if (albw_mq_is_enabled()) {
@@ -416,6 +435,31 @@ void tryPurchase(int visIdx) {
         }
         sPurchasedThisSession = true;
         sJustPurchased = true;
+        rebuildVisibleList();
+        return;
+    }
+    // fork d_albw_rental.cpp:1057. The fork also sets sStatusMsg strings here;
+    // this shop has no status-message system (unported), so it reports through
+    // sJustFailedPurchase / sJustPurchased like every other row does.
+    if (row.kind == VISIBLE_SWORD_ATP) {
+        const int swordId = row.catalogIdx;
+        const int price = dAlbwSwordAtp_getShopPrice(swordId);
+        if (price <= 0) {
+            return;
+        }
+        const u16 rupees = getRupees();
+        if (rupees < static_cast<u16>(price)) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        if (!dAlbwSwordAtp_tryPurchase(swordId)) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        setRupees(static_cast<u16>(rupees - static_cast<u16>(price)));
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
         rebuildVisibleList();
         return;
     }
@@ -748,6 +792,15 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
             pub.desc = albw_oocoo_service_desc();
             pub.itemNo = (u8)dItemNo_BEE_CHILD_e;
             pub.isOocooService = true;
+            pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_SWORD_ATP) {
+            // fork d_albw_rental.cpp:1723
+            const int swordId = row.catalogIdx;
+            pub.name = dAlbwSwordAtp_getShopName(swordId);
+            pub.price = row.purchasable ? dAlbwSwordAtp_getShopPrice(swordId) : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = dAlbwSwordAtp_getShopDesc(swordId);
+            pub.itemNo = dAlbwSwordAtp_getItemNo(swordId);
             pub.showNameWhenSoldOut = true;
         } else if (row.kind == VISIBLE_FA_TIER) {
             const int tier = dFocusedArts_getNextShopTierIndex();

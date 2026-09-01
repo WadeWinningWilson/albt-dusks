@@ -62,6 +62,14 @@ inline void set_event_reg(u16 reg, u8 value) {
     g_dComIfG_gameInfo.info.getEvent().setEventReg(reg, value);
 }
 
+inline u8 clear_count() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerInfo().getClearCount();
+}
+
+inline u8 poh_spirit_num() {
+    return g_dComIfG_gameInfo.info.getPlayer().getCollect().getPohNum();
+}
+
 inline u16 life() {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getLife();
 }

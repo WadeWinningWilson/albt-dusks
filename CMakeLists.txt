@@ -66,6 +66,7 @@ add_mod(albt_full_plugin
             src/rental_shop_ui.cpp
             src/oocoo.cpp
             src/mq_hearts.cpp
+            src/sword_atp.cpp
             src/outfit.cpp
         MOD_JSON mod.json
         RES_DIR res

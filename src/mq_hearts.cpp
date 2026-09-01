@@ -165,3 +165,12 @@ const char* albw_mq_meter_shop_name() {
 const char* albw_mq_meter_shop_desc() {
     return "Raises ALBW meter capacity. Sold at the Postman shop when rental UI ships.";
 }
+
+// ============================================
+// NEW CODE - ALBW Port
+// Fork gate for Master Quest features (dAlbwMQ_isEnabled). Exposed so sword_atp
+// reads the same config key rather than keeping a second notion of "MQ on".
+// ============================================
+bool albw_mq_enabled() {
+    return albw_cfg_bool(g_master_quest, false);
+}
