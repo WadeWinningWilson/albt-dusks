@@ -149,6 +149,9 @@ dRes_info_c* dComIfG_getObjectResInfo(const char* i_arcName) {
 void* dComIfG_getObjectRes(const char* i_arcName, int i_index) {
     return albw_game::object_res(i_arcName, i_index);
 }
+void* dComIfG_getObjectRes(const char* i_arcName, const char* i_resName) {
+    return albw_game::object_res(i_arcName, i_resName);
+}
 
 #endif  // TARGET_PC
 

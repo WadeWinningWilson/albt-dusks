@@ -232,6 +232,10 @@ inline void* object_res(const char* arcName, int index) {
     return g_dComIfG_gameInfo.mResControl.getObjectRes(arcName, index);
 }
 
+inline void* object_res(const char* arcName, const char* resName) {
+    return g_dComIfG_gameInfo.mResControl.getObjectRes(arcName, resName);
+}
+
 inline int evt_is_addvance(int staffId) {
     return g_dComIfG_gameInfo.play.getEvtManager().getIsAddvance(staffId);
 }

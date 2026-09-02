@@ -88,6 +88,14 @@ struct AlbwDuskLog {
             svc_log->warn(mod_ctx,
                           albw_log_detail::format(fmt, static_cast<Args&&>(args)...).c_str());
     }
+    // The fork reaches for OSReport on the paths that must never pass quietly
+    // (a resource that did not resolve). error() is the loud channel here.
+    template <typename... Args>
+    void error(const char* fmt, Args&&... args) const {
+        if (svc_log != nullptr)
+            svc_log->error(mod_ctx,
+                           albw_log_detail::format(fmt, static_cast<Args&&>(args)...).c_str());
+    }
 };
 
 static const AlbwDuskLog DuskLog;

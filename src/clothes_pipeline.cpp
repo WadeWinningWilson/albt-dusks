@@ -8,6 +8,7 @@
 #include <os.h>
 
 #include "JSystem/JKernel/JKRExpHeap.h"
+#include "JSystem/J3DGraphAnimator/J3DAnimation.h"
 #include "SSystem/SComponent/c_phase.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_com_inf_game.h"
@@ -38,12 +39,18 @@ const char*                    s_swapOldArc   = nullptr;
 bool                           s_swapActive   = false;
 bool                           s_forceRemount = false;
 
+// stock's l_mArcName (d_a_alink.cpp:85) is file-static; the resource manager keys
+// on the string, so the literal is the same lookup.
+const char* const ALBW_MMDL_ARC = "Mmdl";
+
 DEFINE_HOOK(&daAlink_c::loadModelDVD, LoadModelDVD);
 DEFINE_HOOK(&daAlink_c::setClothesChange, SetClothesChangeCloth);
 DEFINE_HOOK(&daAlink_c::create, AlinkCreate);
 DEFINE_HOOK(&daAlink_c::changeLink, ChangeLinkStamp);
 DEFINE_HOOK(&daAlink_c::changeWolf, ChangeWolfStamp);
 DEFINE_HOOK(&daAlink_c::draw, AlinkDrawGuard);
+DEFINE_HOOK(&daAlink_c::setMagicArmorBrk, SetMagicArmorBrk);
+DEFINE_HOOK(&daAlink_c::setWaterDropColor, SetWaterDropColor);
 
 // fork d_a_alink.cpp:199 - encodes the draw-relevant identity of Link's clothes
 // models. changeLink/changeWolf stamp the token the models were BUILT for; draw
@@ -343,6 +350,245 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
     return ret(0);
 }
 
+// ============================================
+// NEW CODE - ALBW Port (Magic-Armor model readiness)
+//
+// Ports fork commit 3a345b5b5d ("fix Magic-Armor-buy crash"), which hardened the
+// Magic path against the clothes pipeline making Mmdl non-resident. Its own
+// write-up of the failure:
+//
+//   changeLink's Magic branch can fall back to the Kmdl (Hero's) body when Mmdl
+//   isn't resolvable, but the wear flag stays Magic, so draw() ran Magic-only
+//   material/Brk ops on a Hero's-layout model and read off the end.
+//
+// The playtest crash on 2026-09-01 is the Brk half of exactly that:
+//   J3DAnmTevRegKey::searchUpdateMaterialID  <- setMagicArmorBrk  <- execute
+//   EXCEPTION_ACCESS_VIOLATION, fault addr 0x10   (a NULL `this` + 0x10)
+// dComIfG_getObjectRes("Mmdl", "ml_body_power_down.brk") returned NULL and stock
+// dereferences it unconditionally.
+//
+// Ported here: setMagicArmorBrk and setWaterDropColor, both verbatim, plus the
+// s_albwMagicModelReady predicate that ties them together.
+//
+// NOT ported - changeLink's Kmdl fallback. changeLink cannot be replaced from a
+// mod: its param_0==0 branch needs five file-statics in stock's d_a_alink.cpp
+// with no external linkage (l_jntColData, l_crawlSideOffset, l_crawlTopUpOffset,
+// l_autoUpHeight, l_autoDownHeight) plus daAlink_kandelaarModelCallBack, and
+// l_autoUpHeight/l_autoDownHeight are MUTABLE state that other d_a_alink.cpp
+// code reads back - a mod-side copy would write a duplicate the game never sees.
+// So the flag is computed in a changeLink PRE-hook using the fork's own
+// predicate, at the same moment and off the same three lookups. When it comes
+// out false the miss is logged as an error rather than passed over quietly: the
+// fallback that would have rescued it is the part that cannot be ported.
+//
+// Translation: l_mArcName is likewise file-static, so the literal "Mmdl" is used
+// - the resource manager keys on the string, so the lookup is identical.
+// ============================================
+
+bool s_albwMagicModelReady = false;
+
+// fork d_a_alink.cpp:13756 - stock's is void and unguarded; the fork's returns
+// BOOL so changeLink only touches the Brks when they actually resolved.
+BOOL albw_setMagicArmorBrk(daAlink_c* i_this, int i_status) {
+    static const char* bodyBrkName[3] = {
+        "ml_body_power_down.brk",
+        "ml_body_power_up_a.brk",
+        "ml_body_power_up_b.brk",
+    };
+
+    static const char* headBrkName[3] = {
+        "ml_head_power_down.brk",
+        "ml_head_power_up_a.brk",
+        "ml_head_power_up_b.brk",
+    };
+
+    i_this->mMagicArmorBodyBrk = NULL;
+    i_this->mMagicArmorHeadBrk = NULL;
+
+    if (i_status < 0 || i_status > 2) {
+        return FALSE;
+    }
+    if (i_this->mpLinkModel == NULL || i_this->mpLinkHatModel == NULL) {
+        DuskLog.error("setMagicArmorBrk: missing link model (body={} hat={})",
+                      (const void*)i_this->mpLinkModel,
+                      (const void*)i_this->mpLinkHatModel);
+        return FALSE;
+    }
+
+    J3DModelData* modelData = i_this->mpLinkModel->getModelData();
+    i_this->mMagicArmorBodyBrk =
+        (J3DAnmTevRegKey*)dComIfG_getObjectRes(ALBW_MMDL_ARC, bodyBrkName[i_status]);
+    if (i_this->mMagicArmorBodyBrk == NULL || modelData == NULL) {
+        DuskLog.error("setMagicArmorBrk: missing body BRK {} in {}", bodyBrkName[i_status],
+                      ALBW_MMDL_ARC);
+        i_this->mMagicArmorBodyBrk = NULL;
+        return FALSE;
+    }
+    i_this->mMagicArmorBodyBrk->searchUpdateMaterialID(modelData);
+    modelData->entryTevRegAnimator(i_this->mMagicArmorBodyBrk);
+    i_this->mMagicArmorBodyBrk->setFrame(0.0f);
+
+    modelData = i_this->mpLinkHatModel->getModelData();
+    i_this->mMagicArmorHeadBrk =
+        (J3DAnmTevRegKey*)dComIfG_getObjectRes(ALBW_MMDL_ARC, headBrkName[i_status]);
+    if (i_this->mMagicArmorHeadBrk == NULL || modelData == NULL) {
+        DuskLog.error("setMagicArmorBrk: missing head BRK {} in {}", headBrkName[i_status],
+                      ALBW_MMDL_ARC);
+        i_this->mMagicArmorBodyBrk = NULL;
+        i_this->mMagicArmorHeadBrk = NULL;
+        return FALSE;
+    }
+    i_this->mMagicArmorHeadBrk->searchUpdateMaterialID(modelData);
+    modelData->entryTevRegAnimator(i_this->mMagicArmorHeadBrk);
+    i_this->mMagicArmorHeadBrk->setFrame(0.0f);
+
+    i_this->field_0x2fd7 = i_status;
+    return TRUE;
+}
+
+// fork d_a_alink.cpp:21372 - carries BOTH of the fork's changes to this function:
+// the ALBW_HAT_TEV bound (Cap Wear can put a foreign cap with fewer materials on
+// Link) and the s_albwMagicModelReady gate on the Magic branch.
+void albw_setWaterDropColor(daAlink_c* i_this, const J3DGXColorS10* i_color) {
+    static const GXColorS10 notColor0 = {0x00, 0x00, 0x00, 0xFF};
+    J3DGXColorS10* var_r31;
+
+    // ============================================
+    // NEW CODE - ALBW Port (Cap Wear recolor safety)
+    // The recolor below indexes the HAT material by the wear-flag branch (Magic touches hat
+    // mats 1+2, Zora mat 1, Hero's/casual mat 0).  With Cap Wear a foreign cap can be on Link
+    // (e.g. the green al_head, 2 mats, over a Magic body whose branch writes hat mat 2) -> an
+    // off-the-end read.  Guard every mpLinkHatModel material write by the cap's ACTUAL count so
+    // a mismatched cap recolors only what it has.  ALBW_HAT_TEV is also used by the existing
+    // wear-flag branches (harmless: a native cap always has the expected material).
+    // ============================================
+    J3DModelData* const albwHatMd =
+        (i_this->mpLinkHatModel != NULL) ? i_this->mpLinkHatModel->getModelData() : NULL;
+    const u16 albwHatMatNum = (albwHatMd != NULL) ? albwHatMd->getMaterialNum() : 0;
+#define ALBW_HAT_TEV(idx)                                                        \
+    do {                                                                         \
+        if (albwHatMd != NULL && albwHatMatNum > (u16)(idx))                     \
+            albwHatMd->getMaterialNodePointer(idx)->setTevColor(1, i_color);      \
+    } while (0)
+
+    if (&i_this->field_0x32a0[0] == i_color) {
+        if (i_this->checkNoResetFlg2(daPy_py_c::FLG2_UNK_80000) || i_this->checkZoraWearAbility() ||
+            i_this->checkMagicArmorWearAbility())
+        {
+            var_r31 = (J3DGXColorS10*)&notColor0;
+            i_color = (J3DGXColorS10*)&notColor0;
+        } else {
+            var_r31 = (J3DGXColorS10*)&i_color[1];
+        }
+    } else {
+        var_r31 = (J3DGXColorS10*)i_color;
+    }
+
+    if (!i_this->checkNoResetFlg2(daPy_py_c::FLG2_UNK_80000)) {
+        if (i_this->checkZoraWearAbility()) {
+            if (i_this->field_0x064C->getMaterialNum() >= 14)
+            {
+            i_this->field_0x064C->getMaterialNodePointer(13)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(0)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(1)->setTevColor(1, i_color);
+            ALBW_HAT_TEV(1);
+            }
+        // Only run the Magic Armor material ops on the REAL Mmdl model - the Kmdl
+        // fallback body lacks this material layout and getMaterialNodePointer(2) on its
+        // hat reads off the end (the shop-buy-Magic draw crash).  Fall through to the
+        // Hero's branch below, which matches the fallback body.
+        } else if (i_this->checkMagicArmorWearAbility() && s_albwMagicModelReady) {
+            if (i_this->field_0x064C->getMaterialNum() >= 12)
+            {
+            i_this->field_0x064C->getMaterialNodePointer(11)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(10)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(9)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(8)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(6)->setTevColor(1, i_color);
+            ALBW_HAT_TEV(2);
+            ALBW_HAT_TEV(1);
+            }
+        } else if (i_this->checkCasualWearFlg()) {
+            if (i_this->field_0x064C->getMaterialNum() >= 8)
+            {
+            i_this->field_0x064C->getMaterialNodePointer(7)->setTevColor(1, i_color);
+            ALBW_HAT_TEV(0);
+            i_this->field_0x064C->getMaterialNodePointer(5)->setTevColor(1, var_r31);
+            }
+        } else {
+            if (i_this->field_0x064C->getMaterialNum() >= 18)
+            {
+            i_this->field_0x064C->getMaterialNodePointer(17)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(9)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(0)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(1)->setTevColor(1, i_color);
+            i_this->field_0x064C->getMaterialNodePointer(2)->setTevColor(1, i_color);
+            ALBW_HAT_TEV(0);
+            i_this->field_0x064C->getMaterialNodePointer(16)->setTevColor(1, var_r31);
+            i_this->field_0x064C->getMaterialNodePointer(15)->setTevColor(1, var_r31);
+            i_this->field_0x064C->getMaterialNodePointer(14)->setTevColor(1, var_r31);
+            }
+        }
+    }
+#undef ALBW_HAT_TEV
+}
+
+HookAction on_set_magic_armor_brk_pre(ModContext*, void* args, void*, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) return HOOK_CONTINUE;
+    (void)albw_setMagicArmorBrk(link, mods::arg<int>(args, 1));
+    return HOOK_SKIP_ORIGINAL;
+}
+
+HookAction on_set_water_drop_color_pre(ModContext*, void* args, void*, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) return HOOK_CONTINUE;
+    albw_setWaterDropColor(link, mods::arg<const J3DGXColorS10*>(args, 1));
+    return HOOK_SKIP_ORIGINAL;
+}
+
+// fork d_a_alink_wolf.inc:334-347 - the head of changeLink, which the mod cannot
+// replace (see the note at the top of this block). Two of its lines are portable
+// at the boundary and both are load-bearing:
+//
+//  1. The sumo trigger. dAlbwSumoTest_prepareChangeLink()'s whole contract is
+//     "true when resources are resident and FLG2_UNK_200000 may be set", and
+//     this is the fork's only place that sets it. Without it stock's sumo branch
+//     is unreachable - every other reference in this mod clears the flag.
+//  2. s_albwMagicModelReady, off the fork's own three Mmdl lookups. Assigned
+//     only when the Magic branch is the one stock will take, matching the fork,
+//     where the assignment lives inside that branch.
+HookAction on_change_link_magic_pre(ModContext*, void* args, void*, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) return HOOK_CONTINUE;
+
+    if (dAlbwOutfit_isSumoWorn() && dAlbwSumoTest_prepareChangeLink()) {
+        link->onNoResetFlg2(daPy_py_c::FLG2_UNK_200000);
+    }
+
+    if (!link->checkNoResetFlg2(daPy_py_c::FLG2_UNK_200000) && !link->checkCasualWearFlg() &&
+        !link->checkZoraWearFlg() && link->checkMagicArmorWearFlg())
+    {
+        const bool ready = dComIfG_getObjectRes(ALBW_MMDL_ARC, "ml.bmd") != NULL &&
+                           dComIfG_getObjectRes(ALBW_MMDL_ARC, "ml_head.bmd") != NULL &&
+                           dComIfG_getObjectRes(ALBW_MMDL_ARC, "al_hands.bmd") != NULL;
+        if (!ready && s_albwMagicModelReady) {
+            // LOUD: the fork answers this by rebuilding from Kmdl, which needs
+            // changeLink itself. Here stock's branch is about to build from a
+            // NULL J3DModelData, so say so instead of letting it look handled.
+            DuskLog.error("ALBW changeLink: Mmdl parts unresolvable - stock's Magic branch has "
+                          "no fallback (the fork's needs changeLink, which cannot be replaced); "
+                          "Magic draw ops now gated off");
+        }
+        s_albwMagicModelReady = ready;
+    }
+    return HOOK_CONTINUE;
+}
+
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
+
 bool install(ModError* error, const char* name, ModResult r) {
     if (r != MOD_OK) {
         if (svc_log != nullptr) svc_log->error(mod_ctx, name);
@@ -411,7 +657,13 @@ ModResult albw_clothes_pipeline_init(ModError* error) {
         !install(error, "ChangeWolfStampToken",
                  mods::hook_add_post<ChangeWolfStamp>(svc_hook, on_change_wolf_post)) ||
         !install(error, "AlinkDrawConsistencyGuard",
-                 mods::hook_add_pre<AlinkDrawGuard>(svc_hook, on_alink_draw_pre)))
+                 mods::hook_add_pre<AlinkDrawGuard>(svc_hook, on_alink_draw_pre)) ||
+        !install(error, "ChangeLinkMagicReady",
+                 mods::hook_add_pre<ChangeLinkStamp>(svc_hook, on_change_link_magic_pre)) ||
+        !install(error, "SetMagicArmorBrkGuarded",
+                 mods::hook_add_pre<SetMagicArmorBrk>(svc_hook, on_set_magic_armor_brk_pre)) ||
+        !install(error, "SetWaterDropColorCapSafe",
+                 mods::hook_add_pre<SetWaterDropColor>(svc_hook, on_set_water_drop_color_pre)))
     {
         return MOD_ERROR;
     }
