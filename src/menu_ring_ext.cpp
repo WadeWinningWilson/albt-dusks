@@ -765,7 +765,12 @@ namespace {
 // ============================================
 
 DEFINE_HOOK(&dMenu_Ring_c::_create, Ring_Create);
-DEFINE_HOOK(&dMenu_Ring_c::_delete, Ring_Delete);
+// dMenu_Ring_c::_delete is an EMPTY function in stock (d_menu_ring.cpp:674) and
+// compiles to a bare ret - funchook cannot trampoline it ("Too short
+// instructions"). The ring's only destruction path is its owner, so the slot
+// release hooks dMw_c::dMw_ring_delete (d_menu_window.cpp:1103) instead, which
+// still holds mpMenuRing when it runs. Same moment, hookable function.
+DEFINE_HOOK(&dMw_c::dMw_ring_delete, Mw_RingDelete);
 DEFINE_HOOK(&dMenu_Ring_c::_move, Ring_Move);
 DEFINE_HOOK(&dMenu_Ring_c::_draw, Ring_Draw);
 DEFINE_HOOK(&dMenu_Ring_c::isMoveEnd, Ring_IsMoveEnd);
@@ -786,12 +791,16 @@ HookAction on_ring_create_pre(ModContext*, void* args, void*, void*) {
     return HOOK_CONTINUE;   // vanilla _create still builds the panes
 }
 
-// fork ~dMenu_Ring_c:571
-void on_ring_delete_post(ModContext*, void* args, void*, void*) {
-    auto* r = mods::arg<dMenu_Ring_c*>(args, 0);
-    if (r == nullptr) return;
+// fork ~dMenu_Ring_c:571 - runs as the owner tears the ring down, BEFORE the
+// JKR_DELETE, so mpMenuRing is still the ring whose slot we are releasing.
+HookAction on_mw_ring_delete_pre(ModContext*, void* args, void*, void*) {
+    auto* mw = mods::arg<dMw_c*>(args, 0);
+    if (mw == nullptr) return HOOK_CONTINUE;
+    dMenu_Ring_c* r = mw->mpMenuRing;
+    if (r == nullptr) return HOOK_CONTINUE;
     if (s_liveQuickRing == r) s_liveQuickRing = nullptr;
     albw_ring_qe_release(r);
+    return HOOK_CONTINUE;
 }
 
 // fork _move:686 - page flip on tap or hold; short-circuits the rest of _move.
@@ -954,8 +963,8 @@ bool install(ModError* error, const char* name, ModResult rr) {
 ModResult albw_menu_ring_ext_init(ModError* error) {
     if (!install(error, "Ring_Create",
                  mods::hook_add_pre<Ring_Create>(svc_hook, on_ring_create_pre)) ||
-        !install(error, "Ring_Delete",
-                 mods::hook_add_post<Ring_Delete>(svc_hook, on_ring_delete_post)) ||
+        !install(error, "Mw_RingDelete",
+                 mods::hook_add_pre<Mw_RingDelete>(svc_hook, on_mw_ring_delete_pre)) ||
         !install(error, "Ring_Move",
                  mods::hook_add_pre<Ring_Move>(svc_hook, on_ring_move_pre)) ||
         !install(error, "Ring_Draw",
