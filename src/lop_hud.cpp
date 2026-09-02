@@ -77,6 +77,38 @@ void refresh_mode() {
     s_healthBar = m == Mode::HealthBar;
 }
 
+// ============================================
+// Toggle-frame redraw.
+// The fork puts BOTH wallet branches inside drawRupee (d_meter2_draw.cpp:3381):
+// LoP anchors top-right, vanilla anchors bottom-right, and whichever ran last
+// owns the pane. But drawRupee only runs when the rupee VALUE changes
+// (d_meter2.cpp:1189) - the sole unconditional call is the one at HUD init
+// (d_meter2_draw.cpp:1082). So on the frame the layout is switched OFF nothing
+// re-anchors the wallet: it stays parked in the LoP top-right until the player
+// next gains or spends a rupee. The shield row measures the wallet's geometry
+// for its spacing, so it reads the stale position and stretches its icons off
+// the top of the screen - both halves of the reported defect, one cause.
+//
+// Fixed the way the fork itself seeds the pane: call drawRupee once. Not a
+// re-implementation of the layout - it hands the decision back to the game's own
+// function, which reads the flag we just refreshed and anchors accordingly.
+// ============================================
+bool s_lopWasActive = false;
+bool s_lopToggleSeen = false;
+
+void redraw_rupee_on_toggle(dMeter2Draw_c* d) {
+    if (!s_lopToggleSeen) {
+        s_lopToggleSeen = true;
+        s_lopWasActive = s_active;
+        return;
+    }
+    if (s_lopWasActive == s_active) {
+        return;
+    }
+    s_lopWasActive = s_active;
+    d->drawRupee(static_cast<s16>(dComIfGs_getRupee()));
+}
+
 // Fork draw():870-890 - cache the shield row anchor. Midna is the real anchor;
 // cross and life are fallbacks only, in that order.
 void compute_anchor(dMeter2Draw_c* d) {
@@ -331,6 +363,7 @@ HookAction on_draw_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
     refresh_mode();
+    redraw_rupee_on_toggle(d);
     // ============================================
     // Positioning runs EVERY FRAME from here, not from the drawRupee / exec
     // post-hooks alone. The fork forces a redraw on toggle by setting
@@ -917,6 +950,8 @@ ModResult albw_lop_hud_shutdown(ModError*) {
     albw_lop::s_btnLiftCached = false;
     albw_lop::s_buttonsWasOn = false;
     albw_lop::s_rupeeWasOn = false;
+    albw_lop::s_lopWasActive = false;
+    albw_lop::s_lopToggleSeen = false;
     albw_lop::s_crossWasOn = false;
     albw_lop::s_kanteraOffsetValid = false;
     return MOD_OK;
