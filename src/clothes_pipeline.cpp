@@ -97,15 +97,42 @@ void on_change_wolf_post(ModContext*, void* args, void*, void*) {
 // material scan (albwFirstCorruptMat) it describes as a DETECTOR for collecting
 // samples of a build-corruption bug. That is diagnostics, not the seatbelt, so
 // the epoch/token half is ported and the scan is left in the fork.
+// ============================================
+// The guard below skipping is what "invisible Link" looks like. The fork's own
+// note on this seatbelt (d_a_alink.cpp:21524) says the tokens are kept in
+// agreement during normal play so "this does not fire" - so a skip that PERSISTS
+// is never routine, it is a state that stopped reconciling. Silent it would be
+// indistinguishable from a rendering bug, so report every distinct state once.
+// ============================================
+u32 s_lastSkipBuilt = 0xFFFFFFFF;
+u32 s_lastSkipCur = 0xFFFFFFFF;
+bool s_wasSkipping = false;
+
 HookAction on_alink_draw_pre(ModContext*, void* args, void* retval, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr || retval == nullptr) {
         return HOOK_CONTINUE;
     }
     const u32 cur = albwLiveModelStateToken(link, link->checkWolf() != 0);
-    if (!dAlbwAlink_clothesEpochInSync() || s_builtModelState != cur) {
+    const bool epochOk = dAlbwAlink_clothesEpochInSync();
+    if (!epochOk || s_builtModelState != cur) {
+        if (!s_wasSkipping || s_lastSkipBuilt != s_builtModelState || s_lastSkipCur != cur) {
+            s_wasSkipping = true;
+            s_lastSkipBuilt = s_builtModelState;
+            s_lastSkipCur = cur;
+            DuskLog.error("[Alink] draw SKIPPED (Link invisible): built={} live={} epochInSync={} "
+                          "arc={} cloth={} timer={}",
+                          s_builtModelState, cur, epochOk, 
+                          link->mArcName != nullptr ? link->mArcName : "(null)",
+                          (int)dComIfGs_getSelectEquipClothes(),
+                          (int)link->mClothesChangeWaitTimer);
+        }
         *static_cast<int*>(retval) = 1;
         return HOOK_SKIP_ORIGINAL;
+    }
+    if (s_wasSkipping) {
+        s_wasSkipping = false;
+        DuskLog.info("[Alink] draw resumed (state={})", cur);
     }
     return HOOK_CONTINUE;
 }
@@ -386,6 +413,7 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
 // ============================================
 
 bool s_albwMagicModelReady = false;
+int s_lastBrkMissStatus = -1;
 
 // fork d_a_alink.cpp:13756 - stock's is void and unguarded; the fork's returns
 // BOOL so changeLink only touches the Brks when they actually resolved.
@@ -419,8 +447,16 @@ BOOL albw_setMagicArmorBrk(daAlink_c* i_this, int i_status) {
     i_this->mMagicArmorBodyBrk =
         (J3DAnmTevRegKey*)dComIfG_getObjectRes(ALBW_MMDL_ARC, bodyBrkName[i_status]);
     if (i_this->mMagicArmorBodyBrk == NULL || modelData == NULL) {
-        DuskLog.error("setMagicArmorBrk: missing body BRK {} in {}", bodyBrkName[i_status],
-                      ALBW_MMDL_ARC);
+        // Once per (status, arc-residency) state - execute() retries this every
+        // frame while the mismatch holds, and 60 identical lines a second buries
+        // whatever else the log was about to tell us.
+        if (s_lastBrkMissStatus != i_status) {
+            s_lastBrkMissStatus = i_status;
+            DuskLog.error("setMagicArmorBrk: missing body BRK {} in {} (arc={} cloth={})",
+                          bodyBrkName[i_status], ALBW_MMDL_ARC,
+                          i_this->mArcName != nullptr ? i_this->mArcName : "(null)",
+                          (int)dComIfGs_getSelectEquipClothes());
+        }
         i_this->mMagicArmorBodyBrk = NULL;
         return FALSE;
     }
@@ -443,6 +479,7 @@ BOOL albw_setMagicArmorBrk(daAlink_c* i_this, int i_status) {
     i_this->mMagicArmorHeadBrk->setFrame(0.0f);
 
     i_this->field_0x2fd7 = i_status;
+    s_lastBrkMissStatus = -1;  // resolved - let a later miss report itself
     return TRUE;
 }
 

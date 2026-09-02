@@ -687,6 +687,34 @@ void dAlbwOutfit_syncLinkModel(daAlink_c* link) {
     // clothesTimer / sReloadPending early-returns here, so `clothes` is settled.
     // ============================================
     if (sSyncedNativeClothes == 0xFF) {
+        // ============================================
+        // DIAGNOSTIC ONLY - no behaviour change (this block is verbatim fork,
+        // d_albw_outfit.cpp:687).
+        //
+        // Seeding the tracker from the live clothes VALUE adopts that value
+        // without rebuilding the model. If the models on screen were built for a
+        // DIFFERENT outfit, nativeStable goes true on the next line and
+        // syncLinkModel early-returns from then on - the rebuild that would have
+        // reconciled them is never requested. That is the shape of the reported
+        // invisible Link: value ARMOR, models Hero's, draw guard skipping.
+        //
+        // Report it when the live arc does not match the value being adopted.
+        // Deciding what to seed instead means changing ported fork logic, which
+        // is a DN-10 call for the user, not for this code.
+        // ============================================
+        daAlink_c* seedLink = daAlink_getAlinkActorClass();
+        const char* liveArc = (seedLink != NULL) ? seedLink->mArcName : NULL;
+        const char* wantArc = (clothes == dItemNo_WEAR_CASUAL_e)   ? "Bmdl"
+                              : (clothes == dItemNo_WEAR_KOKIRI_e) ? "Kmdl"
+                              : (clothes == dItemNo_ARMOR_e)       ? "Mmdl"
+                              : (clothes == dItemNo_WEAR_ZORA_e)   ? "Zmdl"
+                                                                   : NULL;
+        if (liveArc != NULL && wantArc != NULL && strcmp(liveArc, wantArc) != 0) {
+            DuskLog.error("[Outfit] re-seed ADOPTS a value the models were not built for: "
+                          "cloth={} wants arc {} but live arc is {} - no rebuild will be "
+                          "requested from here",
+                          (int)clothes, wantArc, liveArc);
+        }
         sSyncedNativeClothes = clothes;
     }
 
