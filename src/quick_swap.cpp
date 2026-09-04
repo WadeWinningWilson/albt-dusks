@@ -17,6 +17,7 @@
 #include "Z2AudioLib/Z2SeMgr.h"
 
 #include "albw_game.h"
+#include "wardrobe.h"
 #include "albw_common.h"
 #include "config_vars.h"
 #include "extra_item_slot.h"
@@ -82,8 +83,41 @@ u8 next_owned_shield(u8 current) {
     return dItemNo_NONE_e;
 }
 
-// Port of fork dMeter2_equipOwnedShield — never invent first bits; sync collect +
-// select equip locally (avoid relying on DUSK_NOINLINE dMeter2Info_setShield).
+// ============================================
+// MODIFIED CODE - ALBW Port (fork-verbatim equip chain)
+// The previous version here inverted the fork's timer handling: it REFUSED the
+// whole swap while a shield reload was in flight, so a reload that never
+// settled froze cycling permanently. The fork writes the equip value first and
+// only soft-skips the model kick when busy (dMeter2_requestLinkShieldModelUpdate
+// no-ops on a live timer; the reload path re-derives the arc from the equip
+// value, so the value written during a reload still lands on screen).
+// Bodies below are fork d_meter2.cpp, boundary renames only.
+// ============================================
+
+// fork dMeter2_ensureShieldOwned - first bit AND collect value, not collect alone.
+void ensure_shield_owned(u8 itemNo) {
+    if (!shield_is_item(itemNo)) {
+        return;
+    }
+    if (!albw_game::is_item_first_bit(itemNo)) {
+        albw_game::on_item_first_bit(itemNo);
+    }
+    set_collect_shield_for_item(itemNo);
+}
+
+// fork dMeter2_requestLinkShieldModelUpdate
+void request_link_shield_model_update() {
+    daAlink_c* link = static_cast<daAlink_c*>(albw_game::link_player());
+    if (link == nullptr) {
+        return;
+    }
+    if (link->getShieldChangeWaitTimer() != 0) {
+        return;
+    }
+    link->setShieldChange();
+}
+
+// fork dMeter2_equipOwnedShield
 bool equip_owned_shield(u8 itemNo) {
     if (!shield_is_item(itemNo) || itemNo == dItemNo_NONE_e) {
         return false;
@@ -95,17 +129,9 @@ bool equip_owned_shield(u8 itemNo) {
         return false;
     }
 
-    daAlink_c* link = static_cast<daAlink_c*>(albw_game::link_player());
-    if (link != nullptr && link->getShieldChangeWaitTimer() != 0) {
-        return false;
-    }
-
-    set_collect_shield_for_item(itemNo);
+    ensure_shield_owned(itemNo);
     albw_shield_game::set_shield(itemNo, false);
-
-    if (link != nullptr) {
-        link->setShieldChange();
-    }
+    request_link_shield_model_update();
     return true;
 }
 
@@ -189,7 +215,33 @@ void cycle_next_shield() {
     }
 
     const u8 current = albw_game::select_equip_shield();
-    const u8 next = next_owned_shield(current);
+    u8 next = next_owned_shield(current);
+    // fork cycleNextShield (dpad_quick_swap.cpp:194-215): quick-swap cycles
+    // through the WARDROBE-ACTIVE shields, not merely the owned ones. The
+    // previous version dropped this whole branch, so a shield the wardrobe had
+    // benched stayed in the rotation and an active one could be skipped.
+    {
+        static constexpr u8 kOrder[] = {
+            (u8)dItemNo_WOOD_SHIELD_e,
+            (u8)dItemNo_SHIELD_e,
+            (u8)dItemNo_HYLIA_SHIELD_e,
+        };
+        int start = 0;
+        for (int i = 0; i < 3; ++i) {
+            if (kOrder[i] == current) {
+                start = i + 1;
+                break;
+            }
+        }
+        next = current;
+        for (int step = 0; step < 3; ++step) {
+            const u8 candidate = kOrder[(start + step) % 3];
+            if (candidate != current && dAlbwWardrobe_isActiveShield(candidate)) {
+                next = candidate;
+                break;
+            }
+        }
+    }
     if (next == dItemNo_NONE_e || next == current) {
         return;
     }

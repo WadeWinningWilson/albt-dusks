@@ -3,6 +3,9 @@
 #include "global.h"
 
 #include "SSystem/SComponent/c_cc_d.h"
+#include "JSystem/JKernel/JKRExpHeap.h"
+#include "SSystem/SComponent/c_phase.h"
+#include "d/d_resorce.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_cc_d.h"
 #include "d/d_com_inf_game.h"
@@ -35,6 +38,8 @@ DEFINE_HOOK(&daAlink_c::procGuardSlipInit, ProcGuardSlipInit);
 DEFINE_HOOK(&daAlink_c::procGuardBreakInit, ProcGuardBreakInit);
 DEFINE_HOOK(&daAlink_c::execute, LinkExecute);
 DEFINE_HOOK(&daAlink_c::setShieldChange, SetShieldChange);
+DEFINE_HOOK(&daAlink_c::loadShieldModelDVD, LoadShieldModelDVD);
+DEFINE_HOOK(&daAlink_c::setShieldModel, SetShieldModel);
 DEFINE_HOOK(&daAlink_c::setShieldArcName, SetShieldArcName);
 DEFINE_HOOK(&dMeter2_c::moveKantera, MoveKantera);
 DEFINE_HOOK(&dMeter2Draw_c::draw, MeterDraw);
@@ -56,6 +61,91 @@ HookAction on_set_shield_change_pre(ModContext*, void* args, void*, void*) {
     link->offNoResetFlg2(daPy_py_c::FLG2_UNK_8000000);
     link->mShieldChangeWaitTimer = 4;
     return HOOK_SKIP_ORIGINAL;
+}
+
+// ============================================
+// NEW CODE - ALBW Port (hardened shield reload - fork d_a_alink_swindow.inc)
+//
+// The fork hardened loadShieldModelDVD and setShieldModel; the mod never
+// carried it, and both playtest symptoms are that one gap:
+//   - stock dComIfG_resDelete no-ops when the phase id != 2, so the arc stays
+//     REGISTERED while freeAll() guts its heap. The next resLoad sees the stale
+//     registration and the rebuilt model comes from freed data -> INVISIBLE
+//     shield. Fork fix: force-unregister via dComIfG_deleteObjectResMain.
+//   - a reload that never completes flips the timer 1<->2 forever, and every
+//     swap path checks that timer -> "cannot continue swapping". Fork fix:
+//     NULL-heap bailout zeroes the timer; the model-miss is REPORTED.
+//
+// loadShieldModelDVD is replaced with the fork body (member access via the
+// private-public include, OS_REPORT -> svc_log). setShieldModel needs no
+// wholesale copy: the fork's only change is a NULL-data guard before initModel,
+// so a pre-hook checks the same lookup and skips vanilla with mShieldModel
+// cleared - vanilla IS the fork's else-branch.
+// ============================================
+HookAction on_load_shield_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr || retval == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    auto ret = [retval](int v) {
+        *static_cast<int*>(retval) = v;
+        return HOOK_SKIP_ORIGINAL;
+    };
+
+    if (link->mShieldChangeWaitTimer != 0) {
+        link->mShieldChangeWaitTimer--;
+
+        if (link->mShieldChangeWaitTimer == 2) {
+            link->mShieldModel = NULL;
+            if (!dComIfG_resDelete(&link->mShieldPhaseReq, link->mShieldArcName)) {
+                // resDelete no-ops when phase id != 2; force-unregister before freeAll
+                dComIfG_deleteObjectResMain(link->mShieldArcName);
+            }
+            cPhs_Reset(&link->mShieldPhaseReq);
+            if (link->mpShieldArcHeap != NULL) {
+                link->mpShieldArcHeap->freeAll();
+            }
+            link->setShieldArcName();
+        } else if (link->mShieldChangeWaitTimer == 1) {
+            if (link->mpShieldArcHeap == NULL) {
+                link->mShieldChangeWaitTimer = 0;
+                return ret(1);
+            }
+
+            int phase_state =
+                dComIfG_resLoad(&link->mShieldPhaseReq, link->mShieldArcName, link->mpShieldArcHeap);
+            if (phase_state == cPhs_COMPLEATE_e) {
+                link->mShieldChangeWaitTimer = 0;
+                link->setShieldModel();
+                if (link->mShieldModel == NULL && svc_log != nullptr) {
+                    svc_log->error(mod_ctx, "loadShieldModelDVD: missing shield model after load");
+                }
+            } else {
+                link->mShieldChangeWaitTimer = 2;
+            }
+        }
+    } else {
+        return ret(1);
+    }
+
+    return ret(0);
+}
+
+HookAction on_set_shield_model_pre(ModContext*, void* args, void*, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    if (dComIfG_getObjectRes(link->mShieldArcName, 3) == NULL) {
+        // fork setShieldModel: NULL model data -> leave the model empty rather
+        // than hand initModel a null (its JUT_ASSERT is compiled out here).
+        link->mShieldModel = NULL;
+        if (svc_log != nullptr) {
+            svc_log->error(mod_ctx, "setShieldModel: shield arc has no model data (res 3)");
+        }
+        return HOOK_SKIP_ORIGINAL;
+    }
+    return HOOK_CONTINUE;
 }
 
 HookAction on_set_shield_arc_name_pre(ModContext*, void* args, void*, void*) {
@@ -338,6 +428,10 @@ ModResult albw_shield_init(ModError* error) {
                  mods::hook_add_pre<SetShieldChange>(svc_hook, on_set_shield_change_pre)) ||
         !install(error, "SetShieldArcNameEquip",
                  mods::hook_add_pre<SetShieldArcName>(svc_hook, on_set_shield_arc_name_pre)) ||
+        !install(error, "LoadShieldModelDVDHardened",
+                 mods::hook_add_pre<LoadShieldModelDVD>(svc_hook, on_load_shield_model_dvd_pre)) ||
+        !install(error, "SetShieldModelNullGuard",
+                 mods::hook_add_pre<SetShieldModel>(svc_hook, on_set_shield_model_pre)) ||
         !install(error, "MoveKanteraShield",
                  mods::hook_add_post<MoveKantera>(svc_hook, on_move_kantera_post)) ||
         !install(error, "MeterDrawShield",
