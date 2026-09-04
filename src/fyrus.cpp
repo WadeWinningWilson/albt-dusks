@@ -316,9 +316,44 @@ void try_install(const char* what, ModResult result) {
 
 }  // namespace
 
+
+// ============================================
+// NEW CODE - ALBW Port (E_FM parryable ATs - fork e_fm_albwApplyParryableAt)
+// Fork d_a_e_fm.cpp:616 stamps AtSpl 1 + SPrm bit 12 + VsPlayer on Fyrus's
+// at/chain/effect spheres at their arming sites (effect_set:3547, Execute:3875
+// and :3955); ChkAtNoGuard rejects spl >= 12, which is what makes the swings
+// PARRYABLE. This was never carried - the reported "phase 2 attacks aren't
+// parry-able". Re-stamped once per frame after Execute (any vanilla re-Set of
+// a sphere this frame lands before this), gated exactly as the fork gates it.
+// ============================================
+static void e_fm_albwApplyParryableAt(dCcD_Sph* i_sph) {
+    if (i_sph == NULL) {
+        return;
+    }
+    i_sph->SetAtSpl((dCcG_At_Spl)1);
+    i_sph->OnAtSPrmBit(12);
+    i_sph->OnAtVsPlayerBit();
+}
+
+static void on_execute_parry_post(ModContext*, void* args, void*, void*) {
+    auto* i_this = mods::arg<e_fm_class*>(args, 0);
+    if (i_this == nullptr) {
+        return;
+    }
+    // fork e_fm_albwWantParryableAt
+    if (!dAlbwBossRefinement_isEnabled() || dAlbwBoss_fyrusGolemWindowIsLive()) {
+        return;
+    }
+    e_fm_albwApplyParryableAt(&i_this->mAtSph);
+    e_fm_albwApplyParryableAt(&i_this->mEffAtSph);
+    for (int j = 0; j < (int)(sizeof(i_this->mChainAtSph) / sizeof(i_this->mChainAtSph[0])); j++) {
+        e_fm_albwApplyParryableAt(&i_this->mChainAtSph[j]);
+    }
+}
 ModResult albw_fyrus_init(ModError*) {
     try_install("daE_FM_Create", mods::hook::add_post<FmCreate>(on_create_post));
     try_install("daE_FM_Execute", mods::hook::add_pre<FmExecute>(on_execute_pre));
+    try_install("daE_FM_Execute post", mods::hook::add_post<FmExecute>(on_execute_parry_post));
     try_install("e_fm_down:pre", mods::hook::add_pre<FmDown>(on_down_pre));
     try_install("e_fm_down:post", mods::hook::add_post<FmDown>(on_down_post));
     try_install("e_fm_normal:pre", mods::hook::add_pre<FmNormal>(on_normal_pre));

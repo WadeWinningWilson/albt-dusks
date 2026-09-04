@@ -26,7 +26,18 @@ static constexpr f32 kBarTopFrac = 0.908f;
 static constexpr f32 kBarBorder = 1.0f;
 static constexpr f32 kNameFontFrac = 0.028f;
 static constexpr f32 kNameGap = 3.0f;
+static constexpr f32 kNameOutline = 1.0f;
 static const char* kBlockBti = "tt_block8x8.bti";
+
+// ============================================
+// NEW CODE - ALBW Port (fork intro-card name styling)
+// fork d_albw_boss_hp_hud.cpp D_ALBW_BOSS_BAR_INTRO_STYLE 1: the bar name uses
+// the boss-intro title font (mDoExt_getRubyFont, same as zelda_boss_name.blo)
+// in the intro-card cream/gold gradient. The previous version here used the
+// message font in plain white - the reported wrong-font bar.
+// ============================================
+static const u32 kNameColorTop = 0xF6E8B0FF;  // cream - intro-card gold, glyph top
+static const u32 kNameColorBot = 0xE0B84AFF;  // gold  - intro-card gradient, glyph bottom
 
 static J2DPicture* sBlock = nullptr;
 static J2DTextBox* sName = nullptr;
@@ -98,7 +109,7 @@ bool ensureResources() {
         if (sName == nullptr) {
             return false;
         }
-        sName->setFont(mDoExt_getMesgFont());
+        sName->setFont(mDoExt_getRubyFont());  // fork: boss-intro title font
     }
     return true;
 }
@@ -222,19 +233,21 @@ void albw_boss_hp_hud_draw() {
 
     sName->setFontSize(fontSz, fontSz);
     sName->setString(name);
-    // Fork-style black outline (8-neighbor) then white fill.
-    sName->setCharColor(0xFF000000);
-    sName->setGradColor(0xFF000000);
+    // fork: black outline (8-neighbor, RGBA 0x000000FF - the old value here was
+    // byte-swapped to 0xFF000000, i.e. RED with alpha 0, an invisible outline),
+    // then the intro-card cream/gold fill.
+    sName->setCharColor(0x000000FF);
+    sName->setGradColor(0x000000FF);
     for (int ox = -1; ox <= 1; ++ox) {
         for (int oy = -1; oy <= 1; ++oy) {
             if (ox == 0 && oy == 0) {
                 continue;
             }
-            sName->draw(barX + static_cast<f32>(ox), nameY + static_cast<f32>(oy), barW,
+            sName->draw(barX + ox * kNameOutline, nameY + oy * kNameOutline, barW,
                         HBIND_CENTER);
         }
     }
-    sName->setCharColor(0xFFFFFFFF);
-    sName->setGradColor(0xFFFFFFFF);
+    sName->setCharColor(kNameColorTop);
+    sName->setGradColor(kNameColorBot);
     sName->draw(barX, nameY, barW, HBIND_CENTER);
 }

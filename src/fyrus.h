@@ -4,4 +4,5 @@
 #include "albw_common.h"
 
 ModResult albw_fyrus_init(ModError* error);
+ModResult albw_fyrus_golem_init(ModError* error);
 ModResult albw_fyrus_shutdown(ModError* error);

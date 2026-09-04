@@ -152,6 +152,13 @@ void* dComIfG_getObjectRes(const char* i_arcName, int i_index) {
 void* dComIfG_getObjectRes(const char* i_arcName, const char* i_resName) {
     return albw_game::object_res(i_arcName, i_resName);
 }
+// stock d_com_inf_game.h:5303 / :3830 (#else inline bodies)
+dCcS* dComIfG_Ccsp() {
+    return &g_dComIfG_gameInfo.play.mCcs;
+}
+dVibration_c& dComIfGp_getVibration() {
+    return g_dComIfG_gameInfo.play.getVibration();
+}
 
 #endif  // TARGET_PC
 
