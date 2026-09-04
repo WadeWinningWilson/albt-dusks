@@ -18,6 +18,8 @@ u8 albw_wolf_get_charge_count();
 u8 albw_wolf_get_max_charges();
 void albw_wolf_spend_charge(u8 amount);
 
+ModResult albw_wolf_charge_art_init(ModError* error);
+
 bool dAlbwWolfArts_isHowlUnlocked();
 bool dAlbwWolfArts_isArmUnlocked();
 

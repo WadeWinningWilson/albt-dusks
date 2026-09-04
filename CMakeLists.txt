@@ -34,6 +34,7 @@ add_mod(albt_full_plugin
             src/soul_of_light.cpp
             src/enemy_rupees.cpp
             src/wolf_combat.cpp
+            src/wolf_charge_art.cpp
             src/wolf_charge_hud.cpp
             src/hold_a_crawl.cpp
             src/quick_swap.cpp

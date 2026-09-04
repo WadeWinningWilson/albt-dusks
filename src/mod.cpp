@@ -162,6 +162,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_focused_arts_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
         albw_wolf_combat_init(error) != MOD_OK ||
+        albw_wolf_charge_art_init(error) != MOD_OK ||
         albw_wolf_arts_init(error) != MOD_OK ||
         albw_hold_a_crawl_init(error) != MOD_OK ||
         albw_extra_item_slot_init(error) != MOD_OK ||
