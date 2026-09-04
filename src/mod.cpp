@@ -17,6 +17,7 @@
 #include "meter.h"
 #include "quick_swap.h"
 #include "quick_equip.h"
+#include "ext_status.h"
 #include "extra_item_slot.h"
 #include "extra_item_slot_hooks.h"
 #include "z_item_hud.h"
@@ -185,6 +186,10 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     {
         return MOD_ERROR;
     }
+
+    // fork custom_assets.cpp:1872 - claims.ini ingest runs when the boot asset
+    // scan completes; the mod's equivalent moment is the end of activation.
+    dExtInv_rescanClaims();
 
     if (albw_settings_ui_register_panel(error) != MOD_OK) {
         svc_log->warn(mod_ctx, "mods panel unavailable; config keys still work");

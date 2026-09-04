@@ -6,14 +6,15 @@
 // Both registries are deliberately WW-agnostic in the fork ("callers claim by
 // behavior kind. No WW names here"), which is what makes them usable by any mod.
 //
-// ONE DELIBERATE DIVERGENCE, and it makes the feature MORE capable rather than
-// less: the fork discovers third-party claims by scanning enabled mod folders
-// for ext_inv/claims.ini (dExtInv_rescanClaims). The mod SDK has no folder
-// enumeration, so that scan cannot be ported - but it does not need to be.
-// HostService already provides publish_service / get_service / watch_mod_lifecycle
-// (sdk/include/mods/svc/host.h:55-97), so the registry is published as a service
-// other mods retrieve and call directly, and their claims are dropped when they
-// unload. That is the platform's own mechanism instead of a file-scan.
+// TWO ingestion paths, matching the fork (add-and-label, never substitute):
+//  1. The fork's zero-code path, dExtInv_rescanClaims: content mods ship
+//     ext_inv/claims.ini and their rows land with no code. Ported below; only
+//     its folder ENUMERATION is translated at the boundary (the fork walks its
+//     Custom Models subsystem, which stock lacks - see the block comment there).
+//  2. The published service (HostService publish_service / get_service /
+//     watch_mod_lifecycle, sdk/include/mods/svc/host.h:55-97): typed live
+//     claims for native mods, dropped when the claiming mod unloads. This one
+//     has no fork counterpart because the fork links callers directly.
 // ============================================
 
 #include "global.h"
@@ -32,6 +33,13 @@
 #include "potion.h"
 
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+#include "albw_dusk_log.h"
 
 #if TARGET_PC
 
@@ -495,14 +503,239 @@ bool dExtStatus_tryDeepLinkZ(u16 rowId) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
-// Third-party claims
+// ============================================
+// NEW CODE - ALBW Port (claims.ini zero-code path)
 //
-// The fork discovers other mods' sockets by scanning each enabled mod folder for
-// ext_inv/claims.ini (dExtInv_rescanClaims + a small INI parser). The mod SDK
-// exposes no folder enumeration, so that scan is NOT ported - and does not need
-// to be: HostService already offers publish_service / get_service /
-// watch_mod_lifecycle (sdk/include/mods/svc/host.h:55-97).
+// Ported from the fork d_ext_mod_flags.cpp:807-960. This is the ZERO-CODE way
+// into both registries: a content mod ships ext_inv/claims.ini and its rows
+// land in the wheel pages / Ext Status tabs without linking anything. The
+// published service (below) remains the first-class path for native mods;
+// this is ADDITIVE, per the never-substitute rule - both mechanisms coexist,
+// exactly as the fork runs the scan alongside its own C API.
+//
+// parseQeKind / parseEsTab / parseEsKind / loadClaimsFile are VERBATIM - the
+// file format is the contract, so the parser must not drift.
+//
+// dExtInv_rescanClaims is verbatim except its enumeration block, which is the
+// consumption boundary: the fork walks dusk::custom_assets::list_folders()
+// (its Custom Models order list, with per-folder enable flags) under
+// dusk::ConfigPath. Stock has neither the subsystem nor the setting, so:
+//   - the config root is derived from HostService::native_dir (which sits at
+//     <root>/mods/.cache/<id>/g<N>) by walking up to the "mods" component;
+//   - <root>/model_replacements/<folder>/ext_inv/claims.ini is scanned - the
+//     fork's own on-disk path. No enable flag exists in stock, so an existing
+//     folder counts as enabled (each load is logged so this is auditable);
+//   - <root>/mods/<dir>/ext_inv/claims.ini and
+//     <root>/mods/.cache/<id>/g<N>/ext_inv/claims.ini are scanned too - the
+//     .dusk-world equivalent of "a mod folder", so an installed .dusk can
+//     carry claims with zero code, which is the donor's whole point.
+// ============================================
+
+namespace {
+
+dQeKind parseQeKind(const std::string& s) {
+    if (s == "inv_z") return dQeKind_InvSlot_Z;
+    if (s == "sword") return dQeKind_SwordEquip;
+    if (s == "shield") return dQeKind_ShieldEquip;
+    if (s == "zsel") return dQeKind_ZSelect;
+    if (s == "custom") return dQeKind_Custom;
+    if (s == "bag") return dQeKind_Bag;
+    return dQeKind_Empty;
+}
+
+dExtStatusTab parseEsTab(const std::string& s) {
+    if (s == "tools") return dExtStatusTab_Tools;
+    if (s == "quest") return dExtStatusTab_Quest;
+    if (s == "atlas") return dExtStatusTab_Atlas;
+    return dExtStatusTab_Tools;
+}
+
+dExtStatusKind parseEsKind(const std::string& s) {
+    if (s == "passive") return dExtStatusKind_Passive;
+    if (s == "usable") return dExtStatusKind_Usable;
+    if (s == "bag") return dExtStatusKind_Bag;
+    if (s == "chart") return dExtStatusKind_Chart;
+    if (s == "mark") return dExtStatusKind_Mark;
+    return dExtStatusKind_Empty;
+}
+
+void loadClaimsFile(const std::filesystem::path& path) {
+    std::ifstream in(path);
+    if (!in) {
+        return;
+    }
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty() || line[0] == '#' || line[0] == ';') {
+            continue;
+        }
+        char cmd[16] = {};
+        char a[32] = {};
+        char b[32] = {};
+        char c[32] = {};
+        char d[64] = {};
+        unsigned id = 0;
+        unsigned icon = 0xFF;
+        unsigned tp = 0xFF;
+        unsigned page = 0;
+        unsigned slot = 0;
+        unsigned child = 0;
+        // qe <page|auto> <slot|auto> <kind> <id> <icon> <tpInv>
+        if (std::sscanf(line.c_str(), "qe %31s %31s %31s %x %x %x", a, b, c, &id, &icon, &tp) >= 4) {
+            dQeSocketDesc desc{};
+            desc.id = static_cast<u16>(id);
+            desc.kind = parseQeKind(c);
+            desc.iconItemNo = static_cast<u8>(icon);
+            desc.tpInvSlot = static_cast<u8>(tp);
+            desc.flags = dQeFlag_ModClaim;
+            if (std::strcmp(a, "auto") == 0) {
+                claimOnPage(0, desc);
+            } else {
+                page = static_cast<unsigned>(std::strtoul(a, nullptr, 0));
+                if (std::strcmp(b, "auto") == 0) {
+                    desc.page = static_cast<u8>(page);
+                    claimOnPage(desc.page, desc);
+                } else {
+                    slot = static_cast<unsigned>(std::strtoul(b, nullptr, 0));
+                    desc.page = static_cast<u8>(page);
+                    desc.slot = static_cast<u8>(slot);
+                    dQe_claim(desc);
+                }
+            }
+            continue;
+        }
+        // bag <bagId> <childSlot> <kind> <id> <icon> <tpInv>
+        {
+            unsigned bagId = 0;
+            unsigned childId = 0;
+            if (std::sscanf(line.c_str(), "bag %x %u %31s %x %x %x", &bagId, &child, c, &childId,
+                            &icon, &tp) >= 4)
+            {
+                dQeSocketDesc childDesc{};
+                childDesc.id = static_cast<u16>(childId);
+                childDesc.kind = parseQeKind(c);
+                childDesc.iconItemNo = static_cast<u8>(icon);
+                childDesc.tpInvSlot = static_cast<u8>(tp);
+                childDesc.flags = dQeFlag_ModClaim;
+                dQe_claimBagChild(static_cast<u16>(bagId), static_cast<u8>(child), childDesc);
+                continue;
+            }
+        }
+        // es <tab> <kind> <id> <icon> <label...>
+        if (std::sscanf(line.c_str(), "es %31s %31s %x %x %63[^\r\n]", a, b, &id, &icon, d) >= 3) {
+            dExtStatusRow row{};
+            row.id = static_cast<u16>(id);
+            row.tab = parseEsTab(a);
+            row.kind = parseEsKind(b);
+            row.iconItemNo = static_cast<u8>(icon);
+            row.tpInvSlot = 0xFF;
+            row.flags = dExtStatusFlag_ModClaim;
+            if (d[0] != '\0') {
+                std::snprintf(row.label, sizeof(row.label), "%s", d);
+            }
+            dExtStatus_claim(row);
+        }
+    }
+}
+
+// Boundary translation for the fork's list_folders()/ConfigPath (see header
+// comment). Returns an empty path - loudly - when the layout is not recognized,
+// so a host that moves its tree fails visibly instead of scanning nothing.
+std::filesystem::path claimsConfigRoot() {
+    if (svc_host == nullptr || svc_host->native_dir == nullptr) {
+        DuskLog.error("[ext_inv] HostService::native_dir unavailable - claims.ini scan skipped");
+        return {};
+    }
+    const char* nd = svc_host->native_dir(mod_ctx);
+    if (nd == nullptr) {
+        DuskLog.error("[ext_inv] native_dir returned null - claims.ini scan skipped");
+        return {};
+    }
+    std::filesystem::path p(nd);
+    for (std::filesystem::path q = p; q.has_parent_path() && q != q.parent_path();
+         q = q.parent_path())
+    {
+        if (q.filename() == "mods") {
+            return q.parent_path();
+        }
+    }
+    DuskLog.error("[ext_inv] no 'mods' component above '{}' - claims.ini scan skipped", nd);
+    return {};
+}
+
+void scanClaimsDir(const std::filesystem::path& dir, const char* what) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir, ec)) {
+        return;
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        if (!entry.is_directory(ec)) {
+            continue;
+        }
+        const std::filesystem::path claims = entry.path() / "ext_inv" / "claims.ini";
+        if (std::filesystem::exists(claims, ec)) {
+            loadClaimsFile(claims);
+            DuskLog.info("[ext_inv] loaded claims from {} '{}'", what,
+                         entry.path().filename().string().c_str());
+        }
+    }
+}
+
+}  // namespace
+
+void dExtInv_rescanClaims() {
+    dQe_clearByFlag(dQeFlag_ModClaim);
+    dExtStatus_clearByFlag(dExtStatusFlag_ModClaim);
+    for (u8 i = 0; i < dQe_kMaxBags; ++i) {
+        if (s_bags[i].bagId != 0) {
+            // Clear mod bag children by wiping bags that only hold mod claims.
+            bool anyBuiltin = false;
+            for (u8 c = 0; c < dQe_kBagCapacity; ++c) {
+                if (s_bags[i].children[c].id != 0 &&
+                    (s_bags[i].children[c].flags & dQeFlag_ModClaim) == 0)
+                {
+                    anyBuiltin = true;
+                }
+            }
+            if (!anyBuiltin) {
+                dQe_clearBag(s_bags[i].bagId);
+            }
+        }
+    }
+
+    // Boundary translation of the fork's enumeration (d_ext_mod_flags.cpp:938-948);
+    // everything above and below this block is verbatim.
+    const std::filesystem::path root = claimsConfigRoot();
+    if (!root.empty()) {
+        scanClaimsDir(root / "model_replacements", "folder");
+        scanClaimsDir(root / "mods", "mod dir");
+        std::error_code ec;
+        const std::filesystem::path cache = root / "mods" / ".cache";
+        if (std::filesystem::is_directory(cache, ec)) {
+            for (const auto& modEntry : std::filesystem::directory_iterator(cache, ec)) {
+                if (modEntry.is_directory(ec)) {
+                    scanClaimsDir(modEntry.path(), "installed mod");
+                }
+            }
+        }
+    }
+
+    // Empty-shell chrome when no mod rows claimed Quest/Atlas/Tools yet.
+    if (dExtStatus_countTab(dExtStatusTab_Tools) == 0 &&
+        dExtStatus_countTab(dExtStatusTab_Quest) == 0 &&
+        dExtStatus_countTab(dExtStatusTab_Atlas) == 0)
+    {
+        dExtStatus_seedDebug();
+    }
+}
+
+// ============================================
+// NEW CODE ENDS HERE (claims.ini zero-code path)
+// ============================================
+
+// ---------------------------------------------------------------------------
+// Third-party claims - path 2 of 2, the published service (path 1, the fork's
+// claims.ini scan, is ported directly above this section).
 //
 // The registry is therefore published as a service. Another mod calls
 // get_service("albt.quick_equip", ...) and claims sockets through these same
