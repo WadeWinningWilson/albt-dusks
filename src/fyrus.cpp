@@ -283,25 +283,10 @@ HookAction on_execute_pre(ModContext*, void* args, void*, void*) {
     }
 
     dAlbwBoss_fyrusUpdateGolemWindow(fm);
-
-    if (!fm->mCoreSph.ChkTgHit()) {
-        return HOOK_CONTINUE;
-    }
-    fm->mAtInfo.mpCollider = fm->mCoreSph.GetTgHitObj();
-
-    if (dAlbwBoss_fyrusAblazePhase() && dAlbwBoss_fyrusAblazeVulnOpen()) {
-        cc_at_check(fm, &fm->mAtInfo);
-        dAlbwBoss_fyrusOnAblazeVulnDamaged();
-        dAlbwBoss_fyrusSyncFireVulnState(fm);
-    } else if (dAlbwBoss_fyrusShouldChipAblazeDamage()) {
-        const int hpBefore = fm->health;
-        cc_at_check(fm, &fm->mAtInfo);
-        dAlbwBoss_fyrusApplyChipDamage(fm, hpBefore);
-    } else {
-        return HOOK_CONTINUE;  // no refinement claim on this hit - leave it to vanilla
-    }
-
-    fm->mCoreSph.ClrTgHit();
+    // Core-hit claims moved WHOLE to fyrus_phases.cpp's pre-hook on this same
+    // seam: the fork's damage_check tail also enters the ablaze STUN and the
+    // hollow DAMAGE_RUN, which the claim here lacked - two partial claimants
+    // on one hit would shadow each other.
     return HOOK_CONTINUE;
 }
 
