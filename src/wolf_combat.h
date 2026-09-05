@@ -20,6 +20,25 @@ void albw_wolf_spend_charge(u8 amount);
 
 ModResult albw_wolf_charge_art_init(ModError* error);
 
+// wolf_howl_combat.cpp
+ModResult albw_wolf_howl_combat_init(ModError* error);
+void albw_wolf_howl_arm_combat_request();
+bool albw_wolf_combat_howl_active();
+
+// hair-reach visual bridge (defined in wolf_combat.cpp; consumed by the arm
+// actor and the setNeckAngle hook - fork d_albw_wolf_stun.h:123)
+class cXyz;
+void dAlbwMidnaArm_setReachPos(const cXyz& i_pos, bool i_striking);
+void dAlbwMidnaArm_clearReachPos();
+bool dAlbwMidnaArm_getReachPos(cXyz* o_pos);
+bool dAlbwMidnaArm_isReachStriking();
+
+// midna_arm.cpp
+class daAlink_c;
+ModResult albw_midna_arm_init(ModError* error);
+bool albw_midna_arm_is_alive();
+bool albw_midna_arm_spawn(daAlink_c* link);
+
 bool dAlbwWolfArts_isHowlUnlocked();
 bool dAlbwWolfArts_isArmUnlocked();
 

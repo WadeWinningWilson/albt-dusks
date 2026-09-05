@@ -35,6 +35,8 @@ add_mod(albt_full_plugin
             src/enemy_rupees.cpp
             src/wolf_combat.cpp
             src/wolf_charge_art.cpp
+            src/wolf_howl_combat.cpp
+            src/midna_arm.cpp
             src/wolf_charge_hud.cpp
             src/hold_a_crawl.cpp
             src/quick_swap.cpp

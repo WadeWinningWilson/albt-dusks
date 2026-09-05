@@ -1330,10 +1330,28 @@ void on_cc_at_check_post(ModContext*, void* args, void*, void*) {
         return;
     }
 
+    // fork d_cc_uty.cpp:732-741 - special D-pad ARTS never build charges: the
+    // combat-howl AOE rides Link's own collider (AT_TYPE_WOLF_CUT_TURN, owner
+    // ALINK) so it would otherwise pass this guard; exclude it via the
+    // combat-howl flag (Link can't bite mid-howl, so the flag exactly
+    // identifies howl-AOE hits). The Midna-arm art is a separate non-ALINK
+    // actor and is excluded automatically (mHitType stays generic).
     if (info->mHitType == HIT_TYPE_LINK_NORMAL_ATTACK &&
-        !info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) && info->mAttackPower > 0)
+        !info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) &&
+        !albw_wolf_combat_howl_active() && info->mAttackPower > 0)
     {
         dAlbwWolfCombat_onBiteConnect();
+    }
+
+    // fork d_cc_uty.cpp:505-515 - fixed hit powers for the two arts
+    // (user-tuned 2026-07-15: 100 each).
+    if (info->mpActor != NULL && fopAcM_GetName(info->mpActor) == 0x31A /* ALBW_MIDNA_ARM */) {
+        info->mAttackPower = 100;
+    } else if (info->mHitType == HIT_TYPE_LINK_NORMAL_ATTACK &&
+               info->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN) &&
+               albw_wolf_combat_howl_active())
+    {
+        info->mAttackPower = 100;
     }
 
     if (info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) && info->mAttackPower > 0 &&
