@@ -98,7 +98,17 @@ int procWolfHowlCombat(daAlink_c* link) {
         s_howlElapsed++;
     }
 
-    const bool songPlaying = Z2GetSeqMgr()->isItemGetDemo();
+    // Z2GetSeqMgr() reads JASGlobalInstance<Z2SeqMgr>::sInstance - a TEMPLATE
+    // STATIC, so this TU gets its own zero copy and the call returns NULL (the
+    // playtest crash, fault addr 0x18 = isItemGetDemo's member read). The
+    // game's live instance is reachable through the exported Z2AudioMgr
+    // pointer: Z2AudioMgr INHERITS Z2SeqMgr, and mAudioMgrPtr is
+    // DUSK_GAME_DATA - the same route every working audio call here uses.
+    Z2SeqMgr* seqMgr = static_cast<Z2SeqMgr*>(Z2GetAudioMgr());
+    if (seqMgr == nullptr) {
+        return 1;  // audio not up; hold the pose one frame
+    }
+    const bool songPlaying = seqMgr->isItemGetDemo();
     const bool songEnded   = s_howlElapsed > 15 && !songPlaying;
     const bool hardCap     = s_howlElapsed > 1800;  // 60 s failsafe (30 Hz sim tick)
 
@@ -106,7 +116,7 @@ int procWolfHowlCombat(daAlink_c* link) {
         if (s_howlFramesLeft > 0) {
             s_howlFramesLeft--;  // 1 s buffer after the song, for a clean return to gameplay
         } else {
-            Z2GetSeqMgr()->stopWolfHowlSong();  // safety (already ended); field BGM fades back
+            seqMgr->stopWolfHowlSong();  // safety (already ended); field BGM fades back
             link->setSingleAnimeWolfBase(daAlink_c::WANM_HOWL_END);
             s_howlEnding = true;
         }

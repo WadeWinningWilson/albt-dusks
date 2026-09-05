@@ -159,6 +159,10 @@ dCcS* dComIfG_Ccsp() {
 dVibration_c& dComIfGp_getVibration() {
     return g_dComIfG_gameInfo.play.getVibration();
 }
+// stock d_com_inf_game.h:2366
+BOOL dComIfGs_isTransformLV(int i_no) {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusB().isTransformLV(i_no);
+}
 
 #endif  // TARGET_PC
 

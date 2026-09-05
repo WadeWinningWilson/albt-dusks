@@ -50,6 +50,7 @@
 #include "boss_refinement.h"
 #include "fyrus.h"
 #include "shield.h"
+#include "albw_dusk_log.h"
 #include "mods/hook.hpp"
 
 #if TARGET_PC
@@ -267,6 +268,25 @@ void e_fm_albwAblazeVulnStun(e_fm_class* i_this) {
 
 s16 s_prev790 = 0;  // for the effect_set FX re-speed (tickCrossed to 2)
 
+// ============================================
+// PROBE (multi-hypothesis, strip after the no-attack report is rooted): one
+// line per CHANGE of (action,mode) plus gate verdicts, so a session shows the
+// exact state machine Fyrus actually walked.
+// ============================================
+s16 s_probeAction = -99;
+s16 s_probeMode   = -99;
+void probeState(e_fm_class* fm, const char* where) {
+    if (fm->mAction == s_probeAction && fm->mMode == s_probeMode) {
+        return;
+    }
+    s_probeAction = fm->mAction;
+    s_probeMode   = fm->mMode;
+    DuskLog.info("[fyrus] {} action={} mode={} hp={} ablaze={} vulnOpen={} hollow={} texAnm={}",
+                 where, (int)fm->mAction, (int)fm->mMode, (int)fm->health,
+                 dAlbwBoss_fyrusAblazePhase(), dAlbwBoss_fyrusAblazeVulnOpen(),
+                 dAlbwBoss_fyrusHollowPhase(), (int)fm->mPlayTexAnmNo);
+}
+
 // fork action() pre-dispatch block (:3190-3207) + damage_check tail (:2661) -
 // runs BEFORE vanilla Execute -> action() -> damage_check(), same order as
 // the fork (its block sits at action() entry, before the switch).
@@ -309,6 +329,7 @@ HookAction on_fm_execute_phases_pre(ModContext*, void* args, void*, void*) {
     } else if (fm->mAction == kActionAblazeStun) {
         e_fm_albwAblazeVulnStun(fm);
     }
+    probeState(fm, "exec");
 
     // fork damage_check:2720-2752 - the refinement core-hit tail beyond the
     // claims fyrus.cpp already makes (which handle ablaze-vuln damage + chip
@@ -425,12 +446,20 @@ HookAction on_fm_f_fight_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
     if (!e_fm_albwTexReadyForFireStart(fm)) {
-        // fork gate says wait; vanilla's own gate can only be stricter (it
-        // reads the FM tex), so let vanilla run its non-arming body.
+        // PROBE: once per second while stuck at this gate - the "won't attack"
+        // hypothesis that phase 1's FM tex frame never reads 0.
+        static u16 sGateStuck = 0;
+        if ((++sGateStuck % 30) == 1) {
+            DuskLog.info("[fyrus] f_fight gate WAIT: texAnm={} fmBtkFrame={} powFrame={} hollow={}",
+                         (int)fm->mPlayTexAnmNo, (int)fm->mpFmBtk[kTexFm]->getFrame(),
+                         (int)fm->mpFmBtk[kTexPutOutWait]->getFrame(),
+                         dAlbwBoss_fyrusStayHollow());
+        }
         return HOOK_CONTINUE;
     }
-    // fork f_fight mode-0 arm, verbatim (:1280-1293).
-    fm->field_0x7c0 = 1;
+    DuskLog.info("[fyrus] f_fight ARM (blast) spd={}", attackAnimSpeed());
+    // fork f_fight mode-0 arm, verbatim (:1280-1293; unlike n_fight/fire the
+    // stock fn body does NOT set field_0x7c0).
     const f32 atk_spd = attackAnimSpeed();
     fm_anm_init(fm, kBckAttack, 10.0f, 0, atk_spd);
     fm->mpFmBrk[kTexAttack]->setPlaySpeed(atk_spd);
@@ -470,8 +499,14 @@ HookAction on_fm_fire_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
     if (!e_fm_albwTexReadyForFireStart(fm)) {
+        static u16 sFireStuck = 0;
+        if ((++sFireStuck % 30) == 1) {
+            DuskLog.info("[fyrus] fire gate WAIT: texAnm={} fmBtkFrame={}",
+                         (int)fm->mPlayTexAnmNo, (int)fm->mpFmBtk[kTexFm]->getFrame());
+        }
         return HOOK_CONTINUE;
     }
+    DuskLog.info("[fyrus] fire ARM (breath) spd={}", breathAnimSpeed());
     // fork fire mode-0 arm, verbatim (:1391-1400).
     fm->field_0x7c0 = 1;
     fm->field_0x1830 = 0.0f;

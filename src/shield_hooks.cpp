@@ -14,6 +14,7 @@
 #undef private
 
 #include "albw_common.h"
+#include "albw_dusk_log.h"
 #include "lockout.h"
 #include "meter_bridge.h"
 #include "d/d_meter2.h"
@@ -56,8 +57,11 @@ HookAction on_set_shield_change_pre(ModContext*, void* args, void*, void*) {
     }
     // Restarting mid-reload leaves mShieldModel NULL forever (invisible + can't cycle).
     if (link->mShieldChangeWaitTimer != 0) {
+        DuskLog.info("[shield] setShieldChange refused (timer={})",
+                     (int)link->mShieldChangeWaitTimer);
         return HOOK_SKIP_ORIGINAL;
     }
+    DuskLog.info("[shield] change begins: equip={}", (int)albw_shield_game::get_select_equip_shield());
     link->offNoResetFlg2(daPy_py_c::FLG2_UNK_8000000);
     link->mShieldChangeWaitTimer = 4;
     return HOOK_SKIP_ORIGINAL;
@@ -117,10 +121,23 @@ HookAction on_load_shield_model_dvd_pre(ModContext*, void* args, void* retval, v
             if (phase_state == cPhs_COMPLEATE_e) {
                 link->mShieldChangeWaitTimer = 0;
                 link->setShieldModel();
+                // PROBE: report EVERY completed reload, not only failures - an
+                // "invisible but silent" session must show whether the model
+                // pointer was ever non-null here.
+                DuskLog.info("[shield] reload done: arc={} model={}",
+                             link->mShieldArcName != NULL ? link->mShieldArcName : "(null)",
+                             (const void*)link->mShieldModel);
                 if (link->mShieldModel == NULL && svc_log != nullptr) {
                     svc_log->error(mod_ctx, "loadShieldModelDVD: missing shield model after load");
                 }
             } else {
+                // PROBE: once per second while the phase never completes.
+                static u16 sStall = 0;
+                if ((++sStall % 30) == 1) {
+                    DuskLog.info("[shield] reload stalled: arc={} phase={}",
+                                 link->mShieldArcName != NULL ? link->mShieldArcName : "(null)",
+                                 phase_state);
+                }
                 link->mShieldChangeWaitTimer = 2;
             }
         }
@@ -372,6 +389,12 @@ void on_move_kantera_post(ModContext*, void* args, void*, void*) {
 }
 
 void on_meter_draw_post(ModContext*, void*, void*, void*) {
+    // fork d_meter2_draw.cpp:1193 - the whole aux-HUD block is gated on
+    // "not paused, heap-lock != 6"; without it the boss bar (and bash charges)
+    // draw over menus - the reported bar-in-menus.
+    if (dComIfGp_isPauseFlag() || g_dComIfG_gameInfo.play.isHeapLockFlag() == 6) {
+        return;
+    }
     if (albw_shield_parry_enabled()) {
         dShield_drawBashCharges();
     }

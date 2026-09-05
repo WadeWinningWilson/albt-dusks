@@ -37,6 +37,7 @@ add_mod(albt_full_plugin
             src/wolf_charge_art.cpp
             src/wolf_howl_combat.cpp
             src/midna_arm.cpp
+            src/midna_arm_visual.cpp
             src/wolf_charge_hud.cpp
             src/hold_a_crawl.cpp
             src/quick_swap.cpp

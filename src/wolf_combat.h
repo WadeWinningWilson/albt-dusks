@@ -36,6 +36,7 @@ bool dAlbwMidnaArm_isReachStriking();
 // midna_arm.cpp
 class daAlink_c;
 ModResult albw_midna_arm_init(ModError* error);
+ModResult albw_midna_arm_visual_init(ModError* error);
 bool albw_midna_arm_is_alive();
 bool albw_midna_arm_spawn(daAlink_c* link);
 

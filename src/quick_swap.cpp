@@ -17,6 +17,7 @@
 #include "Z2AudioLib/Z2SeMgr.h"
 
 #include "albw_game.h"
+#include "albw_dusk_log.h"
 #include "wardrobe.h"
 #include "albw_common.h"
 #include "config_vars.h"
@@ -202,6 +203,8 @@ void cycle_next_sword() {
 
 void cycle_next_shield() {
     if (!can_use_quick_swap()) {
+        DuskLog.info("[shield] cycle refused: quick-swap gate (heapLock={})",
+                     (int)g_dComIfG_gameInfo.play.isHeapLockFlag());
         return;
     }
 
@@ -211,6 +214,8 @@ void cycle_next_shield() {
     }
 
     if (player->getShieldChangeWaitTimer() != 0) {
+        DuskLog.info("[shield] cycle refused: reload in flight (timer={})",
+                     (int)player->getShieldChangeWaitTimer());
         return;
     }
 
@@ -243,11 +248,20 @@ void cycle_next_shield() {
         }
     }
     if (next == dItemNo_NONE_e || next == current) {
+        DuskLog.info("[shield] cycle refused: no candidate (cur={} owned[cw,sw,hy]={},{},{} "
+                     "active={},{},{})",
+                     (int)current, shield_is_owned(dItemNo_WOOD_SHIELD_e),
+                     shield_is_owned(dItemNo_SHIELD_e), shield_is_owned(dItemNo_HYLIA_SHIELD_e),
+                     dAlbwWardrobe_isActiveShield(dItemNo_WOOD_SHIELD_e),
+                     dAlbwWardrobe_isActiveShield(dItemNo_SHIELD_e),
+                     dAlbwWardrobe_isActiveShield(dItemNo_HYLIA_SHIELD_e));
         return;
     }
     if (!equip_owned_shield(next)) {
+        DuskLog.info("[shield] equip refused: cur={} next={}", (int)current, (int)next);
         return;
     }
+    DuskLog.info("[shield] swap: {} -> {}", (int)current, (int)next);
 
     Z2GetAudioMgr()->seStart(Z2SE_SY_ITEM_SET_X, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
     dMeter2Info_set2DVibration();
