@@ -26,6 +26,8 @@
 #include "shield_mod.h"
 #include "boss_hp_hud.h"
 #include "parry_master.h"
+#include "sumo_test.h"
+#include "d/d_save.h"
 
 namespace {
 
@@ -42,6 +44,8 @@ DEFINE_HOOK(&daAlink_c::setShieldChange, SetShieldChange);
 DEFINE_HOOK(&daAlink_c::loadShieldModelDVD, LoadShieldModelDVD);
 DEFINE_HOOK(&daAlink_c::setShieldModel, SetShieldModel);
 DEFINE_HOOK(&daAlink_c::setShieldArcName, SetShieldArcName);
+DEFINE_HOOK(&daAlink_c::checkShieldDraw, CheckShieldDraw);
+DEFINE_HOOK(&daAlink_c::checkSwordDraw, CheckSwordDraw);
 DEFINE_HOOK(&dMeter2_c::moveKantera, MoveKantera);
 DEFINE_HOOK(&dMeter2Draw_c::draw, MeterDraw);
 
@@ -401,6 +405,50 @@ void on_meter_draw_post(ModContext*, void*, void*, void*) {
     albw_boss_hp_hud_draw();
 }
 
+// ============================================
+// NEW CODE - ALBW Port (SumoTest weapon-draw gates - fork d_a_alink.cpp)
+//
+// The mod already had the CONSUMER (dAlbwSumoTest_showWeapons, sumo_test.cpp,
+// documented in sumo_test.h as "for checkSwordDraw/checkShieldDraw") but the
+// two fork-modified draw gates were never wired - the found-by-diff gap. Stock
+// suppresses the sword/shield whenever the sumo body flag (FLG2_UNK_80000) is
+// set, so on the SumoTest outfit both weapons go INVISIBLE. The fork drops just
+// the sumo bit from the suppression mask when dAlbwSumoTest_showWeapons(), and
+// checkShieldDraw also gains an mShieldModel != NULL guard. Bodies verbatim.
+// ============================================
+HookAction on_check_shield_draw_pre(ModContext*, void* args, void* retval, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr || retval == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    daPy_py_c::daPy_FLG2 drawSuppress = daPy_py_c::FLG2_UNK_4080000;
+    if (dAlbwSumoTest_showWeapons()) {
+        drawSuppress = daPy_py_c::FLG2_UNK_4000000;
+    }
+    const bool v = link->mShieldModel != NULL &&
+                   ((daPy_py_c::checkShieldGet() && link->mShieldChangeWaitTimer == 0) &&
+                    !link->checkNoResetFlg2(drawSuppress)) &&
+                   (!link->checkWolf() || !dComIfGs_isEventBit(dSv_event_flag_c::M_068));
+    *static_cast<bool*>(retval) = v;
+    return HOOK_SKIP_ORIGINAL;
+}
+
+HookAction on_check_sword_draw_pre(ModContext*, void* args, void* retval, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr || retval == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    daPy_py_c::daPy_FLG2 drawSuppress = daPy_py_c::FLG2_UNK_2080000;
+    if (dAlbwSumoTest_showWeapons()) {
+        drawSuppress = daPy_py_c::FLG2_UNK_2000000;
+    }
+    const bool v = ((daPy_py_c::checkSwordGet() && link->mSwordChangeWaitTimer == 0) &&
+                    !link->checkNoResetFlg2(drawSuppress)) &&
+                   (!link->checkWolf() || !dComIfGs_isEventBit(dSv_event_flag_c::M_068));
+    *static_cast<bool*>(retval) = v;
+    return HOOK_SKIP_ORIGINAL;
+}
+
 bool install(ModError* error, const char* name, ModResult r) {
     if (r != MOD_OK) {
         svc_log->error(mod_ctx, name);
@@ -457,6 +505,10 @@ ModResult albw_shield_init(ModError* error) {
                  mods::hook_add_pre<SetShieldModel>(svc_hook, on_set_shield_model_pre)) ||
         !install(error, "MoveKanteraShield",
                  mods::hook_add_post<MoveKantera>(svc_hook, on_move_kantera_post)) ||
+        !install(error, "CheckShieldDrawSumo",
+                 mods::hook_add_pre<CheckShieldDraw>(svc_hook, on_check_shield_draw_pre)) ||
+        !install(error, "CheckSwordDrawSumo",
+                 mods::hook_add_pre<CheckSwordDraw>(svc_hook, on_check_sword_draw_pre)) ||
         !install(error, "MeterDrawShield",
                  mods::hook_add_post<MeterDraw>(svc_hook, on_meter_draw_post)))
     {
