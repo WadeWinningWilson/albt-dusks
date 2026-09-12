@@ -164,6 +164,7 @@ DEFINE_HOOK(&daAlink_c::procCutTurnInit, CutTurnInit);
 DEFINE_HOOK(&daAlink_c::procCutTurnChargeInit, CutTurnChargeInit);
 DEFINE_HOOK(&daAlink_c::procCutHeadInit, CutHeadInit);
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpChargeInit, CutLargeJumpChargeInit);
+DEFINE_HOOK(&daAlink_c::procCutLargeJumpInit, CutLargeJumpInit);
 DEFINE_HOOK(&daAlink_c::procHorseCutInit, HorseCutInit);
 DEFINE_HOOK(&daAlink_c::procHorseCutTurnInit, HorseCutTurnInit);
 DEFINE_HOOK(&daAlink_c::procPickPut, PickPut);
@@ -814,6 +815,11 @@ HookAction gate_cut_finish_pre(ModContext*, void* args, void* retval, void*) {
             }
             signal_drain(g_flag_hidden_skill);
             dFocusedArts_onPlayerHiddenSkillUse();
+            // Fork procCutFinishInit: fire the Mortal Draw special finisher with
+            // its real cut type (self-gates on isSpecialFinisherSpendActive).
+            dFocusedArts_onHiddenSkillProcStarted(cutType == CUT_FINISH_PARAM_MORTAL_DRAW_A
+                                                      ? daPy_py_c::CUT_TYPE_MORTAL_DRAW_A
+                                                      : daPy_py_c::CUT_TYPE_MORTAL_DRAW_B);
         }
         return HOOK_CONTINUE;
     }
@@ -834,7 +840,10 @@ HookAction gate_cut_turn_pre(ModContext*, void* args, void* retval, void*) {
         }
         signal_drain(g_flag_hidden_skill);
         dFocusedArts_onPlayerHiddenSkillUse();
-        dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_TWIRL);
+        // NOTE: Great Spin (large-turn) is NOT an onHiddenSkillProcStarted site in
+        // the fork — its finisher is the GS hurricane (tryArmGsHurricaneFinisher,
+        // Group C, deferred). Back Slice's TWIRL trigger lives in the aerial-twirl
+        // proc (procCutFinishJumpUpInit), reproduced in soft_sword_post below.
         return HOOK_CONTINUE;
     }
     return gate_sword_pre(nullptr, args, retval, nullptr);
@@ -875,6 +884,9 @@ HookAction gate_cut_head_pre(ModContext*, void* args, void* retval, void*) {
         return HOOK_SKIP_ORIGINAL;
     }
     signal_drain(g_flag_hidden_skill);
+    // Fork procCutHeadInit: fire the Helm Split special finisher (max bash
+    // charges). Self-gates on isSpecialFinisherSpendActive.
+    dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_HEAD_JUMP);
     return HOOK_CONTINUE;
 }
 
@@ -919,12 +931,30 @@ HookAction gate_sword_void_pre(ModContext*, void*, void*, void*) {
     return HOOK_CONTINUE;
 }
 
-void soft_sword_post(ModContext*, void*, void*, void*) {
+void soft_sword_post(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return;
     }
     if (can_sword_agility()) {
         signal_drain(g_flag_sword);
+    }
+    // Fork procCutFinishJumpUpInit (aerial twirl = Back Slice): fire the Back
+    // Slice special finisher with its real cut type. Self-gates on
+    // isSpecialFinisherSpendActive (drain/spend bookkeeping handled elsewhere).
+    if (dAlbw_isHiddenSkillReworkEnabled()) {
+        auto* link = mods::arg<daAlink_c*>(args, 0);
+        if (link != nullptr && link->checkCutBackState()) {
+            dFocusedArts_onPlayerHiddenSkillUse();
+            dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_TWIRL);
+        }
+    }
+}
+
+// Fork procCutLargeJumpInit (Jump Strike): fire the Jump Strike special finisher
+// (JS lockout + item +300%). Self-gates on isSpecialFinisherSpendActive.
+void on_cut_large_jump_post(ModContext*, void*, void*, void*) {
+    if (dAlbw_isHiddenSkillReworkEnabled()) {
+        dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_LARGE_JUMP_INIT);
     }
 }
 
@@ -1483,6 +1513,8 @@ ModResult albw_meter_init(ModError* error) {
         !install(error, "CutLargeJumpChargeInit",
                  mods::hook_add_pre<CutLargeJumpChargeInit>(svc_hook,
                                                              gate_cut_large_jump_charge_pre)) ||
+        !install(error, "CutLargeJumpInit",
+                 mods::hook_add_post<CutLargeJumpInit>(svc_hook, on_cut_large_jump_post)) ||
         !install(error, "HorseCutInit",
                  mods::hook_add_pre<HorseCutInit>(svc_hook, gate_sword_pre)) ||
         !install(error, "HorseCutTurnInit",
