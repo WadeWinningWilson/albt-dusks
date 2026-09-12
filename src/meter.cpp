@@ -33,6 +33,7 @@
 #include "shield_adapt.h"
 #include "focused_arts.h"
 #include "flurry_rush.h"
+#include "hidden_skill_charge.h"
 #include "mods/hook.hpp"
 
 #include "d/d_item_data.h"
@@ -165,6 +166,7 @@ DEFINE_HOOK(&daAlink_c::procCutTurnChargeInit, CutTurnChargeInit);
 DEFINE_HOOK(&daAlink_c::procCutHeadInit, CutHeadInit);
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpChargeInit, CutLargeJumpChargeInit);
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpInit, CutLargeJumpInit);
+DEFINE_HOOK(&daAlink_c::procCutLargeJumpCharge, CutLargeJumpCharge);
 DEFINE_HOOK(&daAlink_c::procHorseCutInit, HorseCutInit);
 DEFINE_HOOK(&daAlink_c::procHorseCutTurnInit, HorseCutTurnInit);
 DEFINE_HOOK(&daAlink_c::procPickPut, PickPut);
@@ -950,12 +952,48 @@ void soft_sword_post(ModContext*, void* args, void*, void*) {
     }
 }
 
-// Fork procCutLargeJumpInit (Jump Strike): fire the Jump Strike special finisher
-// (JS lockout + item +300%). Self-gates on isSpecialFinisherSpendActive.
-void on_cut_large_jump_post(ModContext*, void*, void*, void*) {
-    if (dAlbw_isHiddenSkillReworkEnabled()) {
-        dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_LARGE_JUMP_INIT);
+// Fork procCutLargeJumpCharge: once the charge animation completes, mark the
+// Jump Strike charge "ready" so the release is allowed to become a Jump Strike.
+void on_cut_large_jump_charge_post(ModContext*, void* args, void*, void*) {
+    if (!dAlbw_isHiddenSkillReworkEnabled()) {
+        return;
     }
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link != nullptr && link->checkAnmEnd(&link->mUnderFrameCtrl[0])) {
+        dAlbw_setJumpStrikeChargeReady();
+    }
+}
+
+// Fork procCutLargeJumpInit (Jump Strike): the charge gate + the special-finisher
+// trigger, reproduced at the top of the proc. Deny an under-charged release
+// (consume the ready flag; if absent, cancel and skip the proc). On the allowed
+// path, fire the FA hooks (onPlayerHiddenSkillUse + the Jump Strike finisher,
+// both self-gating). Matches the fork's procCutLargeJumpInit head.
+HookAction gate_cut_large_jump_init_pre(ModContext*, void* args, void* retval, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    if (dAlbw_isHiddenSkillReworkEnabled() &&
+        link->mDemo.getDemoMode() != daPy_demo_c::DEMO_CUT_LARGE_JUMP_e)
+    {
+        if (!dAlbw_tryConsumeJumpStrikeChargeReady()) {
+            if (link->mProcID == daAlink_c::PROC_CUT_LARGE_JUMP_CHARGE ||
+                link->mProcID == daAlink_c::PROC_CUT_TURN_MOVE)
+            {
+                link->cancelCutCharge();
+            }
+            if (retval != nullptr) {
+                *static_cast<int*>(retval) = 0;
+            }
+            return HOOK_SKIP_ORIGINAL;
+        }
+    }
+    // Allowed path (rework charge consumed, or rework off): the fork body calls
+    // these before commonProcInit; they self-gate on FA enable / spend state.
+    dFocusedArts_onPlayerHiddenSkillUse();
+    dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_LARGE_JUMP_INIT);
+    return HOOK_CONTINUE;
 }
 
 HookAction on_side_step_pre(ModContext*, void* args, void* retval, void*) {
@@ -1514,7 +1552,9 @@ ModResult albw_meter_init(ModError* error) {
                  mods::hook_add_pre<CutLargeJumpChargeInit>(svc_hook,
                                                              gate_cut_large_jump_charge_pre)) ||
         !install(error, "CutLargeJumpInit",
-                 mods::hook_add_post<CutLargeJumpInit>(svc_hook, on_cut_large_jump_post)) ||
+                 mods::hook_add_pre<CutLargeJumpInit>(svc_hook, gate_cut_large_jump_init_pre)) ||
+        !install(error, "CutLargeJumpCharge",
+                 mods::hook_add_post<CutLargeJumpCharge>(svc_hook, on_cut_large_jump_charge_post)) ||
         !install(error, "HorseCutInit",
                  mods::hook_add_pre<HorseCutInit>(svc_hook, gate_sword_pre)) ||
         !install(error, "HorseCutTurnInit",

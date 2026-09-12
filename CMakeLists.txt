@@ -69,6 +69,7 @@ add_mod(albt_full_plugin
             src/fyrus_golem.cpp
             src/armogohma.cpp
             src/epona_spur_hud.cpp
+            src/hidden_skill_charge.cpp
             src/fyrus_phases.cpp
             src/boss_refinement_hooks.cpp
             src/rental_eligibility.cpp
