@@ -129,5 +129,18 @@ jobs:
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          GH_TOKEN: ${{github.token}}
-        run: gh release create "$GITHUB_REF_NAME" combined/*.dusk --verify-tag --generate-notes
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          FALLBACK_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$RELEASE_TOKEN" ]; then
+            # One-stop shop: publish the .dusk to the "A Link Between Twilight"
+            # repo's Releases so it sits alongside the fork's own downloads.
+            # (RELEASE_TOKEN = a PAT with Contents:write on that repo.)
+            GH_TOKEN="$RELEASE_TOKEN" gh release create "$GITHUB_REF_NAME" combined/*.dusk \
+              --repo WadeWinningWilson/A-Link-Between-Twilight \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          else
+            # Fallback when no cross-repo token is configured: publish here.
+            GH_TOKEN="$FALLBACK_TOKEN" gh release create "$GITHUB_REF_NAME" combined/*.dusk \
+              --verify-tag --generate-notes
+          fi
