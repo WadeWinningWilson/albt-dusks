@@ -379,11 +379,30 @@ HookAction on_proc_guard_break_init_pre(ModContext*, void* args, void* retval, v
 }
 
 void on_link_execute_post(ModContext*, void* args, void*, void*) {
-    if (!albw_shield_parry_enabled()) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) {
         return;
     }
-    auto* link = mods::arg<daAlink_c*>(args, 0);
-    if (link != nullptr) {
+    // ============================================
+    // NEW CODE — ALBW Port (shield reload driver)
+    // Fork daAlink_c::execute (d_a_alink.cpp:19757) added, per frame:
+    //     if (loadModelDVD() && !checkNoResetFlg2(FLG2_STATUS_WINDOW_DRAW))
+    //         loadShieldModelDVD();
+    // Stock only calls loadShieldModelDVD from the pause display and actor
+    // delete, so on the mod's stock base a quick-swap's reload never advances
+    // during gameplay: mShieldChangeWaitTimer sticks non-zero -> checkShieldDraw
+    // hides the shield (invisible) AND cycle_next_shield refuses ("reload in
+    // flight") until the menu (whose display path drives the reload). This
+    // reproduces the driver. loadShieldModelDVD self-gates on the shield timer
+    // (no-op when 0). loadModelDVD() (clothes) is already called by stock
+    // execute, so gate on getClothesChangeWaitTimer()==0 (its return) rather
+    // than re-calling it and double-decrementing the clothes timer.
+    // ============================================
+    if (link->getClothesChangeWaitTimer() == 0 &&
+        !link->checkNoResetFlg2(daPy_py_c::FLG2_STATUS_WINDOW_DRAW)) {
+        link->loadShieldModelDVD();
+    }
+    if (albw_shield_parry_enabled()) {
         dShield_pollGuardAttackHit(link);
     }
 }
