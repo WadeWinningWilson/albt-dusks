@@ -156,6 +156,16 @@ void* dComIfG_getObjectRes(const char* i_arcName, const char* i_resName) {
 dCcS* dComIfG_Ccsp() {
     return &g_dComIfG_gameInfo.play.mCcs;
 }
+// stock d_com_inf_game.h:5299
+dBgS& dComIfG_Bgsp() {
+    return g_dComIfG_gameInfo.play.mBgs;
+}
+// stock d_com_inf_game.h — the 4-arg particle_set overload (id,pos,rot,scale).
+JPABaseEmitter* dComIfGp_particle_set(u16 i_resID, const cXyz* i_pos, const csXyz* i_rotation,
+                                      const cXyz* i_scale) {
+    return g_dComIfG_gameInfo.play.getParticle()->setNormal(
+        i_resID, i_pos, NULL, i_rotation, i_scale, 0xFF, NULL, -1, NULL, NULL, NULL, 1.0f);
+}
 dVibration_c& dComIfGp_getVibration() {
     return g_dComIfG_gameInfo.play.getVibration();
 }

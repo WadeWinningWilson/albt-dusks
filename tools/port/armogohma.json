@@ -1,0 +1,49 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_b_gm.cpp",
+  "stock": "../dusklight-main/src/d/actor/d_a_b_gm.cpp",
+  "out": "build/port/armo_modified.inc",
+  "port_funcs": [
+    "useHeapInit",
+    "damage_check",
+    "daB_GM_Create",
+    "daB_GM_Delete",
+    "daB_GM_Execute",
+    "daB_GM_Draw",
+    "demo_camera",
+    "nodeCallBack",
+    "b_gm_move",
+    "action"
+  ],
+  "diag_zero": [
+    "D_ALBW_ARMO_DEATH_DIAG",
+    "D_ALBW_ARMO_P3_HP_DIAG",
+    "D_ALBW_ARMO_PURSUIT_TEST",
+    "D_ALBW_ARMO_P3_DIAG_NOSWAP",
+    "D_ALBW_ARMO_REVEAL"
+  ],
+  "renames": {
+    "static void anm_init(b_gm_class": "static void armo_anm_init(b_gm_class",
+    "anm_init(i_this": "armo_anm_init(i_this",
+    "anm_init(a_this": "armo_anm_init(a_this"
+  },
+  "substitutions": [
+    [
+      "dusk::custom_assets::try_load_uncached(\"B_gm\", 0x25)",
+      "albw_armo_load_reveal()"
+    ]
+  ],
+  "engine_symbols": [
+    "b_gm_class",
+    "fopAc_ac_c",
+    "J3DModel",
+    "J3DModelData",
+    "J3DAnmTransform",
+    "J3DAnmTextureSRTKey",
+    "mDoExt_McaMorfSO",
+    "mDoExt_McaMorf",
+    "mDoExt_btkAnm",
+    "cXyz",
+    "csXyz",
+    "FILE"
+  ]
+}

@@ -62,6 +62,7 @@ add_mod(albt_full_plugin
             src/diababa.cpp
             src/fyrus.cpp
             src/fyrus_golem.cpp
+            src/armogohma.cpp
             src/fyrus_phases.cpp
             src/boss_refinement_hooks.cpp
             src/rental_eligibility.cpp
