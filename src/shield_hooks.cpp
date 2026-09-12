@@ -425,10 +425,25 @@ HookAction on_check_shield_draw_pre(ModContext*, void* args, void* retval, void*
     if (dAlbwSumoTest_showWeapons()) {
         drawSuppress = daPy_py_c::FLG2_UNK_4000000;
     }
-    const bool v = link->mShieldModel != NULL &&
-                   ((daPy_py_c::checkShieldGet() && link->mShieldChangeWaitTimer == 0) &&
-                    !link->checkNoResetFlg2(drawSuppress)) &&
-                   (!link->checkWolf() || !dComIfGs_isEventBit(dSv_event_flag_c::M_068));
+    const bool modelOk = link->mShieldModel != NULL;
+    const bool gotOk = daPy_py_c::checkShieldGet();
+    const bool timerOk = link->mShieldChangeWaitTimer == 0;
+    const bool suppressed = link->checkNoResetFlg2(drawSuppress);
+    const bool wolfOk = !link->checkWolf() || !dComIfGs_isEventBit(dSv_event_flag_c::M_068);
+    const bool v = modelOk && gotOk && timerOk && !suppressed && wolfOk;
+    // PROBE (temporary): when the shield would be hidden, log WHICH condition
+    // failed — quick-swap leaves it invisible while the menu-equip does not, and
+    // every static path matches the fork, so this pins the actual failing gate.
+    if (!v) {
+        static u16 sDrawProbe = 0;
+        if ((++sDrawProbe % 20) == 1) {
+            DuskLog.info("[shield] draw hidden: model={} got={} timer={} suppressed={} "
+                         "flg2=0x{:x} equip={}",
+                         (int)modelOk, (int)gotOk, (int)link->mShieldChangeWaitTimer,
+                         (int)suppressed, (unsigned)link->mNoResetFlg2,
+                         (int)albw_shield_game::get_select_equip_shield());
+        }
+    }
     *static_cast<bool*>(retval) = v;
     return HOOK_SKIP_ORIGINAL;
 }
