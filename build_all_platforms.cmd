@@ -15,11 +15,12 @@ REM ============================================
 set ROOT=%~dp0
 set CMAKE="C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 set NINJA="C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
-set ZIG=%ROOT%..\tools\tools\zig\zig.exe
+if not defined ZIG set ZIG=zig
 set SYMGEN=%ROOT%tools\bin\symgen.exe
 
-if not exist "%ZIG%" (
-  echo Zig is missing. Expected %ZIG%
+"%ZIG%" version >nul 2>&1
+if errorlevel 1 (
+  echo Zig is missing. Install Zig on PATH or set ZIG=path\to\zig.exe
   exit /b 1
 )
 if not exist "%SYMGEN%" (

@@ -1,9 +1,14 @@
 cmake_minimum_required(VERSION 3.26)
 project(albw CXX)
 
-# Prefer an existing main checkout (dusklight-main). Never point at the ALBT fork.
-if (NOT DUSKLIGHT_DIR AND EXISTS "../dusklight-main/sdk")
-    set(DUSKLIGHT_DIR "../dusklight-main" CACHE PATH "Path to stock Dusklight (main)")
+# Locate a stock dusklight-main checkout (never the ALBT fork). Pass
+# -DDUSKLIGHT_DIR=... or set the DUSKLIGHT_DIR env var; otherwise a sibling
+# ../dusklight-main next to this repo is used if present.
+if (NOT DUSKLIGHT_DIR AND DEFINED ENV{DUSKLIGHT_DIR})
+    set(DUSKLIGHT_DIR "$ENV{DUSKLIGHT_DIR}" CACHE PATH "Path to stock Dusklight (main)")
+endif ()
+if (NOT DUSKLIGHT_DIR AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../dusklight-main/sdk")
+    set(DUSKLIGHT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../dusklight-main" CACHE PATH "Path to stock Dusklight (main)")
 endif ()
 
 if (NOT DUSKLIGHT_VERSION)

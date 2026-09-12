@@ -30,7 +30,7 @@ Install the **same** `albt_full_plugin.dusk` on Windows and Linux. Open `PLATFOR
 | Shape | Id | When to use |
 |-------|-----|-------------|
 | **Collective** | `dev.albt.albw` | One file: meter (P3 partial) + stick-cycle + region HP/damage + Soul of Light (owns wallet half) + enemy death rupees |
-| **Standalone features** | `dev.albt.stick_cycle_lockon`, `dev.albt.region_hp`, `dev.albt.soul_of_light`, `dev.albt.enemy_death_rupees` | Mix-and-match; Lazy Tweaks partner builds live under `tools/mods/` |
+| **Standalone features** | `dev.albt.stick_cycle_lockon`, `dev.albt.region_hp`, `dev.albt.soul_of_light`, `dev.albt.enemy_death_rupees` | Mix-and-match; also offered as standalone **Lazy Tweaks** partner builds |
 
 Do **not** load the collective bundle alongside standalones that duplicate the same hooks (e.g. collective + `dev.albt.region_hp`).
 
@@ -50,7 +50,9 @@ Output: `build/mods/albt_full_plugin.dusk`
 build-linux.cmd
 ```
 
-Requires Zig at `tools/tools/zig/zig.exe`.
+Requires [Zig](https://ziglang.org) on your `PATH` (or set the `ZIG` environment
+variable to the executable). Broader cross-platform build support is a work in
+progress, in collaboration with **Lazy Tweaks**.
 
 ## Combined bundle
 
