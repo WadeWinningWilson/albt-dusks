@@ -48,3 +48,4 @@ ConfigVarHandle g_lop_hud_mode = 0;
 ConfigVarHandle g_parry_icons_mode = 0;
 ConfigVarHandle g_shield_hud_visibility = 0;
 ConfigVarHandle g_epona_spur_hud = 0;
+ConfigVarHandle g_focused_arts_cheat = 0;

@@ -174,6 +174,28 @@ BOOL dComIfGs_isTransformLV(int i_no) {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusB().isTransformLV(i_no);
 }
 
+// ============================================
+// Focused Arts port dependencies. These are DUSK_NOINLINE-declared on PC (no
+// body ships), so the module's verbatim dComIfGs_* calls need out-of-line
+// definitions here. Bodies from stock d_com_inf_game.h inline #else branch.
+// ============================================
+// stock d_com_inf_game.h:2222
+u16 dComIfGs_getLife() {
+    return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getLife();
+}
+// stock d_com_inf_game.h:2226
+void dComIfGs_setLife(u16 i_life) {
+    g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().setLife(i_life);
+}
+// stock d_com_inf_game.h:2900
+void dComIfGs_setEventReg(u16 reg, u8 value) {
+    g_dComIfG_gameInfo.info.getEvent().setEventReg(reg, value);
+}
+// stock d_com_inf_game.h:2904
+u8 dComIfGs_getEventReg(u16 reg) {
+    return g_dComIfG_gameInfo.info.getEvent().getEventReg(reg);
+}
+
 #endif  // TARGET_PC
 
 // ============================================

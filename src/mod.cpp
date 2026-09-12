@@ -97,7 +97,8 @@ ModResult register_all_config(ModError* error) {
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
         albw_register_int("parry_icons_mode", 0, &g_parry_icons_mode) != MOD_OK ||
         albw_register_int("shield_hud_visibility", 0, &g_shield_hud_visibility) != MOD_OK ||
-        albw_register_bool("epona_spur_hud", true, &g_epona_spur_hud) != MOD_OK)
+        albw_register_bool("epona_spur_hud", true, &g_epona_spur_hud) != MOD_OK ||
+        albw_register_int("focused_arts_cheat", 0, &g_focused_arts_cheat) != MOD_OK)
     {
         if (error != nullptr) {
             error->code = MOD_ERROR;

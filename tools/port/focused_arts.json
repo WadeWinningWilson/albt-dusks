@@ -1,0 +1,27 @@
+{
+  "fork": "../dusklight/src/d/d_focused_arts.cpp",
+  "stock": "build/port/empty_stock.cpp",
+  "out": "build/port/fa_ported.inc",
+  "renames": {},
+  "substitutions": [
+    ["dusk::getSettings().game.focusedArtsCheat.getValue()", "albw_cfg_int(g_focused_arts_cheat, 0)"],
+    ["dusk::FocusedArtsCheatMode::WithDebugMaxBank", "4"],
+    ["dusk::FocusedArtsCheatMode::OnMaxBank", "3"],
+    ["dusk::FocusedArtsCheatMode::WithDebug", "2"],
+    ["dusk::FocusedArtsCheatMode::Off", "0"],
+    ["dusk::FocusedArtsCheatMode::On", "1"],
+    ["dusk::getSettings().game.focusedArts.getValue()", "albw_cfg_bool(g_focused_arts, false)"],
+    ["dMeter2_isALBWLocked()", "albw_meter_is_locked()"],
+    ["dMeter2_drainALBWToLockout()", "albw_meter_drain_to_lockout()"]
+  ],
+  "diag_zero": [],
+  "engine_symbols": [
+    "daPy_py_c",
+    "daAlink_c",
+    "u16",
+    "u8",
+    "s16",
+    "u32",
+    "f32"
+  ]
+}

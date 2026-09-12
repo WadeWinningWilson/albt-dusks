@@ -1,151 +1,158 @@
+// ============================================
+// NEW CODE — ALBW Port (Focused Arts — full module)
+//
+// The module body (tiers, bank/fill/spend state machine, special-finisher logic,
+// melee/item damage resolution, debug overlay) is ported VERBATIM from the fork's
+// src/d/d_focused_arts.cpp via tools/port/port_tool.py (config tools/port/
+// focused_arts.json), included below as focused_arts_core.inc. Only the host ABI
+// was substituted:
+//   dusk::getSettings().game.focusedArts      -> albw_cfg_bool(g_focused_arts, false)
+//   dusk::getSettings().game.focusedArtsCheat -> albw_cfg_int(g_focused_arts_cheat, 0)
+//   dusk::FocusedArtsCheatMode::{Off,On,WithDebug,OnMaxBank,WithDebugMaxBank} -> 0..4
+//   dMeter2_isALBWLocked()        -> albw_meter_is_locked()
+//   dMeter2_drainALBWToLockout()  -> albw_meter_drain_to_lockout()
+//
+// Consumption wiring is below the include: the fork applies the module's outputs
+// inside cc_at_check, so this reproduces that at the mod's cc_at_check seam
+// (melee resolve + EB great-spin AOE + item damage boost + sword/item fill). The
+// mod's stock cc_at_check already applies the vanilla sword multipliers, so FA
+// resolve runs POST (scaling the computed power before the enemy consumes it),
+// matching the fork order. FA melee resolve is human-form-only (!checkNowWolf),
+// so it does not collide with wolf_combat's wolf-form power overrides.
+//
+// DEFERRED (Group C — needs alink-side actor spawning; state is ported and live):
+//   the finisher *visual* launches — GS hurricane proc + Ending-Blow great-spin
+//   AOE actor spawn (fork d_a_alink_hurricane.inc / d_a_alink_cut.inc). The
+//   finisher STATE + damage all resolve; only the spawn flourish is pending.
+//   Also pending: meter.cpp passes CUT_TYPE_TWIRL to onHiddenSkillProcStarted for
+//   every large-turn skill; per-skill cutType precision (JS/MD/Helm/GS finisher
+//   effects) is a meter-lane follow-up.
+// ============================================
+
+#include "global.h"
+
 #include "focused_arts.h"
 
 #include "albw_common.h"
 #include "albw_game.h"
 #include "config_vars.h"
 #include "meter_bridge.h"
+#include "outfit_stats.h"
+#include "shield.h"
 #include "shield_adapt.h"
+#include "wolf_combat.h"
 #include "mods/hook.hpp"
+
+#include <algorithm>
+#include <cstdio>
 
 #include "d/d_cc_uty.h"
 #include "d/d_com_inf_game.h"
+#include "d/d_item_data.h"
 #include "d/d_save.h"
+#include "SSystem/SComponent/c_cc_d.h"
+#include "f_op/f_op_actor_mng.h"
 #include "d/actor/d_a_player.h"
 
 #define private public
 #include "d/actor/d_a_alink.h"
 #undef private
 
+#if TARGET_PC
+
+// Dev trace macro the fork body calls; a no-op here (the mod has no conav trace).
+#ifndef CONAV_LOG
+#define CONAV_LOG(tag, ...) ((void)0)
+#endif
+
+// port_tool drops the fork's forward declaration of this file-static; restore it
+// (logFaEvent is used by helpers defined above its own definition).
+static void logFaEvent(const char* i_msg);
+
+// The mechanically-extracted module (statics + every dFocusedArts_* function),
+// verbatim from the fork with the ABI substitutions above. File-static helpers
+// keep internal linkage; the public dFocusedArts_* keep external linkage (declared
+// in focused_arts.h) — so this sits at file scope, NOT inside an anon namespace.
+#include "focused_arts_core.inc"
+
 namespace {
 
-static int s_bankCount = 0;
-static int s_fillNumerator = 0;
-static int s_spendColumn = 0;
-static bool s_inSpendSequence = false;
-static int s_backSliceSuppressFrames = 0;
-
-static constexpr int kItemFillStep = 2;
-// Fork event reg byte 103 — purchased FA shop tiers (MQ uses 100–102).
-static constexpr u16 kShopTierReg = static_cast<u16>(103u << 8) | 0xFFu;
-static constexpr int kBackSliceSuppressFrames = 90;
-static constexpr int kFocusedArtsShopPrices[kFocusedArtsMaxTier] = {100, 250, 500};
-
-bool fa_enabled() {
-    return albw_cfg_bool(g_focused_arts, false);
-}
-
-void writeShopTierReg(u8 tiers) {
-    albw_game::set_event_reg(kShopTierReg, tiers);
-}
-
-int clampTier(int tier) {
-    if (tier < 0) {
-        return 0;
-    }
-    if (tier > kFocusedArtsMaxTier) {
-        return kFocusedArtsMaxTier;
-    }
-    return tier;
-}
-
-int readPurchasedTier() {
-    return clampTier(static_cast<int>(albw_game::get_event_reg(kShopTierReg) & 0x0F));
-}
-
-int getSwordFillStep() {
-    const u8 sword = albw_game::select_equip_sword();
-    if (sword == dItemNo_WOOD_STICK_e) {
-        return 0;
-    }
-    if (sword == dItemNo_SWORD_e) {
-        return kItemFillStep;
-    }
-    if (sword == dItemNo_MASTER_SWORD_e || sword == dItemNo_LIGHT_SWORD_e) {
-        return 1;
-    }
-    return 0;
-}
-
-void clearFillProgress() {
-    s_fillNumerator = 0;
-}
-
-void addFillSteps(int steps) {
-    if (steps <= 0 || s_inSpendSequence) {
-        return;
-    }
-
-    const int maxBank = dFocusedArts_getMaxBank();
-    if (maxBank <= 0 || s_bankCount >= maxBank) {
-        return;
-    }
-
-    s_fillNumerator += steps;
-    while (s_fillNumerator >= kFocusedArtsFillDenominator && s_bankCount < maxBank) {
-        s_fillNumerator -= kFocusedArtsFillDenominator;
-        s_bankCount++;
-    }
-}
-
-void reset_runtime_state() {
-    s_bankCount = 0;
-    s_fillNumerator = 0;
-    s_spendColumn = 0;
-    s_inSpendSequence = false;
-    s_backSliceSuppressFrames = 0;
-}
-
-void beginSpendCharge(int spendColumn) {
-    s_spendColumn = spendColumn;
-    if (s_bankCount > 0) {
-        s_bankCount--;
-    }
-    if (s_bankCount <= 0) {
-        s_inSpendSequence = false;
-    }
-}
-
-bool meter_locked() {
-    return albw_meter_is_locked();
-}
-
+// ============================================
+// Consumption wiring (reproduces the fork's cc_at_check FA hooks).
+// ============================================
 DEFINE_HOOK(cc_at_check, FaCcAtCheck);
 DEFINE_HOOK(&daAlink_c::procCutTurnChargeInit, CutTurnChargeInit);
 DEFINE_HOOK(&daAlink_c::procDamageInit, ProcDamageInit);
 
 void on_cut_turn_charge_post(ModContext*, void*, void*, void*) {
-    if (fa_enabled() && dAlbw_isHiddenSkillReworkEnabled()) {
+    if (dFocusedArts_isEnabled() && dAlbw_isHiddenSkillReworkEnabled()) {
         dFocusedArts_onHiddenSkillChargeStart();
     }
 }
 
 void on_damage_init_post(ModContext*, void*, void*, void*) {
-    if (fa_enabled()) {
+    if (dFocusedArts_isEnabled()) {
         dFocusedArts_onDamageTaken();
     }
 }
 
+// Post-hook: vanilla cc_at_check has already applied the sword multipliers, so we
+// scale the resolved power (fork order) before the enemy consumes it.
 void on_cc_at_check_post(ModContext*, void* args, void*, void*) {
-    if (!fa_enabled()) {
+    if (!dFocusedArts_isEnabled()) {
         return;
     }
 
     auto* enemy = mods::arg<fopAc_ac_c*>(args, 0);
     auto* info = mods::arg<dCcU_AtInfo*>(args, 1);
-    if (enemy == nullptr || info == nullptr || info->mpCollider == nullptr ||
-        info->mHitBit == 0 || info->mAttackPower <= 0)
-    {
+    if (enemy == nullptr || info == nullptr || info->mpCollider == nullptr) {
         return;
     }
 
+    // --- FA melee damage resolve: human-form Link normal attacks (hidden skills). ---
+    if (info->mHitType == HIT_TYPE_LINK_NORMAL_ATTACK && !daPy_py_c::checkNowWolf()) {
+        daPy_py_c* player = daPy_getPlayerActorClass();
+        if (player != nullptr) {
+            info->mAttackPower =
+                dFocusedArts_resolveMeleeDamage(info->mAttackPower, player->getCutType());
+
+            // --- Ending Blow -> Great Spin AOE: the ALINK atSph carries the AOE. ---
+            if (dFocusedArts_isEndingBlowGreatSpinAoeActive()) {
+                daAlink_c* link = static_cast<daAlink_c*>(player);
+                if (info->mpCollider == static_cast<cCcD_Obj*>(&link->mAtSph)) {
+                    info->mAttackPower =
+                        dFocusedArts_getEndingBlowGreatSpinAoePower(info->mAttackPower);
+                }
+            }
+        }
+    }
+
+    // --- item damage boost (arrow/bomb/iron ball/slingshot/spinner). Safe to call
+    //     broadly: the boost self-gates on bank/spend state. Lockout's own item
+    //     boost is applied separately by lockout.cpp. ---
+    if (info->mAttackPower > 0 &&
+        info->mpCollider->ChkAtType(AT_TYPE_ARROW | AT_TYPE_BOMB | AT_TYPE_IRON_BALL |
+                                    AT_TYPE_SLINGSHOT | AT_TYPE_SPINNER))
+    {
+        dFocusedArts_applyItemDamageBoost(info->mAttackPower);
+    }
+
+    // --- fill: sword hits fill by sword step; item hits fill by the item step. ---
     if (info->mpCollider->ChkAtType(AT_TYPE_NORMAL_SWORD | AT_TYPE_MASTER_SWORD)) {
         dFocusedArts_onConnectedSwordHit();
+    } else if (!info->mpCollider->ChkAtType(AT_TYPE_WOLF_ATTACK) &&
+               !info->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN) &&
+               !info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) &&
+               info->mpCollider->ChkAtType(AT_TYPE_ARROW | AT_TYPE_BOMB | AT_TYPE_SLINGSHOT |
+                                           AT_TYPE_IRON_BALL | AT_TYPE_40))
+    {
+        dFocusedArts_onConnectedItemHit();
     }
 }
 
 bool install(ModError* error, const char* name, ModResult r) {
     if (r != MOD_OK) {
-        svc_log->error(mod_ctx, name);
+        if (svc_log != nullptr) svc_log->error(mod_ctx, name);
         mods::set_error(error, MOD_ERROR, name);
         return false;
     }
@@ -153,225 +160,6 @@ bool install(ModError* error, const char* name, ModResult r) {
 }
 
 }  // namespace
-
-void dFocusedArts_onHiddenSkillProcStarted(int cutType) {
-    if (!fa_enabled()) {
-        return;
-    }
-    if (cutType == daPy_py_c::CUT_TYPE_TWIRL) {
-        s_backSliceSuppressFrames = kBackSliceSuppressFrames;
-    }
-}
-
-void dFocusedArts_onHiddenSkillChargeStart() {
-    if (!fa_enabled() || s_fillNumerator <= 0) {
-        return;
-    }
-    clearFillProgress();
-}
-
-void dFocusedArts_onDamageTaken() {
-    if (!fa_enabled() || s_fillNumerator <= 0) {
-        return;
-    }
-    clearFillProgress();
-}
-
-bool dFocusedArts_shouldSuppressAlbwSpend() {
-    return fa_enabled() && (s_backSliceSuppressFrames > 0 || s_inSpendSequence);
-}
-
-bool dFocusedArts_isEnabled() {
-    return fa_enabled();
-}
-
-bool dFocusedArts_shouldSuppressAlbwMeterDrain() {
-    return fa_enabled() && s_backSliceSuppressFrames > 0;
-}
-
-bool dFocusedArts_shouldSuppressHiddenSkillAlbw() {
-    if (!fa_enabled()) {
-        return false;
-    }
-    if (s_backSliceSuppressFrames > 0) {
-        return true;
-    }
-    return s_inSpendSequence;
-}
-
-int dFocusedArts_getEffectiveTier() {
-    if (!fa_enabled()) {
-        return 0;
-    }
-    const int purchased = readPurchasedTier();
-    // Mod default: at least one bank column when FA is on (shop rows are Tier B).
-    return purchased > 0 ? purchased : 1;
-}
-
-int dFocusedArts_getMaxBank() {
-    return dFocusedArts_getEffectiveTier();
-}
-
-int dFocusedArts_getBankCount() {
-    return s_bankCount;
-}
-
-void dFocusedArts_clearOneBankCharge() {
-    if (!fa_enabled() || s_bankCount <= 0) {
-        return;
-    }
-    s_bankCount--;
-}
-
-int dFocusedArts_getFillNumerator() {
-    return s_fillNumerator;
-}
-
-int dFocusedArts_getFillDenominator() {
-    return kFocusedArtsFillDenominator;
-}
-
-bool dFocusedArts_isInSpendSequence() {
-    return s_inSpendSequence;
-}
-
-bool dFocusedArts_canPerfectDodgeSpend(int spendGate, int barCost) {
-    if (barCost <= 0) {
-        return true;
-    }
-    if (!fa_enabled() || s_inSpendSequence) {
-        return false;
-    }
-    return s_bankCount >= spendGate && s_bankCount >= barCost;
-}
-
-bool dFocusedArts_onPerfectDodgeSpend(int spendGate, int barCost) {
-    if (!dFocusedArts_canPerfectDodgeSpend(spendGate, barCost)) {
-        return false;
-    }
-    s_bankCount -= barCost;
-    if (s_bankCount < 0) {
-        s_bankCount = 0;
-    }
-    clearFillProgress();
-    return true;
-}
-
-void dFocusedArts_onConnectedSwordHit() {
-    if (!fa_enabled() || s_inSpendSequence || meter_locked()) {
-        return;
-    }
-    const int step = getSwordFillStep();
-    if (step > 0) {
-        addFillSteps(step);
-    }
-}
-
-void dFocusedArts_onPlayerHiddenSkillUse() {
-    if (!fa_enabled()) {
-        return;
-    }
-
-    const int maxBank = dFocusedArts_getMaxBank();
-    if (maxBank <= 0) {
-        return;
-    }
-
-    if (s_bankCount > 0 && (s_inSpendSequence || s_bankCount >= maxBank)) {
-        const bool laterDump = s_inSpendSequence;
-        if (!s_inSpendSequence && s_bankCount >= maxBank) {
-            s_inSpendSequence = true;
-        }
-        beginSpendCharge(s_bankCount);
-        (void)laterDump;
-        return;
-    }
-
-    clearFillProgress();
-}
-
-void dFocusedArts_onStageLoad() {
-    if (!fa_enabled()) {
-        return;
-    }
-    // Bank + partial fill persist across doors; clear in-flight combat windows only.
-    s_spendColumn = 0;
-    s_inSpendSequence = false;
-    s_backSliceSuppressFrames = 0;
-}
-
-void dFocusedArts_update() {
-    static bool s_prevEnabled = false;
-    const bool enabled = fa_enabled();
-    if (enabled != s_prevEnabled) {
-        reset_runtime_state();
-        s_prevEnabled = enabled;
-    }
-    if (s_backSliceSuppressFrames > 0) {
-        s_backSliceSuppressFrames--;
-    }
-}
-
-int dFocusedArts_getPurchasedTiers() {
-    return clampTier(static_cast<int>(albw_game::get_event_reg(kShopTierReg) & 0x0F));
-}
-
-int dFocusedArts_getNextShopTierIndex() {
-    const int next = dFocusedArts_getPurchasedTiers() + 1;
-    if (next < 1 || next > kFocusedArtsMaxTier) {
-        return 0;
-    }
-    return next;
-}
-
-int dFocusedArts_getNextShopTierPrice() {
-    const int next = dFocusedArts_getNextShopTierIndex();
-    if (next <= 0) {
-        return 0;
-    }
-    return kFocusedArtsShopPrices[next - 1];
-}
-
-bool dFocusedArts_shouldShowShopTierRow() {
-    if (!fa_enabled()) {
-        return false;
-    }
-    // Ending Blow / 2nd secret technique gate (fork F_0339).
-    if (!albw_game::is_event_bit(dSv_event_flag_c::F_0339)) {
-        return false;
-    }
-    return dFocusedArts_getPurchasedTiers() < kFocusedArtsMaxTier;
-}
-
-bool dFocusedArts_canPurchaseShopTier() {
-    return dFocusedArts_shouldShowShopTierRow();
-}
-
-bool dFocusedArts_tryPurchaseShopTier() {
-    if (!dFocusedArts_canPurchaseShopTier()) {
-        return false;
-    }
-    writeShopTierReg(static_cast<u8>(dFocusedArts_getPurchasedTiers() + 1));
-    return true;
-}
-
-const char* dFocusedArts_getShopTierName(int tier) {
-    switch (tier) {
-    case 1:
-        return "Focused Arts I";
-    case 2:
-        return "Focused Arts II";
-    case 3:
-        return "Focused Arts III";
-    default:
-        return "Focused Arts";
-    }
-}
-
-const char* dFocusedArts_getShopTierDesc(int /*tier*/) {
-    return "I noticed you are adept with that sword you carry! I found this scroll "
-           "left discarded on the Hyrule Castle grounds. Care to take a look?";
-}
 
 ModResult albw_focused_arts_init(ModError* error) {
     if (!install(error, "FaCcAtCheckPost",
@@ -393,3 +181,9 @@ ModResult albw_focused_arts_shutdown(ModError*) {
 void albw_focused_arts_tick() {
     dFocusedArts_update();
 }
+
+#endif  // TARGET_PC
+
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
