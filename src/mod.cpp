@@ -30,6 +30,7 @@
 #include "diababa.h"
 #include "fyrus.h"
 #include "armogohma.h"
+#include "epona_spur_hud.h"
 #include "lop_hud.h"
 #include "rental_shop.h"
 
@@ -95,7 +96,8 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
         albw_register_int("parry_icons_mode", 0, &g_parry_icons_mode) != MOD_OK ||
-        albw_register_int("shield_hud_visibility", 0, &g_shield_hud_visibility) != MOD_OK)
+        albw_register_int("shield_hud_visibility", 0, &g_shield_hud_visibility) != MOD_OK ||
+        albw_register_bool("epona_spur_hud", true, &g_epona_spur_hud) != MOD_OK)
     {
         if (error != nullptr) {
             error->code = MOD_ERROR;
@@ -190,7 +192,8 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_colossal_wallet_init(error) != MOD_OK ||
         albw_clothes_pipeline_init(error) != MOD_OK ||
         albw_menu_window_ext_init(error) != MOD_OK ||
-        albw_menu_ring_ext_init(error) != MOD_OK)
+        albw_menu_ring_ext_init(error) != MOD_OK ||
+        albw_epona_spur_hud_init(error) != MOD_OK)
     {
         return MOD_ERROR;
     }

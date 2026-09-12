@@ -88,7 +88,11 @@ ModResult build_combat_tab(ModContext*, UiWindowHandle, UiElementHandle left, Ui
                            "When durability and parry aux HUD stay visible outside guard.",
                            g_shield_hud_visibility, kShieldHudVisibilityModes,
                            sizeof(kShieldHudVisibilityModes) / sizeof(kShieldHudVisibilityModes[0])) !=
-            MOD_OK)
+            MOD_OK ||
+        albw_ui_add_toggle(left, "Epona dash-spur HUD",
+                           "Show the Epona dash-spur icons while riding. Off hides them. "
+                           "Does not affect wolf charges, shield HUD, or parry icons.",
+                           g_epona_spur_hud) != MOD_OK)
     {
         return MOD_ERROR;
     }
