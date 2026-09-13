@@ -26,10 +26,13 @@
 #include "SSystem/SComponent/c_math.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_particle_name.h"
+#include "d/d_save.h"
+#include "m_Do/m_Do_audio.h"
 #define private public
 #include "d/actor/d_a_alink.h"
 #undef private
 #include "Z2AudioLib/Z2Instances.h"
+#include "Z2AudioLib/Z2SeqMgr.h"
 
 #include "albw_common.h"
 #include "albw_game.h"
@@ -58,6 +61,21 @@ const f32 l_wolfHowlVfxYOffset   = 30.0f;
 const s16 l_wolfHowlVfxSweepRate = 300;
 const int l_wolfHowlVfxWidthPct  = 90;
 const int l_wolfHowlVfxHeightPct = 90;
+
+// fork handleWolfHowlBurst song pool (d_a_alink_dusk.cpp:23-42), verbatim. The 3
+// solos are always available; each duet is added once its "distant howling
+// complete" event bit (F_0472..F_0477) is set.
+const u32 s_wolfHowlSolo[] = {
+    Z2BGM_HOWL_TOBIKUSA, Z2BGM_HOWL_UMAKUSA, Z2BGM_HOWL_ZELDASONG,
+};
+struct WolfHowlDuo {
+    u32 bgm;
+    int eventFlag;  // dSv_event_flag_c::saveBitLabels[] index (== F_0xxx number)
+};
+const WolfHowlDuo s_wolfHowlDuos[] = {
+    {Z2BGM_HEALING_DUO, 472},    {Z2BGM_SOUL_REQ_DUO, 473}, {Z2BGM_LIGHT_PRLD_DUO, 474},
+    {Z2BGM_NEW_01_DUO, 475},     {Z2BGM_NEW_02_DUO, 476},   {Z2BGM_NEW_03_DUO, 477},
+};
 
 // fork daAlink_c::setWolfHowlSpinEffect (wolf.inc:3627), baked-default path.
 void setWolfHowlSpinEffect(daAlink_c* link) {
@@ -238,6 +256,31 @@ void albw_wolf_howl_arm_combat_request() {
     s_howlEnding     = false;
     s_howlElapsed    = 0;
     s_howlFramesLeft = 30;  // 1 s post-song buffer at the 30 Hz sim tick
+
+    // fork handleWolfHowlBurst (d_a_alink_dusk.cpp:164-179): build the pool from
+    // the 3 always-on solos + each LEARNED duet, pick one at random, and START it
+    // ONCE here (not in procWolfHowlInit, so the pose re-loop never restarts it).
+    // Without this the combat howl has NO song: isItemGetDemo() stays false, so
+    // procWolfHowlCombat force-ends it after ~15 frames + buffer (no duet, no
+    // music) — the reported "howl doesn't work like the fork". The song length
+    // itself drives the howl duration.
+    constexpr int kSolo = (int)(sizeof(s_wolfHowlSolo) / sizeof(s_wolfHowlSolo[0]));
+    constexpr int kDuo  = (int)(sizeof(s_wolfHowlDuos) / sizeof(s_wolfHowlDuos[0]));
+    u32 pool[kSolo + kDuo];
+    int n = 0;
+    for (int i = 0; i < kSolo; i++) {
+        pool[n++] = s_wolfHowlSolo[i];
+    }
+    for (int i = 0; i < kDuo; i++) {
+        if (dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[s_wolfHowlDuos[i].eventFlag])) {
+            pool[n++] = s_wolfHowlDuos[i].bgm;  // duet learned -> add to the pool
+        }
+    }
+    int idx = (int)cM_rndF((f32)n);
+    if (idx < 0 || idx >= n) {
+        idx = 0;
+    }
+    mDoAud_subBgmStart(pool[idx]);
 }
 
 // fork daAlink_c::mWolfCombatHowlActive, for the earn guard (d_cc_uty.cpp:738)
