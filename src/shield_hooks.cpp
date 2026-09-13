@@ -46,6 +46,7 @@ DEFINE_HOOK(&daAlink_c::setShieldModel, SetShieldModel);
 DEFINE_HOOK(&daAlink_c::setShieldArcName, SetShieldArcName);
 DEFINE_HOOK(&daAlink_c::checkShieldDraw, CheckShieldDraw);
 DEFINE_HOOK(&daAlink_c::checkSwordDraw, CheckSwordDraw);
+DEFINE_HOOK(&daAlink_c::setCollision, SetCollision);
 DEFINE_HOOK(&dMeter2_c::moveKantera, MoveKantera);
 DEFINE_HOOK(&dMeter2Draw_c::draw, MeterDraw);
 
@@ -483,6 +484,49 @@ HookAction on_check_sword_draw_pre(ModContext*, void* args, void* retval, void*)
     return HOOK_SKIP_ORIGINAL;
 }
 
+// ============================================
+// NEW CODE — ALBW Port (setCollision null-shield-model guard)
+// Fork d_a_alink.cpp:7771 guards the one shield-model use in setCollision:
+//     if (mShieldModel != NULL)
+//         mDoMtx_multVecSR(getShieldMtx(), &cXyz::BaseZ, &field_0x351c);
+// getShieldMtx() = mShieldModel->getBaseTRMtx() (inline), so a null shield model
+// crashes in C_MTXMultVecSR (confirmed EXCEPTION_ACCESS_VIOLATION, #00 C_MTXMultVecSR
+// / #01 daAlink_c::setCollision, right after a quick-swap). setCollision runs every
+// frame UNGATED by the reload timer, and the shield-reload driver now advances the
+// reload during gameplay, so the model is briefly null there. The fork ships the
+// reload driver AND this guard as a pair; we ported the driver, this is the guard.
+//
+// mShieldModel is used at exactly ONE line in setCollision's 139 lines of otherwise
+// pure-stock collision setup, so reproducing the whole function to add one guard is
+// disproportionate. Boundary translation instead: while the model is transiently
+// null, alias it to Link's own always-valid model for setCollision's duration (the
+// matrix read is the only use) and restore null after. field_0x351c gets Link's
+// forward for the ~2 reload frames (shield invisible then anyway) vs the fork's
+// stale value — negligible, and non-crashing.
+// ============================================
+bool s_setCollisionAliasedShield = false;
+
+HookAction on_set_collision_pre(ModContext*, void* args, void*, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    s_setCollisionAliasedShield = false;
+    if (link != nullptr && link->mShieldModel == NULL && link->mpLinkModel != NULL) {
+        link->mShieldModel = link->mpLinkModel;
+        s_setCollisionAliasedShield = true;
+    }
+    return HOOK_CONTINUE;
+}
+
+void on_set_collision_post(ModContext*, void* args, void*, void*) {
+    if (!s_setCollisionAliasedShield) {
+        return;
+    }
+    s_setCollisionAliasedShield = false;
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link != nullptr) {
+        link->mShieldModel = NULL;
+    }
+}
+
 bool install(ModError* error, const char* name, ModResult r) {
     if (r != MOD_OK) {
         svc_log->error(mod_ctx, name);
@@ -544,7 +588,11 @@ ModResult albw_shield_init(ModError* error) {
         !install(error, "CheckSwordDrawSumo",
                  mods::hook_add_pre<CheckSwordDraw>(svc_hook, on_check_sword_draw_pre)) ||
         !install(error, "MeterDrawShield",
-                 mods::hook_add_post<MeterDraw>(svc_hook, on_meter_draw_post)))
+                 mods::hook_add_post<MeterDraw>(svc_hook, on_meter_draw_post)) ||
+        !install(error, "SetCollisionShieldGuardPre",
+                 mods::hook_add_pre<SetCollision>(svc_hook, on_set_collision_pre)) ||
+        !install(error, "SetCollisionShieldGuardPost",
+                 mods::hook_add_post<SetCollision>(svc_hook, on_set_collision_post)))
     {
         return MOD_ERROR;
     }
