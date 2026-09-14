@@ -172,9 +172,31 @@ void on_bgm_create_post(ModContext*, void* args, void*, void*) {
 // fork daB_GM_Execute inserts (action() dispatch for the two added ACTION
 // states + per-frame phase-3 driving). Runs as a pre-hook; the new actions are
 // beyond stock's switch, so vanilla ignores them and we drive them here.
+// ============================================
+// Egg-spam gate (fork d_a_b_gm.cpp b_gm_move trigger replacement). Vanilla lays
+// eggs when getArrowNum() <= 3 so the player can refill by killing babies; in
+// ALBW arrows are never the resource (the meter is), so the count sits <= 3
+// forever and eggs spawn endlessly. b_gm_move is file-static (unhookable), so
+// force the arrow count > 3 across this frame's execute — the vanilla trigger
+// then only fires on the legit statue-batch path (field_0x1ad5 == 2) — and
+// restore it in the post-hook. Applies regardless of Boss Refinement, matching
+// the fork (its refinement path keeps the HP-gated egg system separately).
+// ============================================
+u8   s_savedArrowNum = 0;
+bool s_arrowForced   = false;
+
 HookAction on_bgm_execute_pre(ModContext*, void* args, void*, void*) {
     auto* i_this = mods::arg<b_gm_class*>(args, 0);
-    if (i_this == nullptr || !dAlbwBossRefinement_isEnabled()) {
+    if (i_this == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    s_savedArrowNum = dComIfGs_getArrowNum();
+    s_arrowForced = false;
+    if (s_savedArrowNum <= 3) {
+        dComIfGs_setArrowNum(4);
+        s_arrowForced = true;
+    }
+    if (!dAlbwBossRefinement_isEnabled()) {
         return HOOK_CONTINUE;
     }
     // Reproduce damage_check's ALBW routing (trigger + drain) before vanilla runs.
@@ -186,6 +208,13 @@ HookAction on_bgm_execute_pre(ModContext*, void* args, void*, void*) {
         b_gm_pursuit_test(i_this);
     }
     return HOOK_CONTINUE;
+}
+
+void on_bgm_execute_post(ModContext*, void*, void*, void*) {
+    if (s_arrowForced) {
+        dComIfGs_setArrowNum(s_savedArrowNum);
+        s_arrowForced = false;
+    }
 }
 
 void on_bgm_delete_post(ModContext*, void* args, void*, void*) {
@@ -210,6 +239,8 @@ ModResult albw_armogohma_init(ModError* error) {
                  mods::hook_add_post<BGmCreate>(svc_hook, on_bgm_create_post)) ||
         !install(error, "BGmExecutePhase3",
                  mods::hook_add_pre<BGmExecute>(svc_hook, on_bgm_execute_pre)) ||
+        !install(error, "BGmExecuteEggGate",
+                 mods::hook_add_post<BGmExecute>(svc_hook, on_bgm_execute_post)) ||
         !install(error, "BGmDeleteReveal",
                  mods::hook_add_post<BGmDelete>(svc_hook, on_bgm_delete_post)))
     {

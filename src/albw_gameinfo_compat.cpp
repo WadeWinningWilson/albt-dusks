@@ -195,6 +195,14 @@ void dComIfGs_setEventReg(u16 reg, u8 value) {
 u8 dComIfGs_getEventReg(u16 reg) {
     return g_dComIfG_gameInfo.info.getEvent().getEventReg(reg);
 }
+// stock d_com_inf_game.h:2558 (armogohma egg-gate: force arrow count > 3)
+u8 dComIfGs_getArrowNum() {
+    return g_dComIfG_gameInfo.info.getPlayer().getItemRecord().getArrowNum();
+}
+// stock d_com_inf_game.h:2562
+void dComIfGs_setArrowNum(u8 i_arrowNum) {
+    g_dComIfG_gameInfo.info.getPlayer().getItemRecord().setArrowNum(i_arrowNum);
+}
 
 #endif  // TARGET_PC
 
