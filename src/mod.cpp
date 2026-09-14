@@ -166,6 +166,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_confuse_init(error) != MOD_OK ||
         albw_magic_jar_init(error) != MOD_OK ||
         albw_rupee_popup_init(error) != MOD_OK ||
+        albw_tear_particles_init(error) != MOD_OK ||
         albw_shield_init(error) != MOD_OK ||
         albw_focused_arts_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||

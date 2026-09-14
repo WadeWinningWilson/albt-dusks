@@ -26,6 +26,12 @@ ModResult albw_magic_jar_init(ModError* error);
 ModResult albw_rupee_popup_init(ModError* error);
 void albw_rupee_popup_on_grant(unsigned short amount);
 
+// Supplemental Tear-of-Light scene particles (tear_particles.cpp): loads the
+// Pscene011 tear FX archive + slot-2 getRM_ID fallback so the recovery orb is
+// visible in stages whose own scene archive lacks the tear FX.
+ModResult albw_tear_particles_init(ModError* error);
+bool albw_tear_ensure_scene_res();
+
 // Public bridge: grant the one-time boss-defeat rupee reward for profName (deduped).
 // Used by the armogohma whole-function port, which reproduces the fork's
 // dAlbwEnemyRupees_tryGrantFightVictory call on the boss's death.

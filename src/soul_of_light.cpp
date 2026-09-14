@@ -274,6 +274,10 @@ void finishRecoveryDropSetup(daObjDrop_c* drop) {
     drop->mModeAction = 2;
     drop->mModeTimer = 0;
 
+    // Kick off the supplemental tear-FX archive load (Pscene011). The tear body
+    // effect only renders once it is resident; it is polled each frame below.
+    albw_tear_ensure_scene_res();
+
     drop->removeBodyEffect();
     drop->createBodyEffect();
     drop->mSound.startSound(Z2SE_OBJ_LIGHTDROP_APPEAR, 0, -1);
@@ -506,16 +510,23 @@ void on_drop_execute_post(ModContext*, void* args, void*, void*) {
     if (!isRecoveryOrbDrop(drop)) {
         return;
     }
-    bool needBody = false;
-    for (int i = 0; i < 6; i++) {
-        if (drop->mpBodyEffEmtrs[i] == NULL) {
-            needBody = true;
-            break;
+    // Poll the supplemental tear archive to completion (async DVD read), then the
+    // recreated body emitters resolve their FX through slot 2 and become visible.
+    albw_tear_ensure_scene_res();
+    // fork d_a_obj_drop.cpp:674 gates the body-effect keep-alive on mModeAction < 3
+    // (the idle/wait states); recreating during the collect demo fights the line FX.
+    if (drop->mModeAction < 3) {
+        bool needBody = false;
+        for (int i = 0; i < 6; i++) {
+            if (drop->mpBodyEffEmtrs[i] == NULL) {
+                needBody = true;
+                break;
+            }
         }
-    }
-    if (needBody) {
-        drop->removeBodyEffect();
-        drop->createBodyEffect();
+        if (needBody) {
+            drop->removeBodyEffect();
+            drop->createBodyEffect();
+        }
     }
     clearLinkTearCollectEffect();
 }
