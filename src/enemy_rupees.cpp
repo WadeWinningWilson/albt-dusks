@@ -12,6 +12,7 @@
 #include "d/actor/d_a_obj_bemos.h"
 #include "d/d_cc_uty.h"
 #include "d/d_com_inf_game.h"
+#include "d/d_item_data.h"
 #include "d/d_pane_class.h"
 #include "d/d_meter2.h"
 #include "d/d_meter2_draw.h"
@@ -21,6 +22,7 @@
 #include "f_op/f_op_actor_mng.h"
 #include "f_pc/f_pc_name.h"
 #include "mods/svc/hook.hpp"
+#include "SSystem/SComponent/c_math.h"
 
 namespace {
 
@@ -385,6 +387,40 @@ void tryKillAfterDamage(fopAc_ac_c* enemy, s32 attackPower) {
     onEnemyKill(enemy);
 }
 
+// ============================================
+// NEW CODE - ALBW Port (magic-jar bonus drop, fork d_cc_uty.cpp death block)
+//
+// The fork spawns a large-magic jar on common-enemy death, right inside the
+// `mAttackPower != 0 && health <= 0` block of cc_at_check's damage apply, at a
+// 10% rate (matches the ALBW orange-rupee bonus-drop rate). fopAcM_createItem
+// with itemNo dItemNo_L_MAGIC_e -> daItem_c, whose get-path (d_a_obj_item.cpp)
+// is already ported to fill the ALBW meter via item_func_L_MAGIC. The drop
+// itself was never ported, so the meter refill had no in-world source -> "the
+// jar never spawns". Reproduced here at the same cc_at_check seam.
+//
+// Intentionally NOT gated on the kill-rupees toggle: in the fork this drop is
+// unconditional on enemy kill, and the meter is always live in this mod.
+// ============================================
+void tryDropMagicJar(fopAc_ac_c* enemy, s32 attackPower) {
+    if (enemy == NULL || attackPower == 0) {
+        return;
+    }
+    if (fopAcM_GetGroup(enemy) != fopAc_ENEMY_e) {
+        return;
+    }
+    if (enemy->health > 0) {
+        return;
+    }
+    if (cM_rndF(1.0f) < 0.10f) {
+        static const cXyz s_jarDropScale(1.3f, 1.3f, 1.3f);
+        fopAcM_createItem(&enemy->current.pos, dItemNo_L_MAGIC_e, -1,
+                          fopAcM_GetRoomNo(enemy), NULL, &s_jarDropScale, 0);
+    }
+}
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
+
 void tryGrantFightVictory(s16 profName) {
     if (!grantsEnabled()) {
         return;
@@ -532,6 +568,7 @@ void on_cc_at_post(ModContext*, void* args, void*, void*) {
         return;
     }
     tryKillAfterDamage(enemy, info->mAttackPower);
+    tryDropMagicJar(enemy, info->mAttackPower);
 }
 
 void on_execute_post(ModContext*, void* args, void*, void*) {
