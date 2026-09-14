@@ -628,8 +628,10 @@ void rebuildVisibleList() {
     }
 
     // fork d_albw_rental.cpp:842 - Deity row shows (????? or eligible) until owned.
+    // True ALBW makes it purchasable regardless of the COLOSSAL_WALLET prereq
+    // (which the mod never grants), matching "full catalog from the start".
     if (cat == CAT_ARMOR && !dComIfGs_isItemFirstBit((u8)dItemNo_DEITY_ARMOR_e)) {
-        appendVisible(VISIBLE_DEITY, -1, deityRowEligible());
+        appendVisible(VISIBLE_DEITY, -1, albw_is_true_albw_enabled() || deityRowEligible());
     }
 
     if (cat == CAT_UPGRADES) {
@@ -857,7 +859,7 @@ void tryPurchase(int visIdx) {
 
     // fork d_albw_rental.cpp:1219
     if (row.kind == VISIBLE_DEITY) {
-        if (!deityRowEligible()) {
+        if (!albw_is_true_albw_enabled() && !deityRowEligible()) {
             return;
         }
         const u16 rupees = getRupees();
