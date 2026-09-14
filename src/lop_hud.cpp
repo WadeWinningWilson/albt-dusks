@@ -16,6 +16,7 @@
 #include "parry_master.h"
 #include "lop_item_belt.h"
 #include "focused_arts.h"
+#include "shield.h"  // shield durability accessors + ShieldRowLayout (durability bar draw)
 #include "d/d_item_data.h"
 #include "JSystem/JKernel/JKRArchive.h"
 #include "JSystem/J2DGraph/J2DPane.h"
@@ -44,6 +45,13 @@ constexpr f32 kLopSwordSlotOffY = 0.0f;
 constexpr f32 kLopButtonRaiseY = 64.0f;
 constexpr f32 kFaSegGap = 3.0f;
 constexpr f32 kFaSegWidthScale = 0.5f;
+// ============================================
+// Shield durability bar — fork d_meter2_draw.cpp constants (drawShieldDurabilityBelowAlbw).
+// ============================================
+constexpr f32 kLopDurabilityGapPx = 6.0f;   // gap below the shield-icon row (LoP layout)
+constexpr f32 kLopDurabilityOffX = -8.0f;   // nudge left to align with icons (LoP layout)
+constexpr f32 kFaVanillaRowH = 14.0f;       // ~kantera bar native height (durability shift)
+constexpr f32 kFaVanillaGap = 6.0f;
 
 bool s_active = false;
 bool s_healthBar = false;
@@ -54,8 +62,9 @@ bool s_lifeHidden = false;
 u32 s_lastExecStatus = 0;
 bool s_lastExecStatusValid = false;
 
-void draw_item_belt(dMeter2Draw_c* d);  // defined below, used by on_draw_post
-void draw_fa_meter(dMeter2Draw_c* d);   // defined below, used by on_draw_post
+void draw_item_belt(dMeter2Draw_c* d);         // defined below, used by on_draw_post
+void draw_fa_meter(dMeter2Draw_c* d);          // defined below, used by on_draw_post
+void draw_shield_durability(dMeter2Draw_c* d);  // defined below, used by on_draw_post
 void apply_lop_button_ring(dMeter2Draw_c* d, u32 i_status);  // defined below
 
 void hide_pane(CPaneMgr* p) {
@@ -398,6 +407,7 @@ void on_draw_post(ModContext*, void* args, void*, void*) {
         draw_item_belt(d);
         draw_lop_health_bar(d);
         draw_fa_meter(d);
+        draw_shield_durability(d);
     }
 }
 
@@ -792,6 +802,104 @@ void draw_fa_meter(dMeter2Draw_c* d) {
         const f32 rowLocalY = albwY + d->mpMagicBase->getInitSizeY() * d->field_0x5d8[0] + 8.0f;
         draw_fa_meter_kantera(d, albwX, rowLocalY, totalW);
     }
+}
+
+// ============================================
+// Fork dMeter2Draw_c::drawShieldDurabilityBelowAlbw() - the shield durability bar,
+// drawn beneath the ALBW magic meter with the same kantera/magic-meter reuse as the
+// FA strip: recolor the fill pane (mm_00) per durability tier over the default base
+// track, draw, then restore. LoP HUD mode anchors it to the shield-icon row instead
+// of below the meter; vanilla keeps it under the ALBW meter (shifted down when the FA
+// strip already occupies that row).
+// ============================================
+void draw_shield_durability(dMeter2Draw_c* d) {
+    if (!dShield_shouldDrawDurabilityHud() || dShield_getDurabilityMax() == 0 ||
+        d->mMeterAlphaRate[0] <= 0.0f)
+    {
+        return;
+    }
+    if (d->mpKanteraScreen == nullptr || d->mpMagicBase == nullptr ||
+        d->mpMagicParent == nullptr || d->mpMagicMeter == nullptr ||
+        d->mpMagicFrameL == nullptr || d->mpMagicFrameR == nullptr)
+    {
+        return;
+    }
+    J2DGrafContext* graf_ctx = albw_game::current_graf_port();
+    if (graf_ctx == nullptr) {
+        return;
+    }
+
+    const u16 cur = dShield_getDurability();
+    const u16 max = dShield_getDurabilityMax();
+    const s16 fill32 = (max > 0) ? (s16)((u32)cur * 32U / max) : 0;
+    f32 widthScale = dShield_getDurabilityMeterWidthScale();
+
+    f32 barX = 0.0f, barY = 0.0f;
+    bool useLopRowLayout = false;
+    // LoP: keep the kantera durability-meter style, but move it beneath the bottom-left
+    // shield-icon row. The row coords are GLOBAL; the kantera meter draws in its screen's
+    // local space, so convert by subtracting the cached kantera root offset. Width spans
+    // the shield row.
+    if (s_active) {
+        ShieldRowLayout row;
+        if (dShield_getLastRowLayout(&row) && row.iconW >= 1.0f) {
+            useLopRowLayout = true;
+            const f32 rowSpan =
+                row.slotCount > 1 ? row.spacing * (f32)(row.slotCount - 1) + row.iconW : row.iconW;
+            const f32 targetX = row.firstCenterX - row.iconW * 0.5f + kLopDurabilityOffX;
+            const f32 targetY = row.centerY + row.iconW * 0.5f + kLopDurabilityGapPx;
+
+            f32 offX = 0.0f, offY = 0.0f;
+            kantera_root_offset(d, &offX, &offY);
+            barX = targetX - offX;
+            barY = targetY - offY;
+
+            const f32 baseW = d->mpMagicBase->getInitSizeX();
+            widthScale = (baseW > 0.0f) ? (rowSpan / baseW) : widthScale;
+        }
+    }
+    if (!useLopRowLayout) {
+        const f32 albwX = d->field_0x5e4[0];
+        const f32 albwY = d->field_0x5f0[0];
+        const f32 albwScaleY = d->field_0x5d8[0];
+        barX = albwX;
+        barY = albwY + d->mpMagicBase->getInitSizeY() * albwScaleY + 8.0f;
+        // Vanilla FA on: the lilac FA row takes durability's slot, so push durability
+        // down one row. FA off -> barY unchanged.
+        if (fa_meter_active()) {
+            barY += kFaVanillaRowH + kFaVanillaGap;
+        }
+    }
+
+    apply_magic_meter_layout_transient(d, 32, fill32, barX, barY, widthScale, 0);
+
+    switch (dShield_getDurabilityTierStyle()) {
+    case 0:
+        d->mpMagicMeter->setBlackWhite(JUtility::TColor(70, 45, 20, 255),
+                                       JUtility::TColor(175, 120, 55, 255));
+        break;
+    case 1:
+        d->mpMagicMeter->setBlackWhite(JUtility::TColor(55, 58, 62, 255),
+                                       JUtility::TColor(185, 195, 210, 255));
+        break;
+    default:
+        d->mpMagicMeter->setBlackWhite(JUtility::TColor(30, 70, 140, 255),
+                                       JUtility::TColor(90, 160, 235, 255));
+        break;
+    }
+
+    d->setAlphaMagicChange(true);
+    d->mpKanteraScreen->draw(0.0f, 0.0f, graf_ctx);
+
+    // Restore the fill pane's init tint + slot layout so the real magic meter (and the
+    // next frame) are clean.
+    JUtility::TColor black = d->mpMagicMeter->getInitBlack();
+    black.a = 255;
+    d->mpMagicMeter->setBlackWhite(black, d->mpMagicMeter->getInitWhite());
+
+    apply_magic_meter_slot(d, 0);
+    d->mpMagicParent->setAlphaRate(d->mMeterAlphaRate[0]);
+    d->setAlphaMagicChange(true);
 }
 
 DEFINE_HOOK(&dMeter2Draw_c::exec, LopMeterExec);
