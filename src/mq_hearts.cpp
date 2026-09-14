@@ -5,8 +5,19 @@
 #include "config_vars.h"
 
 #include "d/d_com_inf_game.h"
+#include "mods/svc/hook.hpp"
 
 namespace {
+
+// ============================================
+// NEW CODE - ALBW Port (bonus hearts actually raise max HP)
+// The heart-shop grant writes the bonus half/quarter-heart regs, but the mod
+// never APPLIED them to the real max-life gauge, so purchases did nothing. The
+// fork adds the bonus inside dComIfGs_getMaxLifeGauge()
+// (d_com_inf_game.cpp:2051): gauge += dAlbwMQ_getBonusMaxLifeQuarters(). Stock
+// getMaxLifeGauge lacks that, so we hook it and add the bonus (the whole life
+// system reads this accessor, so the extra hearts become real everywhere).
+// ============================================
 
 static constexpr int kHeartShopTiers = 17;
 static constexpr int kMeterShopTiers = 23;
@@ -79,10 +90,42 @@ int heartPrice(int tier) {
     return 9999 + 333 * (tier - (kHeartShopTiers - 1));
 }
 
+// fork dAlbwMQ_getBonusMaxLifeQuarters (d_albw_master_quest.cpp:88): the bought
+// bonus expressed in quarter-hearts (a half heart = 2 quarters).
+int mqBonusMaxLifeQuarters() {
+    if (!albw_cfg_bool(g_master_quest, false)) {
+        return 0;
+    }
+    return static_cast<int>(readReg(kBonusHalfHeartsReg)) * 2 +
+           static_cast<int>(readReg(kBonusQuarterHeartsReg));
+}
+
+DEFINE_HOOK_SYMBOL("dComIfGs_getMaxLifeGauge", u16(), MqMaxLifeGauge);
+
+void on_get_max_life_gauge_post(ModContext*, void*, void* retval, void*) {
+    if (retval == nullptr) {
+        return;
+    }
+    const int bonus = mqBonusMaxLifeQuarters();
+    if (bonus != 0) {
+        u16* gauge = static_cast<u16*>(retval);
+        *gauge = static_cast<u16>(*gauge + bonus);
+    }
+}
+
 }  // namespace
 
 bool albw_mq_is_enabled() {
     return albw_cfg_bool(g_master_quest, false);
+}
+
+ModResult albw_mq_hearts_init(ModError*) {
+    // Apply bought bonus hearts to the real max-life gauge everywhere it is read.
+    if (mods::hook::add_post<MqMaxLifeGauge>(on_get_max_life_gauge_post) != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to hook dComIfGs_getMaxLifeGauge (mq hearts)");
+        return MOD_ERROR;
+    }
+    return MOD_OK;
 }
 
 bool albw_mq_can_purchase_heart_shop() {

@@ -2,6 +2,11 @@
 
 #include "config_vars.h"
 
+#include "mods/api.h"
+
+// Hook dComIfGs_getMaxLifeGauge so bought bonus hearts raise real max HP.
+ModResult albw_mq_hearts_init(ModError* error);
+
 bool albw_mq_is_enabled();
 bool albw_mq_can_purchase_heart_shop();
 bool albw_mq_try_purchase_heart_shop();
