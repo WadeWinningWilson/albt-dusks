@@ -29,6 +29,7 @@
 #include "d/d_com_inf_game.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_meter2_info.h"
+#include "f_op/f_op_camera_mng.h"
 #include "JSystem/J2DGraph/J2DPicture.h"
 
 #if TARGET_PC
@@ -202,6 +203,48 @@ u8 dComIfGs_getArrowNum() {
 // stock d_com_inf_game.h:2562
 void dComIfGs_setArrowNum(u8 i_arrowNum) {
     g_dComIfG_gameInfo.info.getPlayer().getItemRecord().setArrowNum(i_arrowNum);
+}
+
+// ============================================
+// Armogohma whole-function port (demo_camera death cutscene + Execute) deps.
+// DUSK_NOINLINE accessors — bodies from stock d_com_inf_game.h inline #else branch.
+// ============================================
+// stock :3568
+dEvt_control_c* dComIfGp_getEvent() {
+    return g_dComIfG_gameInfo.play.getEvent();
+}
+// stock :3625
+void dComIfGp_event_reset() {
+    g_dComIfG_gameInfo.play.getEvent()->reset();
+}
+// stock :2976
+void dComIfGs_onStageBossEnemy() {
+    g_dComIfG_gameInfo.info.getMemory().getBit().onStageBossEnemy();
+}
+// stock :4369
+camera_process_class* dComIfGp_getCamera(int idx) {
+    return (camera_process_class*)g_dComIfG_gameInfo.play.getCamera(idx);
+}
+// stock :4452
+int dComIfGp_getPlayerCameraID(int idx) {
+    return g_dComIfG_gameInfo.play.getPlayerCameraID(idx);
+}
+// stock :4279 — the (id, resID, pos, rot, scale) overload.
+u32 dComIfGp_particle_set(u32 param_0, u16 param_1, const cXyz* i_pos, const csXyz* param_3,
+                          const cXyz* param_4) {
+    return g_dComIfG_gameInfo.play.getParticle()->setNormal(
+        param_0, param_1, i_pos, NULL, param_3, param_4, 0xFF, NULL, -1, NULL, NULL, NULL, 1.0f);
+}
+// stock :4296 — the full-parameter setColor overload.
+JPABaseEmitter* dComIfGp_particle_setColor(u16 param_0, const cXyz* i_pos,
+                                           const dKy_tevstr_c* param_2, const GXColor* param_3,
+                                           const GXColor* param_4, f32 param_5, u8 param_6,
+                                           const csXyz* param_7, const cXyz* param_8,
+                                           dPa_levelEcallBack* param_9, s8 param_10,
+                                           const cXyz* param_11) {
+    return g_dComIfG_gameInfo.play.getParticle()->setNormal(param_0, i_pos, param_2, param_7,
+                                                            param_8, param_6, param_9, param_10,
+                                                            param_3, param_4, param_11, param_5);
 }
 
 #endif  // TARGET_PC

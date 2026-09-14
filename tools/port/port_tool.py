@@ -140,8 +140,19 @@ def main(cfg_path):
     for n in emit_list([w for w in want if w in new_fns]):
         out.append(f"// [NEW helper] {n}")
         out.append(transform(F[n]['text'])); out.append("")
+    # whole_funcs: MODIFIED stock fns to emit as WHOLE verbatim fork bodies (for a
+    # HOOK_SKIP_ORIGINAL replacement) instead of the added-hunks diff — which cannot
+    # represent edits interwoven with a giant function's locals. diag/substitution
+    # preprocessing still applies, so the body compiles with REVEAL kept / diags off.
+    whole = [w for w in want if w in cfg.get('whole_funcs',[])]
+    if whole:
+        out.append("// ---- WHOLE fork replacements (verbatim, transformed): hook the stock")
+        out.append("//      symbol with HOOK_SKIP_ORIGINAL and call these ----")
+        for n in sorted(whole, key=lambda n: fork.index(F[n]['text'])):
+            out.append(f"// [WHOLE replacement] {n}")
+            out.append(transform(F[n]['text'])); out.append("")
     out.append("// ---- MODIFIED stock fns: ADDED hunks only (place at hook seams) ----")
-    for n in [w for w in want if w in mod_fns]:
+    for n in [w for w in want if w in mod_fns and w not in whole]:
         sa=strip_comments(S[n]['text']).split(chr(10)); fa=transform(F[n]['text']).split(chr(10))
         # diff fork(full, transformed) vs stock(stripped) -> keep added(+) with a little context
         diff=list(difflib.unified_diff([l for l in strip_comments(S[n]['text']).split(chr(10))],

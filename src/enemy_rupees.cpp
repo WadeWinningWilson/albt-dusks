@@ -596,6 +596,12 @@ void on_meter_draw_post(ModContext*, void*, void*, void*) {
 
 }  // namespace
 
+// Public bridge for the armogohma whole-function port (fork
+// dAlbwEnemyRupees_tryGrantFightVictory). tryGrantFightVictory dedups internally.
+void albw_enemy_rupees_grant_fight_victory(short profName) {
+    tryGrantFightVictory(static_cast<s16>(profName));
+}
+
 ModResult albw_enemy_rupees_build_panel(UiElementHandle panel, ModError*) {
     return albw_ui_add_toggle(
         panel, "Kill rupees",

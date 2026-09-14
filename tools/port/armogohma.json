@@ -1,25 +1,22 @@
 {
   "fork": "../dusklight/src/d/actor/d_a_b_gm.cpp",
   "stock": "../dusklight-main/src/d/actor/d_a_b_gm.cpp",
-  "out": "build/port/armo_modified.inc",
+  "out": "build/port/armogohma_port.inc",
   "port_funcs": [
-    "useHeapInit",
-    "damage_check",
-    "daB_GM_Create",
-    "daB_GM_Delete",
     "daB_GM_Execute",
-    "daB_GM_Draw",
-    "demo_camera",
-    "nodeCallBack",
+    "action",
+    "damage_check",
     "b_gm_move",
-    "action"
+    "b_gm_beam",
+    "b_gm_kogoma",
+    "b_gm_drop",
+    "demo_camera"
   ],
   "diag_zero": [
     "D_ALBW_ARMO_DEATH_DIAG",
     "D_ALBW_ARMO_P3_HP_DIAG",
     "D_ALBW_ARMO_PURSUIT_TEST",
-    "D_ALBW_ARMO_P3_DIAG_NOSWAP",
-    "D_ALBW_ARMO_REVEAL"
+    "D_ALBW_ARMO_P3_DIAG_NOSWAP"
   ],
   "renames": {
     "static void anm_init(b_gm_class": "static void armo_anm_init(b_gm_class",
@@ -45,5 +42,15 @@
     "cXyz",
     "csXyz",
     "FILE"
+  ],
+  "whole_funcs": [
+    "daB_GM_Execute",
+    "action",
+    "damage_check",
+    "b_gm_move",
+    "b_gm_beam",
+    "b_gm_kogoma",
+    "b_gm_drop",
+    "demo_camera"
   ]
 }

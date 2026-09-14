@@ -23,6 +23,12 @@
 #include "d/d_com_inf_game.h"
 #include "d/d_s_play.h"
 #include "d/d_resorce.h"
+#include "d/actor/d_a_player.h"
+#include "d/actor/d_a_obj_ystone.h"
+#include "f_op/f_op_camera_mng.h"
+#include "f_op/f_op_msg_mng.h"
+#include "c/c_damagereaction.h"
+#include "modules.h"
 #include "d/d_cc_uty.h"
 #include "SSystem/SComponent/c_cc_d.h"
 #include "m_Do/m_Do_ext.h"
@@ -38,6 +44,7 @@
 #undef private
 
 #include "albw_common.h"
+#include "albw_symbols.h"
 #include "boss_refinement.h"
 #include "armogohma.h"
 #include "mods/hook.hpp"
@@ -51,10 +58,28 @@
 // ============================================
 #define ANM_EYE_TEST            6
 #define ANM_GM_BEAM             7
+#define ANM_GOMA_ATTACK_01      8
+#define ANM_GOMA_ATTACK_A       9
+#define ANM_GOMA_ATTACK_B       10
+#define ANM_GOMA_ATTACK_C       11
+#define ANM_GOMA_DAMAGE_01      12
+#define ANM_GOMA_DAMAGE_02      13
+#define ANM_GOMA_DAMAGE_WAIT    14
 #define ANM_GOMA_DASH           15
 #define ANM_GOMA_DEATH          16
+#define ANM_GOMA_FALL_LOOP      17
+#define ANM_GOMA_LANDING        18
+#define ANM_GOMA_LANDING_DAMAGE 19
+#define ANM_GOMA_LANDING_WAIT   20
+#define ANM_GOMA_LAY_EGGS       21
 #define ANM_GOMA_MOVE           22
 #define ANM_GOMA_RETURN         23
+#define ANM_GOMA_ROOF_DAMAGE    24
+#define ANM_GOMA_SLOW_MOVE      25
+#define ANM_GOMA_STEP_L         26
+#define ANM_GOMA_STEP_R         27
+#define ANM_GOMA_UP             28
+#define ANM_GOMA_UP_02          29
 #define ANM_GOMA_WAIT           30
 
 enum { P3_DASH = 0, P3_VULN = 1, P3_LASER = 2, P3_INTRO = 3, P3_LIEDOWN = 4 };
@@ -145,11 +170,93 @@ void albw_armo_free_reveal() {
     s_revealBuf = ResourceBuffer RESOURCE_BUFFER_INIT;
 }
 
-// The mechanically-extracted helper block: daB_GM_HIO_c ctor + l_HIO + all
-// s_gm*/kAlbw* statics + armo_anm_init + the 10 phase-3/reveal/pursuit helpers,
-// verbatim from the fork (tools/port_tool.py, brace-verified).
-#include "armogohma_helpers.inc"
-#include "armogohma_seams.inc"
+// ============================================
+// WHOLE-FUNCTION port (tools/port/armogohma.json, whole_funcs). The Execute path
+// is reproduced VERBATIM from the fork with D_ALBW_ARMO_REVEAL kept and the diags
+// zeroed — daB_GM_Execute + action + damage_check + b_gm_move/beam/kogoma/drop +
+// demo_camera + their fork-local deps (statics, l_HIO ctor, phase-3/reveal
+// helpers, b_gm_wait/b_gm_damage). We hook the stock daB_GM_Execute with
+// HOOK_SKIP_ORIGINAL and run this copy, so the reveal fight's eye vulnerability,
+// eyelid/eye animation, contact damage and egg gate are the fork's exact code —
+// not a paraphrase. armogohma_manual.inc adds the pieces the tool cannot close
+// over (the HIO class is in this TU above; nodeCallBack + reveal anchor + the
+// reveal-morf shim follow the port so they see its statics).
+// ============================================
+// fork file-static arrays the port tool cannot emit (2D/aggregate initialisers),
+// verbatim from d_a_b_gm.cpp — referenced by b_gm_move / daB_GM_Execute below.
+static cXyz target_pos[] = {
+    cXyz(-1350.0f, 0.0f, -1350.0f),
+    cXyz(-1350.0f, 0.0f, 1350.0f),
+    cXyz(1350.0f, 0.0f, -1350.0f),
+    cXyz(1350.0f, 0.0f, 1350.0f),
+};
+static cXyz top_pos_data[] = {
+    cXyz(260.0f, 0.0f, 0.0f),
+    cXyz(280.0f, 0.0f, 0.0f),
+    cXyz(300.0f, 0.0f, 0.0f),
+    cXyz(280.0f, 0.0f, 0.0f),
+};
+static int top_j[] = {
+    0x1B, 0x1F, 0x23, 0x27, 0x2B, 0x2F, 0x33, 0x37, 0x3C, 0x41,
+};
+
+// Bridge: the fork's daB_GM_Execute calls dAlbwEnemyRupees_tryGrantFightVictory
+// on the boss's death; route it to the mod's enemy-rupees victory grant (deduped).
+static void dAlbwEnemyRupees_tryGrantFightVictory(s16 profName) {
+    albw_enemy_rupees_grant_fight_victory(profName);
+}
+
+// ============================================
+// Runtime-resolved bridges for the two actor-create calls in the fork's
+// demo_camera (death cutscene): fopAcM_create (9-arg) + fopAcM_createItemForBoss.
+// These engine functions are NOT link-importable in the mod — the host resolves
+// them by symbol at runtime (the same pattern boss_refinement uses). We macro-
+// rename the port's calls onto these bridges across the #include below so they
+// don't clash with the non-importable global declarations.
+// ============================================
+using ArmoCreate9Fn =
+    fpc_ProcID (*)(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, u32, u8);
+using ArmoCreateItemBossFn =
+    fpc_ProcID (*)(const cXyz*, int, int, const csXyz*, const cXyz*, f32, f32, int, const char*);
+
+fpc_ProcID armo_fopAcM_create(s16 procName, u32 params, const cXyz* pos, int roomNo,
+                              const csXyz* angle, const cXyz* scale, s8 p6, u32 p7 = 0,
+                              u8 p8 = 0xFF) {
+    static ArmoCreate9Fn fn = nullptr;
+    if (fn == nullptr && svc_hook != nullptr) {
+        void* addr = nullptr;
+        if (svc_hook->resolve(mod_ctx, ALBT_SYM_FOPACM_CREATE, &addr, nullptr) == MOD_OK)
+            fn = reinterpret_cast<ArmoCreate9Fn>(addr);
+    }
+    return fn != nullptr ? fn(procName, params, pos, roomNo, angle, scale, p6, p7, p8)
+                         : fpcM_ERROR_PROCESS_ID_e;
+}
+
+fpc_ProcID armo_fopAcM_createItemForBoss(const cXyz* pos, int itemNo, int roomNo,
+                                         const csXyz* angle, const cXyz* scale, f32 p5, f32 p6,
+                                         int p7, const char* p8 = nullptr) {
+    static ArmoCreateItemBossFn fn = nullptr;
+    if (fn == nullptr && svc_hook != nullptr) {
+        void* addr = nullptr;
+        if (svc_hook->resolve(mod_ctx, ALBT_SYM_FOPACM_CREATE_ITEM_FOR_BOSS, &addr, nullptr) == MOD_OK)
+            fn = reinterpret_cast<ArmoCreateItemBossFn>(addr);
+    }
+    return fn != nullptr ? fn(pos, itemNo, roomNo, angle, scale, p5, p6, p7, p8)
+                         : fpcM_ERROR_PROCESS_ID_e;
+}
+
+// The reveal fight is the whole point of this TU, so its feature gate is ON
+// (the port keeps every `#if … D_ALBW_ARMO_REVEAL` block). The remaining diag
+// gates are defined 0 inside the generated .inc. The two create calls are
+// macro-renamed onto the runtime bridges above (token-exact: fopAcM_createItem*
+// stays untouched).
+#define D_ALBW_ARMO_REVEAL 1
+#define fopAcM_create armo_fopAcM_create
+#define fopAcM_createItemForBoss armo_fopAcM_createItemForBoss
+#include "armogohma_port.inc"
+#undef fopAcM_create
+#undef fopAcM_createItemForBoss
+#include "armogohma_manual.inc"
 
 DEFINE_HOOK_SYMBOL("daB_GM_Create", int(fopAc_ac_c*), BGmCreate);
 DEFINE_HOOK_SYMBOL("daB_GM_Execute", int(b_gm_class*), BGmExecute);
@@ -170,57 +277,18 @@ void on_bgm_create_post(ModContext*, void* args, void*, void*) {
     }
 }
 
-// fork daB_GM_Execute inserts (action() dispatch for the two added ACTION
-// states + per-frame phase-3 driving). Runs as a pre-hook; the new actions are
-// beyond stock's switch, so vanilla ignores them and we drive them here.
-// ============================================
-// Egg-spam gate (fork d_a_b_gm.cpp b_gm_move trigger replacement). Vanilla lays
-// eggs when getArrowNum() <= 3 so the player can refill by killing babies; in
-// ALBW arrows are never the resource (the meter is), so the count sits <= 3
-// forever and eggs spawn endlessly. b_gm_move is file-static (unhookable), so
-// force the arrow count > 3 across this frame's execute — the vanilla trigger
-// then only fires on the legit statue-batch path (field_0x1ad5 == 2) — and
-// restore it in the post-hook. Applies regardless of Boss Refinement, matching
-// the fork (its refinement path keeps the HP-gated egg system separately).
-// ============================================
-u8   s_savedArrowNum = 0;
-bool s_arrowForced   = false;
-
-HookAction on_bgm_execute_pre(ModContext*, void* args, void*, void*) {
+// Replace the stock daB_GM_Execute wholesale with the fork's verbatim copy
+// (armogohma_port.inc). When Boss Refinement is off, fall through to vanilla so
+// the mod is inert for players who disable it. The fork's Execute is a superset
+// of stock (vanilla ceiling/wall fight + the ALBW reveal/phase-3 path), so the
+// vanilla fight is preserved and the reveal fight is exact.
+HookAction on_bgm_execute_pre(ModContext*, void* args, void* retval, void*) {
     auto* i_this = mods::arg<b_gm_class*>(args, 0);
-    if (i_this == nullptr) {
+    if (i_this == nullptr || !dAlbwBossRefinement_isEnabled()) {
         return HOOK_CONTINUE;
     }
-    s_savedArrowNum = dComIfGs_getArrowNum();
-    s_arrowForced = false;
-    if (s_savedArrowNum <= 3) {
-        dComIfGs_setArrowNum(4);
-        s_arrowForced = true;
-    }
-    if (!dAlbwBossRefinement_isEnabled()) {
-        return HOOK_CONTINUE;
-    }
-    // Reproduce damage_check's ALBW routing (trigger + drain) before vanilla runs.
-    albw_armo_damage_route(i_this);
-    // Drive the two added actions (vanilla's switch ignores 12/13).
-    if (i_this->mAction == ACTION_PHASE3) {
-        b_gm_phase3(i_this);
-    } else if (i_this->mAction == ACTION_PURSUIT_TEST) {
-        b_gm_pursuit_test(i_this);
-    }
-    return HOOK_CONTINUE;
-}
-
-void on_bgm_execute_post(ModContext*, void* args, void*, void*) {
-    if (s_arrowForced) {
-        dComIfGs_setArrowNum(s_savedArrowNum);
-        s_arrowForced = false;
-    }
-    // Reproduce the fork's daB_GM_Execute reveal additions (phase-3 eye/leg contact
-    // hurt + any-damage eye + reveal lid drive) — stock Execute just ran without them.
-    if (dAlbwBossRefinement_isEnabled()) {
-        albw_armo_apply_reveal_execute(mods::arg<b_gm_class*>(args, 0));
-    }
+    *static_cast<int*>(retval) = daB_GM_Execute(i_this);  // the ported fork copy
+    return HOOK_SKIP_ORIGINAL;
 }
 
 void on_bgm_delete_post(ModContext*, void* args, void*, void*) {
@@ -243,10 +311,8 @@ bool install(ModError* error, const char* name, ModResult r) {
 ModResult albw_armogohma_init(ModError* error) {
     if (!install(error, "BGmCreateReveal",
                  mods::hook_add_post<BGmCreate>(svc_hook, on_bgm_create_post)) ||
-        !install(error, "BGmExecutePhase3",
+        !install(error, "BGmExecuteReplace",
                  mods::hook_add_pre<BGmExecute>(svc_hook, on_bgm_execute_pre)) ||
-        !install(error, "BGmExecuteEggGate",
-                 mods::hook_add_post<BGmExecute>(svc_hook, on_bgm_execute_post)) ||
         !install(error, "BGmDeleteReveal",
                  mods::hook_add_post<BGmDelete>(svc_hook, on_bgm_delete_post)))
     {

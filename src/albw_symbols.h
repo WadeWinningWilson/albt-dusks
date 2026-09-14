@@ -61,6 +61,8 @@
              "_Z11cc_at_checkP10fopAc_ac_cP11dCcU_AtInfo")
 // fopAcM_create(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, u32, u8)
 #define ALBT_SYM_FOPACM_CREATE                                                                         ALBT_SYM("?fopAcM_create@@YAIFIPEBUcXyz@@HPEBVcsXyz@@0CIE@Z",                                                "_Z13fopAcM_createsjPK4cXyziPK5csXyzS1_ajh")
+// fopAcM_createItemForBoss(const cXyz*, int, int, const csXyz*, const cXyz*, f32, f32, int, const char*)
+#define ALBT_SYM_FOPACM_CREATE_ITEM_FOR_BOSS                                                           ALBT_SYM("?fopAcM_createItemForBoss@@YAIPEBUcXyz@@HHPEBVcsXyz@@0MMHPEBD@Z",                                  "_Z24fopAcM_createItemForBossPK4cXyziiPK5csXyzS1_ffiPKc")
 
 // dComIfG_resLoad(request_of_phase_process_class*, const char*)
 #define ALBT_SYM_RES_LOAD                                                                              ALBT_SYM("?dComIfG_resLoad@@YAHPEAUrequest_of_phase_process_class@@PEBD@Z",                                  "_Z15dComIfG_resLoadP30request_of_phase_process_classPKc")
