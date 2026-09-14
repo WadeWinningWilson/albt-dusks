@@ -21,6 +21,7 @@
 #include <cstdlib>
 
 #include "d/d_com_inf_game.h"
+#include "d/d_s_play.h"
 #include "d/d_resorce.h"
 #include "d/d_cc_uty.h"
 #include "SSystem/SComponent/c_cc_d.h"
@@ -210,10 +211,15 @@ HookAction on_bgm_execute_pre(ModContext*, void* args, void*, void*) {
     return HOOK_CONTINUE;
 }
 
-void on_bgm_execute_post(ModContext*, void*, void*, void*) {
+void on_bgm_execute_post(ModContext*, void* args, void*, void*) {
     if (s_arrowForced) {
         dComIfGs_setArrowNum(s_savedArrowNum);
         s_arrowForced = false;
+    }
+    // Reproduce the fork's daB_GM_Execute reveal additions (phase-3 eye/leg contact
+    // hurt + any-damage eye + reveal lid drive) — stock Execute just ran without them.
+    if (dAlbwBossRefinement_isEnabled()) {
+        albw_armo_apply_reveal_execute(mods::arg<b_gm_class*>(args, 0));
     }
 }
 

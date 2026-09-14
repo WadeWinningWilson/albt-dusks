@@ -171,3 +171,53 @@ static bool albw_armo_damage_route(b_gm_class* i_this) {
     }
     return false;
 }
+
+// ============================================
+// fork daB_GM_Execute reveal additions (the D_ALBW_ARMO_REVEAL block), reproduced
+// as a POST-Execute body. Three fork behaviors the stock Execute lacks:
+//   (1) phase-3 eye (mCoreSph): widen + accept ANY player weapon (vanilla Tg is a
+//       single narrow rod/bomb bit, so sword/arrows never registered on the eye);
+//       while the DASH anim plays, the open eye also DAMAGES Link (contact hurt),
+//       the VULN stagger drops the At bit so up-close hits there are free.
+//   (2) phase-3 legs (mFootSph): widen + DAMAGE Link in the floor chase.
+//   (3) reveal lid drive (field_0x1ad8): the stretched reveal lids need a deeper
+//       close (-8000) to cover the relocated eye, and the laser keeps the eye
+//       visually open. nodeCallBack reads field_0x1ad8 at draw, so driving it here
+//       (post-Execute) is in time.
+// The member spheres were registered to Ccsp by pointer during stock Execute this
+// frame; their At/Tg/radius are read at end-of-frame CrossAllTg, so setting them
+// here still lands. All gated on s_gmPhase3Active -> the vanilla ceiling/wall fight
+// is untouched. Values verbatim from the fork.
+// ============================================
+static void albw_armo_apply_reveal_execute(b_gm_class* i_this) {
+    if (i_this == NULL || !dAlbwBossRefinement_isEnabled() || !s_gmPhase3Active) {
+        return;
+    }
+    const f32 sph_base_size = l_HIO.check_size * l_HIO.model_size;
+
+    // (1) Eye (core) sphere.
+    i_this->mCoreSph.SetR((JREG_F(11) + 200.0f) * sph_base_size);
+    i_this->mCoreSph.SetTgType(0xd8fbfdff);  // any player damage, not just rod/bomb
+    if (i_this->mAnmID == ANM_GOMA_DASH) {
+        i_this->mCoreSph.SetAtType(AT_TYPE_CSTATUE_SWING);
+        i_this->mCoreSph.SetAtAtp(16);  // ~4 hearts; eye hurts Link while dashing
+        i_this->mCoreSph.OnAtSetBit();
+    } else {
+        i_this->mCoreSph.OffAtSetBit();  // VULN stagger = free hits
+    }
+
+    // (2) Legs (foot spheres): widen + damage Link (~2 hearts) in the floor chase.
+    for (int i = 0; i < 8; i++) {
+        i_this->mFootSph[i].SetR((TREG_F(13) + 90.0f) * sph_base_size);
+        i_this->mFootSph[i].SetAtAtp(8);
+    }
+
+    // (3) Reveal lid drive (reveal-deep close + laser open exception).
+    bool lidOpen = s_gmPhase3EyeOpen || (i_this->mMode == P3_LASER);
+    if (lidOpen) {
+        cLib_addCalcAngleS2(&i_this->field_0x1ad8, 6000, 4, 800);
+    } else {
+        s16 shutTarget = s_gmRevealActive ? (s16)(BREG_S(7) - 8000) : (s16)(BREG_S(7) - 3900);
+        cLib_addCalcAngleS2(&i_this->field_0x1ad8, shutTarget, 1, 800);
+    }
+}
