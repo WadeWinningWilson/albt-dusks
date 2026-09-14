@@ -93,6 +93,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("soulbound_potion", false, &g_soulbound_potion) != MOD_OK ||
         albw_register_bool("ext_status_page", false, &g_ext_status_page) != MOD_OK ||
         albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
+        albw_register_bool("true_albw", false, &g_true_albw) != MOD_OK ||
         albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
         albw_register_int("parry_icons_mode", 0, &g_parry_icons_mode) != MOD_OK ||
