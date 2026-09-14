@@ -160,12 +160,18 @@ DEFINE_HOOK(&daNpc_Post_c::create, PostCreate);
 DEFINE_HOOK(&dMsgObject_c::_draw, MsgObjectDraw);
 
 HookAction on_create_pre(ModContext*, void* args, void*, void*) {
-    // Zero ALBW voice latch before create()'s nested Execute() can read it.
-    // Stock reset() memset ends before field_0x1014 — always garbage for every
-    // Post type. Zero all; getBitSW() is not valid yet in create pre.
+    // Zero BOTH ALBW voice latches before create()'s nested Execute() can read
+    // them. Stock reset() memset ends before field_0x1014, so field_0x1014 AND
+    // field_0x1015 are garbage for every Post type. The fork's create zeros both
+    // (d_a_npc_post.cpp:478-479); the mod previously zeroed only field_0x1014, so
+    // a garbage field_0x1015 (read at Execute d_a_npc_post.cpp:621 `if (field_0x1015)`)
+    // could steer the nested Execute into an unwanted voice/theme branch and crash
+    // — which only surfaced once the postman actually spawned (True ALBW). stock
+    // d_a_npc_post.h declares only field_0x1014, so field_0x1015 is the next byte.
     auto* post = mods::arg<daNpc_Post_c*>(args, 0);
     if (post != nullptr) {
         post->field_0x1014 = 0;
+        (&post->field_0x1014)[1] = 0;  // field_0x1015 (0x1015, undeclared in stock header)
     }
     return HOOK_CONTINUE;
 }
