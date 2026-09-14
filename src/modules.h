@@ -22,6 +22,10 @@ ModResult albw_enemy_rupees_build_panel(UiElementHandle panel, ModError* error);
 ModResult albw_confuse_init(ModError* error);
 ModResult albw_magic_jar_init(ModError* error);
 
+// Enemy-death rupee "+n" HUD popup (rupee_popup.cpp, full fork port).
+ModResult albw_rupee_popup_init(ModError* error);
+void albw_rupee_popup_on_grant(unsigned short amount);
+
 // Public bridge: grant the one-time boss-defeat rupee reward for profName (deduped).
 // Used by the armogohma whole-function port, which reproduces the fork's
 // dAlbwEnemyRupees_tryGrantFightVictory call on the boss's death.

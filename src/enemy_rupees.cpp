@@ -29,9 +29,6 @@ namespace {
 constexpr u16 kNormalPoeRupees = 20;
 constexpr u16 kImpPoeRupees = 100;
 constexpr int kGrantedKillIdCap = 64;
-constexpr s16 kPopupFrames = 120;
-constexpr s16 kPopupFadeFrames = 15;
-constexpr int kPopupMaxDigits = 4;
 
 s16 sVictoryGranted[32];
 int sVictoryGrantedCount = 0;
@@ -39,15 +36,12 @@ u32 sGrantedKillActorIds[kGrantedKillIdCap];
 int sGrantedKillIdCount = 0;
 int sGrantedKillEvictIdx = 0;
 
-u16 sPopupAmount = 0;
-s16 sPopupFramesLeft = 0;
-J2DPicture* sPlusPic = NULL;
-J2DPicture* sDigitPic[10] = {};
+// The "+n" HUD popup lives in rupee_popup.cpp (full fork port); grantRupees()
+// arms it via albw_rupee_popup_on_grant().
 
 DEFINE_HOOK(&cc_at_check, CcAtCheck);
 DEFINE_HOOK_SYMBOL("fopAc_Execute", int(void*), AcExecute);
 DEFINE_HOOK(&daObjBm_c::mode_dead_init, BeamosDead);
-DEFINE_HOOK(&dMeter2Draw_c::draw, MeterDraw);
 
 bool grantsEnabled() {
     return albw_cfg_bool(g_kill_rupees, true);
@@ -100,21 +94,13 @@ void markKillGranted(fopAc_ac_c* enemy) {
     sGrantedKillActorIds[sGrantedKillIdCount++] = actorId;
 }
 
-void armPopup(u16 amount) {
-    if (amount == 0) {
-        return;
-    }
-    sPopupAmount = amount;
-    sPopupFramesLeft = kPopupFrames;
-}
-
 void grantRupees(u16 amount) {
     amount = albw_region_scale_rupees(amount);
     if (amount == 0) {
         return;
     }
     g_dComIfG_gameInfo.play.setItemRupeeCount(static_cast<s32>(amount));
-    armPopup(amount);
+    albw_rupee_popup_on_grant(amount);  // arm the "+n" HUD popup (rupee_popup.cpp)
 }
 
 bool isBulblinKingSpawn(fopAc_ac_c* enemy) {
@@ -436,131 +422,6 @@ void tryGrantFightVictory(s16 profName) {
     grantRupees(amount);
 }
 
-bool ensurePics() {
-    if (sPlusPic != NULL) {
-        return true;
-    }
-
-    JKRArchive* arc = g_dComIfG_gameInfo.play.getMain2DArchive();
-    if (arc == NULL) {
-        return false;
-    }
-
-    for (int i = 0; i < 10; i++) {
-        if (sDigitPic[i] != NULL) {
-            continue;
-        }
-        ResTIMG* timg = static_cast<ResTIMG*>(arc->getResource('TIMG', dMeter2Info_getNumberTextureName(i)));
-        if (timg == NULL) {
-            return false;
-        }
-        sDigitPic[i] = JKR_NEW J2DPicture(timg);
-        if (sDigitPic[i] == NULL) {
-            return false;
-        }
-    }
-
-    ResTIMG* plusTimg =
-        static_cast<ResTIMG*>(arc->getResource('TIMG', dMeter2Info_getPlusTextureName()));
-    if (plusTimg == NULL) {
-        return false;
-    }
-    sPlusPic = JKR_NEW J2DPicture(plusTimg);
-    return sPlusPic != NULL;
-}
-
-void drawPopup() {
-    if (sPopupFramesLeft <= 0 || !grantsEnabled()) {
-        if (!grantsEnabled()) {
-            sPopupFramesLeft = 0;
-        }
-        return;
-    }
-
-    if (g_dComIfG_gameInfo.play.isPauseFlag() || g_dComIfG_gameInfo.play.isHeapLockFlag() != 0) {
-        return;
-    }
-
-    if (!ensurePics()) {
-        return;
-    }
-
-    J2DGrafContext* grafCtx = g_dComIfG_gameInfo.play.getCurrentGrafPort();
-    if (grafCtx == NULL) {
-        return;
-    }
-
-    sPopupFramesLeft--;
-
-    f32 fade = 1.0f;
-    if (sPopupFramesLeft < kPopupFadeFrames) {
-        fade = (f32)sPopupFramesLeft / (f32)kPopupFadeFrames;
-    }
-    const u8 alpha = (u8)(255.0f * fade);
-    if (alpha == 0) {
-        return;
-    }
-
-    grafCtx->setup2D();
-
-    const f32 digitW = g_drawHIO.mRupeeCountScale * 32.0f;
-    const f32 digitH = digitW;
-    const f32 advance = digitW * 0.6f;
-
-    // ============================================
-    // NEW CODE - ALBW Port
-    // Anchor to the LIVE rupee pane, not the fixed HIO position - port of the
-    // fork's dMeter2Draw_c::getRupeeAnchorCenter (d_meter2_draw.cpp). The wallet
-    // moves (the LoP layout relocates it to the top-right corner), and a popup
-    // pinned to g_drawHIO.mRupeePos* would be left behind at the vanilla spot.
-    // HIO stays the fallback, exactly as the fork does it.
-    // ============================================
-    f32 anchorX = g_drawHIO.mRupeePosX;
-    f32 anchorY = g_drawHIO.mRupeePosY;
-    {
-        // g_meter2_info, not dMeter2Info_getMeterClass(): the accessor is
-        // DUSK_NOINLINE and absent from the Windows stub (same rule as
-        // albw_game.h). The data global is exported.
-        dMeter2_c* meter = g_meter2_info.getMeterClass();
-        dMeter2Draw_c* meterDraw = (meter != NULL) ? meter->getMeterDrawPtr() : NULL;
-        if (meterDraw != NULL && meterDraw->mpRupeeParent[0] != NULL &&
-            meterDraw->mpRupeeParent[0]->getPanePtr() != NULL)
-        {
-            const Vec c = meterDraw->mpRupeeParent[0]->getGlobalVtxCenter(false, 0);
-            anchorX = c.x;
-            anchorY = c.y;
-        }
-    }
-    // ============================================
-    // NEW CODE ENDS HERE
-    // ============================================
-
-    f32 posX = anchorX - advance * 6.5f;
-    const f32 centerY = anchorY;
-
-    int digits[kPopupMaxDigits];
-    int digitCount = 0;
-    u16 value = sPopupAmount;
-    do {
-        digits[digitCount++] = value % 10;
-        value /= 10;
-    } while (value != 0 && digitCount < kPopupMaxDigits);
-
-    const f32 plusSize = digitH * 0.8f;
-    sPlusPic->setAlpha(alpha);
-    sPlusPic->draw(posX - plusSize * 0.5f, centerY - plusSize * 0.5f, plusSize, plusSize, false,
-                   false, false);
-    posX += advance;
-
-    for (int i = digitCount - 1; i >= 0; i--) {
-        J2DPicture* pic = sDigitPic[digits[i]];
-        pic->setAlpha(alpha);
-        pic->draw(posX - digitW * 0.5f, centerY - digitH * 0.5f, digitW, digitH, false, false,
-                  false);
-        posX += advance;
-    }
-}
-
 void on_cc_at_post(ModContext*, void* args, void*, void*) {
     fopAc_ac_c* enemy = mods::arg<fopAc_ac_c*>(args, 0);
     dCcU_AtInfo* info = mods::arg<dCcU_AtInfo*>(args, 1);
@@ -588,10 +449,6 @@ void on_beamos_post(ModContext*, void*, void*, void*) {
         return;
     }
     grantRupees(5);
-}
-
-void on_meter_draw_post(ModContext*, void*, void*, void*) {
-    drawPopup();
 }
 
 }  // namespace
@@ -623,15 +480,11 @@ ModResult albw_enemy_rupees_init(ModError*) {
         svc_log->error(mod_ctx, "failed to hook Beamos mode_dead_init");
         return MOD_ERROR;
     }
-    if (mods::hook::add_post<MeterDraw>(on_meter_draw_post) != MOD_OK) {
-        svc_log->warn(mod_ctx, "meter draw hook unavailable for rupee popup");
-    }
     return MOD_OK;
 }
 
 ModResult albw_enemy_rupees_shutdown(ModError*) {
     sVictoryGrantedCount = 0;
     sGrantedKillIdCount = 0;
-    sPopupFramesLeft = 0;
     return MOD_OK;
 }

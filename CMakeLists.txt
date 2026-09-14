@@ -31,6 +31,7 @@ add_mod(albt_full_plugin
             src/lockout.cpp
             src/confuse.cpp
             src/magic_jar.cpp
+            src/rupee_popup.cpp
             src/shield.cpp
             src/shield_adapt.cpp
             src/shield_game.cpp
