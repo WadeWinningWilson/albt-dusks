@@ -172,8 +172,19 @@ void stripRentalItemOnDeath(u8 itemNo) {
 // ============================================
 bool albw_rental_player_owns_item(u8 itemNo) { return playerOwnsRentalItem(itemNo); }
 
+// ============================================
+// True ALBW (fork dusk::truetest::isTrueAlbwShopEnabled): when on, the Postman
+// rental shop is unlocked at ANY point and its full catalog is available, without
+// the story gate (Ravio's-shop style). The fork keys this off a game setting; the
+// mod keys it off the True ALBW config toggle.
+// ============================================
+bool albw_is_true_albw_enabled() {
+    return albw_cfg_bool(g_true_albw, false);
+}
+
 bool albw_rental_postman_unlocked() {
-    return albw_game::is_event_bit(kPostmanUnlockFlag);
+    // True ALBW bypasses the F_0625 (Talo-rescued) story gate.
+    return albw_is_true_albw_enabled() || albw_game::is_event_bit(kPostmanUnlockFlag);
 }
 
 void albw_rental_on_eligible(u8 itemNo) {

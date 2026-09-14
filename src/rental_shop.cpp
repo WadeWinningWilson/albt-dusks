@@ -260,6 +260,12 @@ bool clothesEligible(const ALBWRentalEntry& e) {
 }
 
 bool entryEligible(const ALBWRentalEntry& e) {
+    // True ALBW: the full catalog is available from the start (fork entryEligible
+    // True ALBW bypass). The mod has no alwaysGated rows (the Deity/Magic armor
+    // rows were retired), so every entry becomes eligible.
+    if (albw_is_true_albw_enabled()) {
+        return true;
+    }
     if (e.isClothes) {
         return clothesEligible(e);
     }

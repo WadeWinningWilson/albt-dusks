@@ -34,6 +34,7 @@ ConfigVarHandle g_parry_master = 0;
 ConfigVarHandle g_boss_hp_bars = 0;
 ConfigVarHandle g_boss_refinement = 0;
 ConfigVarHandle g_postman_rental = 0;
+ConfigVarHandle g_true_albw = 0;
 ConfigVarHandle g_master_quest = 0;
 ConfigVarHandle g_shade_refuge = 0;
 ConfigVarHandle g_outfit_stats = 0;

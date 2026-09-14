@@ -188,6 +188,10 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
         albw_ui_add_toggle(left, "Postman death strip",
                            "After Talo rescue, death strips ALBW items for rental recovery.",
                            g_postman_rental) != MOD_OK ||
+        albw_ui_add_toggle(left, "True ALBW",
+                           "Postman rental shop unlocked at any point, full catalog available "
+                           "from the start (bypasses the Talo-rescue story gate).",
+                           g_true_albw) != MOD_OK ||
         albw_ui_add_toggle(left, "Master Quest hearts",
                            "MQ heart tiers + stamina meter bonus (shop rows when rental ships).",
                            g_master_quest) != MOD_OK)
