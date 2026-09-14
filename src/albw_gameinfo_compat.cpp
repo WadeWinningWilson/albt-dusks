@@ -27,6 +27,7 @@
 
 #include "albw_game.h"
 #include "d/d_com_inf_game.h"
+#include "d/d_stage.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_meter2_info.h"
 #include "f_op/f_op_camera_mng.h"
@@ -245,6 +246,42 @@ JPABaseEmitter* dComIfGp_particle_setColor(u16 param_0, const cXyz* i_pos,
     return g_dComIfG_gameInfo.play.getParticle()->setNormal(param_0, i_pos, param_2, param_7,
                                                             param_8, param_6, param_9, param_10,
                                                             param_3, param_4, param_11, param_5);
+}
+
+// ============================================
+// Per-enemy lockout port (enemy_lockout.cpp) deps. DUSK_NOINLINE accessors —
+// bodies from stock d_com_inf_game.cpp (out-of-line #if TARGET_PC branch).
+// ============================================
+// stock d_com_inf_game.cpp:5010
+void dComIfGp_setHitMark(u16 i_hitmark, fopAc_ac_c* param_1, const cXyz* param_2,
+                         const csXyz* param_3, const cXyz* param_4, u32 i_atType) {
+    g_dComIfG_gameInfo.play.getParticle()->setHitMark(i_hitmark, param_1, param_2, param_3, param_4,
+                                                      i_atType);
+}
+// stock d_com_inf_game.cpp:5998
+u32 dComIfGp_checkPlayerStatus0(int param_0, u32 flag) {
+    return g_dComIfG_gameInfo.play.checkPlayerStatus(param_0, 0, flag);
+}
+
+// ============================================
+// Region-multiplier port (region_port.cpp) deps — the fork's region resolve uses
+// the dComIfGp_* free-function accessors. Bodies from stock d_com_inf_game.cpp.
+// ============================================
+// stock :4193
+const char* dComIfGp_getStartStageName() {
+    return g_dComIfG_gameInfo.play.getStartStageName();
+}
+// stock :4201
+s8 dComIfGp_getStartStageRoomNo() {
+    return g_dComIfG_gameInfo.play.getStartStageRoomNo();
+}
+// stock :4305
+stage_stag_info_class* dComIfGp_getStageStagInfo() {
+    return g_dComIfG_gameInfo.play.getStage().getStagInfo();
+}
+// stock :4333
+int dComIfGp_roomControl_getStayNo() {
+    return dStage_roomControl_c::getStayNo();
 }
 
 #endif  // TARGET_PC

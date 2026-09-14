@@ -12,6 +12,7 @@
 #include "focused_arts.h"
 #include "flurry_rush.h"
 #include "hold_a_crawl.h"
+#include "enemy_lockout.h"
 #include "lockout.h"
 #include "mail.h"
 #include "meter.h"
@@ -58,6 +59,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_int("hp_midboss", 1, &g_hp_midboss) != MOD_OK ||
         albw_register_int("hp_boss", 1, &g_hp_boss) != MOD_OK ||
         albw_register_int("hp_final", 1, &g_hp_final) != MOD_OK ||
+        albw_register_int("link_damage_decrease", 1, &g_link_damage_decrease) != MOD_OK ||
         albw_register_bool("region_hp", false, &g_region_hp) != MOD_OK ||
         albw_register_bool("region_damage", false, &g_region_damage) != MOD_OK ||
         albw_register_bool("region_mult", true, &g_region_mult) != MOD_OK ||
@@ -81,6 +83,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("postman_mail_test", false, &g_postman_mail_test) != MOD_OK ||
         albw_register_bool("parry_master", false, &g_parry_master) != MOD_OK ||
         albw_register_bool("boss_hp_bars", false, &g_boss_hp_bars) != MOD_OK ||
+        albw_register_bool("enemy_hp_bars", false, &g_enemy_hp_bars) != MOD_OK ||
         albw_register_bool("boss_refinement", false, &g_boss_refinement) != MOD_OK ||
         albw_register_bool("shade_refuge", false, &g_shade_refuge) != MOD_OK ||
         albw_register_bool("outfit_stats", false, &g_outfit_stats) != MOD_OK ||
@@ -164,6 +167,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     register_gameplay_settings();
 
     if (albw_meter_init(error) != MOD_OK || albw_lockout_init(error) != MOD_OK ||
+        albw_enemy_lockout_init(error) != MOD_OK ||
         albw_magic_jar_init(error) != MOD_OK ||
         albw_rupee_popup_init(error) != MOD_OK ||
         albw_tear_particles_init(error) != MOD_OK ||

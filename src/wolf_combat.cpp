@@ -1138,6 +1138,13 @@ void dAlbwWolfStun_applyHold(fopAc_ac_c* i_enemy) {
     tryApplyStun(i_enemy, 0x7FFF, true);
 }
 
+// Ungated fixed-duration freeze for non-wolf callers (lockout slingshot): same
+// pose-freeze + hittable-collider bridge as Midna stun, on an explicit timer.
+// Independent of the Wolf Link Combat toggle (update/bridge always run).
+void dAlbwWolfStun_applyTimed(fopAc_ac_c* i_enemy, s16 i_frames) {
+    tryApplyStun(i_enemy, i_frames, false);
+}
+
 void dAlbwWolfStun_thaw(fopAc_ac_c* i_enemy) {
     if (i_enemy == NULL) {
         return;

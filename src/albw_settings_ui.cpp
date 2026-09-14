@@ -181,6 +181,9 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
         albw_ui_add_toggle(left, "Boss HP bars",
                            "LoP-style name + bar for lock-on dungeon bosses.",
                            g_boss_hp_bars) != MOD_OK ||
+        albw_ui_add_toggle(left, "Enemy HP bars",
+                           "Floating bar + current/max numbers over each regular enemy's head.",
+                           g_enemy_hp_bars) != MOD_OK ||
         albw_ui_add_toggle(left, "Boss Refinement",
                            "Any-sword boss gates, Armogohma pacing brain, Fyrus/Morpheel helpers. "
                            "Arena scripts land in follow-up passes.",

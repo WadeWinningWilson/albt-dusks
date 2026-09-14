@@ -251,3 +251,7 @@ void albw_boss_hp_hud_draw() {
     sName->setGradColor(kNameColorBot);
     sName->draw(barX, nameY, barW, HBIND_CENTER);
 }
+
+bool albw_boss_hp_is_boss_profile(short profName) {
+    return isBossProfile(static_cast<s16>(profName));
+}

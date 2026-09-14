@@ -25,6 +25,14 @@ ModResult albw_magic_jar_init(ModError* error);
 ModResult albw_rupee_popup_init(ModError* error);
 void albw_rupee_popup_on_grant(unsigned short amount);
 
+// Shared digit rendering (rupee-counter number textures). Caller sets up the 2D
+// graf/ortho context first. Draws `value` left-aligned at leftX with vertical
+// center cy, each glyph digitH tall, at the given alpha; returns total width.
+// The width helper measures without drawing (for centering).
+float albw_rupee_popup_uint_width(unsigned value, float digitH);
+float albw_rupee_popup_draw_uint(unsigned value, float leftX, float cy, float digitH,
+                                 unsigned char alpha);
+
 // Supplemental Tear-of-Light scene particles (tear_particles.cpp): loads the
 // Pscene011 tear FX archive + slot-2 getRM_ID fallback so the recovery orb is
 // visible in stages whose own scene archive lacks the tear FX.

@@ -294,6 +294,54 @@ ModResult albw_rupee_popup_init(ModError*) {
     return MOD_OK;
 }
 
+// ---- Shared digit rendering (reused by the per-enemy HP bar's "n/t" label) ----
+// Digit textures are square (im_font_number_32_32); advance 0.6*height packs them
+// like the live counter. Width extent = height + advance*(digits-1).
+namespace {
+int uintDigitCount(u32 value) {
+    int n = 0;
+    u32 v = value;
+    do {
+        n++;
+        v /= 10;
+    } while (v != 0 && n < 10);
+    return n;
+}
+}  // namespace
+
+float albw_rupee_popup_uint_width(unsigned value, float digitH) {
+    const float advance = digitH * 0.6f;
+    return digitH + advance * static_cast<float>(uintDigitCount(value) - 1);
+}
+
+float albw_rupee_popup_draw_uint(unsigned value, float leftX, float cy, float digitH,
+                                 unsigned char alpha) {
+    if (digitH <= 0.0f || !ensurePics()) {
+        return 0.0f;
+    }
+    const float digitW = digitH;
+    const float advance = digitH * 0.6f;
+
+    int digits[10];
+    int count = 0;
+    u32 v = value;
+    do {
+        digits[count++] = static_cast<int>(v % 10);
+        v /= 10;
+    } while (v != 0 && count < 10);
+
+    float posX = leftX + digitW * 0.5f;
+    for (int i = count - 1; i >= 0; i--) {
+        J2DPicture* pic = sDigitPic[digits[i]];
+        if (pic != NULL) {
+            pic->setAlpha(alpha);
+            pic->draw(posX - digitW * 0.5f, cy - digitH * 0.5f, digitW, digitH, false, false, false);
+        }
+        posX += advance;
+    }
+    return digitW + advance * static_cast<float>(count - 1);
+}
+
 #endif  // TARGET_PC
 
 // ============================================

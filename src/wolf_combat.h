@@ -69,6 +69,7 @@ bool        dAlbwWolfArts_tryPurchaseChargeUpgrade();
 bool dAlbwWolfStun_isTwilightEnemy(s16 i_name);
 void dAlbwWolfStun_apply(fopAc_ac_c* i_enemy);
 void dAlbwWolfStun_applyHold(fopAc_ac_c* i_enemy);
+void dAlbwWolfStun_applyTimed(fopAc_ac_c* i_enemy, s16 i_frames);
 void dAlbwWolfStun_thaw(fopAc_ac_c* i_enemy);
 void dAlbwWolfStun_update();
 bool dAlbwWolfStun_isStunned(fopAc_ac_c* i_enemy);

@@ -29,6 +29,8 @@ add_mod(albt_full_plugin
             src/config_vars.cpp
             src/meter.cpp
             src/lockout.cpp
+            src/enemy_lockout.cpp
+            src/enemy_hp_bars.cpp
             src/magic_jar.cpp
             src/rupee_popup.cpp
             src/tear_particles.cpp
@@ -37,8 +39,7 @@ add_mod(albt_full_plugin
             src/shield_game.cpp
             src/shield_hooks.cpp
             src/stick_cycle.cpp
-            src/region_table.cpp
-            src/region_hp.cpp
+            src/region_port.cpp
             src/soul_of_light.cpp
             src/enemy_rupees.cpp
             src/wolf_combat.cpp

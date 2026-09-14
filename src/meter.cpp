@@ -1062,6 +1062,15 @@ static s16 g_make_arrow_count_backup = 0;
 static bool g_make_arrow_count_patched = false;
 static bool g_throw_boomerang_pending = false;
 
+// Slingshot ammo bypass (fork checkUpperItemActionBow @ TARGET_PC: the pachinko
+// fires makeSlingStone() on dMeter2_canALBWSling() [== true], never gating on
+// getPachinkoNum() seeds, and consumes meter via the fire flag instead of a seed
+// decrement). Stock still gates on seeds, so we fake one seed across the call and
+// undo any decrement afterward — the meter cost rides the existing g_flag_sling.
+static u8 g_pachinko_num_backup = 0;
+static s16 g_pachinko_count_backup = 0;
+static bool g_pachinko_patched = false;
+
 HookAction on_make_arrow_pre(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return HOOK_CONTINUE;
@@ -1168,6 +1177,7 @@ HookAction on_bow_pre(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     g_bow_had_arrow = false;
     g_bow_was_bomb = 0;
+    g_pachinko_patched = false;
     if (link == nullptr) {
         return HOOK_CONTINUE;
     }
@@ -1176,6 +1186,17 @@ HookAction on_bow_pre(ModContext*, void* args, void*, void*) {
         g_bow_had_arrow = true;
         auto* arrow = static_cast<daArrow_c*>(item);
         g_bow_was_bomb = arrow->checkBombArrow() ? 1 : 0;
+    }
+    // Slingshot fires off the meter system, not seed ammo (fork bypass). Fake a
+    // seed so the stock getPachinkoNum() gate lets makeSlingStone() run.
+    if (meter_enabled() && link->mEquipItem == dItemNo_PACHINKO_e) {
+        auto& rec = g_dComIfG_gameInfo.info.getPlayer().getItemRecord();
+        if (rec.getPachinkoNum() == 0) {
+            g_pachinko_num_backup = rec.getPachinkoNum();
+            g_pachinko_count_backup = g_dComIfG_gameInfo.play.getItemPachinkoNumCount();
+            rec.setPachinkoNum(1);
+            g_pachinko_patched = true;
+        }
     }
     return HOOK_CONTINUE;
 }
@@ -1187,6 +1208,17 @@ void on_bow_post(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) {
         return;
+    }
+
+    // Undo the faked seed: restore the save count and cancel any seed decrement the
+    // stock fire path applied (the fork consumes meter via g_flag_sling, not seeds).
+    if (g_pachinko_patched) {
+        auto& rec = g_dComIfG_gameInfo.info.getPlayer().getItemRecord();
+        rec.setPachinkoNum(g_pachinko_num_backup);
+        const s16 now = g_dComIfG_gameInfo.play.getItemPachinkoNumCount();
+        g_dComIfG_gameInfo.play.setItemPachinkoNumCount(
+            static_cast<s16>(g_pachinko_count_backup - now));
+        g_pachinko_patched = false;
     }
 
     // Lockout shot gate: strip nocked arrow when session shots are spent.

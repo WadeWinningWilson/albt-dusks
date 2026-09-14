@@ -231,7 +231,14 @@ HookAction on_cc_at_check_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
     if (fopAcM_GetGroup(enemy) == fopAc_ENEMY_e && info->mpCollider->ChkAtType(AT_TYPE_SLINGSHOT)) {
-        dAlbwLockout_onSlingshotHit(enemy);
+        dAlbwLockout_onSlingshotHit(enemy);  // tags the enemy for isRangedOpened queries
+        // A raw pause (the port's tag) skips the enemy's whole execute — including its
+        // own damage_check — so a paused enemy can't take the follow-up damage that is
+        // the whole point of "opening" it. Route through the wolf-stun seam instead:
+        // it freezes the enemy mid-pose AND re-registers its hurt collider each frame
+        // via the draw-phase bridge, so Link's hits still resolve through cc_at_check.
+        // Same shared mechanism Midna stun uses; one seam for every enemy.
+        dAlbwWolfStun_applyTimed(enemy, kLockoutSlingshotDebuffFrames);
     }
     return HOOK_CONTINUE;
 }

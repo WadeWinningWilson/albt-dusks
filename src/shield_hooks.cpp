@@ -25,6 +25,7 @@
 #include "shield_game.h"
 #include "shield_mod.h"
 #include "boss_hp_hud.h"
+#include "enemy_hp_bars.h"
 #include "parry_master.h"
 #include "sumo_test.h"
 #include "d/d_save.h"
@@ -423,6 +424,7 @@ void on_meter_draw_post(ModContext*, void*, void*, void*) {
         dShield_drawBashCharges();
     }
     albw_boss_hp_hud_draw();
+    albw_enemy_hp_bars_draw();
 }
 
 // ============================================

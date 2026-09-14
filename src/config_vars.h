@@ -34,6 +34,8 @@ extern ConfigVarHandle g_postman_mail_test;
 
 extern ConfigVarHandle g_parry_master;
 extern ConfigVarHandle g_boss_hp_bars;
+extern ConfigVarHandle g_enemy_hp_bars;
+extern ConfigVarHandle g_link_damage_decrease;
 extern ConfigVarHandle g_boss_refinement;
 extern ConfigVarHandle g_postman_rental;
 extern ConfigVarHandle g_true_albw;

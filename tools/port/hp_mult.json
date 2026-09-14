@@ -1,0 +1,18 @@
+{
+  "fork": "../dusklight/src/d/d_albw_hp_mult.cpp",
+  "stock": "tools/port/_empty_stock.cpp",
+  "out": "build/port/hp_mult.inc",
+  "port_funcs": ["dAlbwHP_getCategory", "dAlbwHP_getTrueHpMult", "dAlbwHP_scaleHpValue",
+                 "dAlbwHP_tryApplyTrueMaxHp", "dAlbwHP_onActorDelete", "dAlbwHP_applyMult",
+                 "dAlbwHP_getRawMult"],
+  "diag_zero": [],
+  "substitutions": [
+    ["const auto& g = dusk::getSettings().game;", ""],
+    ["g.hpMultNormal.getValue()", "albw_cfg_int(g_hp_normal, 1)"],
+    ["g.hpMultMidBoss.getValue()", "albw_cfg_int(g_hp_midboss, 1)"],
+    ["g.hpMultBoss.getValue()", "albw_cfg_int(g_hp_boss, 1)"],
+    ["g.hpMultFinalBoss.getValue()", "albw_cfg_int(g_hp_final, 1)"],
+    ["dusk::getSettings().game.linkDamageDecreaseMult.getValue()", "albw_cfg_int(g_link_damage_decrease, 1)"]
+  ],
+  "engine_symbols": ["fopAc_ac_c", "daB_TN_c", "fpc_ProcID", "cXyz"]
+}

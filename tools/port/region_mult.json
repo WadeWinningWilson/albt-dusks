@@ -1,0 +1,13 @@
+{
+  "fork": "../dusklight/src/d/d_albw_region_mult.cpp",
+  "stock": "tools/port/_empty_stock.cpp",
+  "out": "build/port/region_mult.inc",
+  "diag_zero": [],
+  "substitutions": [
+    ["dusk::getSettings().game.regionMult.getValue()", "albw_cfg_bool(g_region_mult, true)"],
+    ["dusk::getSettings().game.regionDamage.getValue()", "albw_cfg_bool(g_region_damage, false)"],
+    ["dusk::getSettings().game.regionMultHealth.getValue()", "albw_cfg_bool(g_region_hp, false)"],
+    ["dusk::getSettings().game.regionMultRupees.getValue()", "albw_cfg_bool(g_region_mult_rupees, true)"]
+  ],
+  "engine_symbols": ["fopAc_ac_c", "daNbomb_c", "stage_stag_info_class", "cXyz", "fpc_ProcID"]
+}
