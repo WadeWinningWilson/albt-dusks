@@ -29,6 +29,7 @@ add_mod(albt_full_plugin
             src/config_vars.cpp
             src/meter.cpp
             src/lockout.cpp
+            src/confuse.cpp
             src/shield.cpp
             src/shield_adapt.cpp
             src/shield_game.cpp

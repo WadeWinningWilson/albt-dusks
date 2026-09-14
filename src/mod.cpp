@@ -162,6 +162,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     register_gameplay_settings();
 
     if (albw_meter_init(error) != MOD_OK || albw_lockout_init(error) != MOD_OK ||
+        albw_confuse_init(error) != MOD_OK ||
         albw_shield_init(error) != MOD_OK ||
         albw_focused_arts_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
