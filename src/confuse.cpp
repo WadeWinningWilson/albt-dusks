@@ -31,6 +31,8 @@
 #include <os.h>
 
 #include "d/d_com_inf_game.h"
+#include "d/d_cc_uty.h"
+#include "d/d_particle.h"
 #include "SSystem/SComponent/c_math.h"
 #include "f_op/f_op_actor.h"
 #include "f_op/f_op_actor_mng.h"
@@ -56,6 +58,8 @@ namespace {
 constexpr int kConfuseFrames        = 300;              // 10 seconds @ 30fps
 constexpr f32 kRetargetRange2       = 2500.0f * 2500.0f;
 constexpr f32 kConfuseVictimRadius  = 140.0f;           // ball flight-path graze radius
+constexpr int kProvokedFrames       = 300;              // 10s: retaliation window
+constexpr int kProvokedMax          = 8;
 
 struct DomRodConfuseState {
     fpc_ProcID mHostId;
@@ -63,7 +67,18 @@ struct DomRodConfuseState {
     s16        mFrames;
 };
 
+// A confused enemy that damages another enemy "provokes" the victim: for the
+// next 10s the victim retaliates against its attacker (so BOTH enemies fight),
+// via the same rival-target redirect. (fork ProvokedEnemy, d_albw_lockout.cpp)
+struct ProvokedEnemy {
+    fpc_ProcID mVictimId;
+    fpc_ProcID mAttackerId;
+    s16        mFrames;
+};
+
 DomRodConfuseState sConfuse = {fpcM_ERROR_PROCESS_ID_e, fpcM_ERROR_PROCESS_ID_e, 0};
+ProvokedEnemy sProvokedEnemies[kProvokedMax];
+int           sProvokedCount = 0;
 
 // Reentrancy guard: the redirect post-hooks recompute their answer by calling
 // the very primitive they hook, against the rival target. The guard makes that
@@ -267,13 +282,95 @@ fopAc_ac_c* getConfuseTarget(const fopAc_ac_c* i_attacker) {
     return target;
 }
 
+// --- ProvokedEnemy retaliation (fork d_albw_lockout.cpp) ----------------------
+ProvokedEnemy* findProvokedEntry(fpc_ProcID i_victimId) {
+    for (int i = 0; i < sProvokedCount; i++) {
+        if (sProvokedEnemies[i].mVictimId == i_victimId) {
+            return &sProvokedEnemies[i];
+        }
+    }
+    return NULL;
+}
+
+void clearAllProvoked() {
+    sProvokedCount = 0;
+}
+
+bool isProvoked(const fopAc_ac_c* i_victim) {
+    return i_victim != NULL && meterLocked() &&
+           findProvokedEntry(i_victim->id) != NULL;
+}
+
+fopAc_ac_c* getProvokeSource(const fopAc_ac_c* i_victim) {
+    if (!isProvoked(i_victim)) {
+        return NULL;
+    }
+    const ProvokedEnemy* entry = findProvokedEntry(i_victim->id);
+    fopAc_ac_c* attacker = fopAcM_SearchByID(entry->mAttackerId);
+    if (attacker == NULL || fopAcM_GetGroup(attacker) != fopAc_ENEMY_e) {
+        return NULL;
+    }
+    return attacker;
+}
+
+// The unified "who does this enemy attack": the confuse host attacks its target;
+// a provoked victim retaliates against its attacker. (fork getRivalTarget)
+fopAc_ac_c* getRivalTarget(const fopAc_ac_c* i_actor) {
+    if (isConfused(i_actor)) {
+        return getConfuseTarget(i_actor);
+    }
+    return getProvokeSource(i_actor);
+}
+
+// Register a friendly-fire hit: the victim is provoked to fight the attacker for
+// kProvokedFrames. (fork dAlbwLockout_onConfuseFriendlyFireHit)
+void addProvoke(fopAc_ac_c* i_victim, fopAc_ac_c* i_attacker) {
+    if (!meterLocked() || i_victim == NULL || i_attacker == NULL ||
+        i_victim == i_attacker || !isConfuseEligibleActor(i_victim) ||
+        !isConfuseEligibleActor(i_attacker) || !isConfused(i_attacker) ||
+        isConfused(i_victim)) {
+        return;
+    }
+    ProvokedEnemy* existing = findProvokedEntry(i_victim->id);
+    if (existing != NULL) {
+        existing->mAttackerId = i_attacker->id;
+        existing->mFrames     = static_cast<s16>(kProvokedFrames);
+        return;
+    }
+    if (sProvokedCount >= kProvokedMax) {
+        return;
+    }
+    ProvokedEnemy& entry = sProvokedEnemies[sProvokedCount++];
+    entry.mVictimId   = i_victim->id;
+    entry.mAttackerId = i_attacker->id;
+    entry.mFrames     = static_cast<s16>(kProvokedFrames);
+}
+
+void tickProvokedEnemies() {
+    int writeIdx = 0;
+    for (int i = 0; i < sProvokedCount; i++) {
+        ProvokedEnemy& entry = sProvokedEnemies[i];
+        entry.mFrames--;
+        fopAc_ac_c* victim = fopAcM_SearchByID(entry.mVictimId);
+        fopAc_ac_c* attacker = fopAcM_SearchByID(entry.mAttackerId);
+        if (entry.mFrames > 0 && victim != NULL && attacker != NULL &&
+            fopAcM_GetGroup(victim) == fopAc_ENEMY_e &&
+            fopAcM_GetGroup(attacker) == fopAc_ENEMY_e &&
+            !(sConfuse.mFrames > 0 && entry.mVictimId == sConfuse.mHostId))
+        {
+            sProvokedEnemies[writeIdx++] = entry;
+        }
+    }
+    sProvokedCount = writeIdx;
+}
+
 // A search-primitive call is a "confuse redirect candidate" when the querying
 // actor (A) is the confused host and it is asking about the player (B). Returns
 // the rival target to answer against instead, or NULL to leave the call alone.
 fopAc_ac_c* redirectTargetFor(const fopAc_ac_c* i_a, const fopAc_ac_c* i_b) {
-    // Fast-out: these primitives are extremely hot. When no confuse is live the
-    // whole check collapses to one global read (mFrames), before any call.
-    if (sConfuse.mFrames <= 0) {
+    // Fast-out: these primitives are extremely hot. When nothing is confused or
+    // provoked the whole check collapses to two global reads, before any call.
+    if (sConfuse.mFrames <= 0 && sProvokedCount == 0) {
         return NULL;
     }
     if (s_inRedirect || i_a == NULL || i_b == NULL) {
@@ -282,10 +379,8 @@ fopAc_ac_c* redirectTargetFor(const fopAc_ac_c* i_a, const fopAc_ac_c* i_b) {
     if (i_b != dComIfGp_getPlayer(0)) {
         return NULL;  // only the "aim at / range to Link" queries are bent
     }
-    if (!isConfused(i_a)) {
-        return NULL;
-    }
-    return getConfuseTarget(i_a);
+    // Confuse host -> its target; provoked victim -> its attacker.
+    return getRivalTarget(i_a);
 }
 
 // ============================================
@@ -322,15 +417,49 @@ void on_crod_execute_post(ModContext*, void* args, void*, void*) {
 DEFINE_HOOK(&daAlink_c::execute, ConfuseTick);
 
 void on_confuse_tick_post(ModContext*, void*, void*, void*) {
-    if (sConfuse.mFrames <= 0) {
+    if (sConfuse.mFrames > 0) {
+        sConfuse.mFrames--;
+        if (sConfuse.mFrames <= 0 || !meterLocked()) {
+            clearConfuse();
+        } else {
+            refreshConfuseTarget();
+        }
+    }
+    // Provoke retaliation outlives the confuse window; tick it independently and
+    // drop it all when the meter unlocks (mirrors the fork's lockout update).
+    if (!meterLocked()) {
+        clearAllProvoked();
+    } else if (sProvokedCount > 0) {
+        tickProvokedEnemies();
+    }
+}
+
+// ============================================
+// Friendly-fire credit — cc_at_check post-hook. Stock cc_at_check already applied
+// the damage (i_enemy->health -= mAttackPower) for the enemy-vs-enemy hit; when
+// the attacker is the confused host, add the hit spark and provoke the victim so
+// it fights back. (fork d_cc_uty.cpp confuse block + onConfuseFriendlyFireHit)
+// ============================================
+DEFINE_HOOK(&cc_at_check, ConfuseCcAt);
+
+void on_confuse_cc_at_post(ModContext*, void* args, void*, void*) {
+    if (!meterLocked()) {
         return;
     }
-    sConfuse.mFrames--;
-    if (sConfuse.mFrames <= 0 || !meterLocked()) {
-        clearConfuse();
-    } else {
-        refreshConfuseTarget();
+    fopAc_ac_c* victim = mods::arg<fopAc_ac_c*>(args, 0);
+    dCcU_AtInfo* info = mods::arg<dCcU_AtInfo*>(args, 1);
+    if (victim == NULL || info == NULL || info->mAttackPower == 0) {
+        return;
     }
+    fopAc_ac_c* attacker = info->mpActor;
+    if (attacker == NULL || fopAcM_GetGroup(victim) != fopAc_ENEMY_e ||
+        fopAcM_GetGroup(attacker) != fopAc_ENEMY_e || !isConfused(attacker)) {
+        return;
+    }
+    cXyz hitPos = victim->current.pos;
+    hitPos.y += 100.0f;
+    g_dComIfG_gameInfo.play.getParticle()->setHitMark(3, victim, &hitPos, NULL, NULL, 0);
+    addProvoke(victim, attacker);
 }
 
 // ============================================
@@ -406,7 +535,9 @@ ModResult albw_confuse_init(ModError* error) {
         !install(error, "ConfuseSearchDistance",
                  mods::hook_add_post<SearchDistance>(svc_hook, on_search_distance_post)) ||
         !install(error, "ConfuseSearchDistanceXZ",
-                 mods::hook_add_post<SearchDistanceXZ>(svc_hook, on_search_distance_xz_post)))
+                 mods::hook_add_post<SearchDistanceXZ>(svc_hook, on_search_distance_xz_post)) ||
+        !install(error, "ConfuseFriendlyFire",
+                 mods::hook_add_post<ConfuseCcAt>(svc_hook, on_confuse_cc_at_post)))
     {
         return MOD_ERROR;
     }
