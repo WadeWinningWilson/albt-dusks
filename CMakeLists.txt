@@ -29,7 +29,6 @@ add_mod(albt_full_plugin
             src/config_vars.cpp
             src/meter.cpp
             src/lockout.cpp
-            src/confuse.cpp
             src/magic_jar.cpp
             src/rupee_popup.cpp
             src/tear_particles.cpp

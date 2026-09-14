@@ -19,7 +19,6 @@ ModResult albw_enemy_rupees_init(ModError* error);
 ModResult albw_enemy_rupees_shutdown(ModError* error);
 ModResult albw_enemy_rupees_build_panel(UiElementHandle panel, ModError* error);
 
-ModResult albw_confuse_init(ModError* error);
 ModResult albw_magic_jar_init(ModError* error);
 
 // Enemy-death rupee "+n" HUD popup (rupee_popup.cpp, full fork port).

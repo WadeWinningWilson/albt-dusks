@@ -164,7 +164,6 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     register_gameplay_settings();
 
     if (albw_meter_init(error) != MOD_OK || albw_lockout_init(error) != MOD_OK ||
-        albw_confuse_init(error) != MOD_OK ||
         albw_magic_jar_init(error) != MOD_OK ||
         albw_rupee_popup_init(error) != MOD_OK ||
         albw_tear_particles_init(error) != MOD_OK ||
