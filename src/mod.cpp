@@ -26,6 +26,8 @@
 #include "wolf_arts.h"
 #include "wolf_combat.h"
 #include "end_game_transform.h"
+#include "hurricane_spin.h"
+#include "deku_leaf.h"
 #include "modules.h"
 #include "mq_hearts.h"
 #include "shield_mod.h"
@@ -100,6 +102,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
         albw_register_bool("true_albw", false, &g_true_albw) != MOD_OK ||
         albw_register_bool("end_game_transform", false, &g_end_game_transform) != MOD_OK ||
+        albw_register_bool("deku_leaf", false, &g_deku_leaf) != MOD_OK ||
         albw_register_bool("master_quest", false, &g_master_quest) != MOD_OK ||
         albw_register_int("lop_hud_mode", 0, &g_lop_hud_mode) != MOD_OK ||
         albw_register_int("parry_icons_mode", 0, &g_parry_icons_mode) != MOD_OK ||
@@ -176,6 +179,8 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_mq_hearts_init(error) != MOD_OK ||
         albw_shield_init(error) != MOD_OK ||
         albw_focused_arts_init(error) != MOD_OK ||
+        albw_hurricane_init(error) != MOD_OK ||
+        albw_deku_leaf_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
         albw_wolf_combat_init(error) != MOD_OK ||
         albw_wolf_charge_art_init(error) != MOD_OK ||
@@ -235,6 +240,7 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     albw_colossal_wallet_tick();
     albw_rental_shop_tick();
     albw_end_game_transform_tick();
+    albw_deku_leaf_tick();
     albw_meter_update();
     return MOD_OK;
 }

@@ -1,0 +1,34 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_alink.cpp",
+  "stock": "../dusklight-main/src/d/actor/d_a_alink.cpp",
+  "out": "build/port/deku_leaf_port.inc",
+  "renames": {},
+  "port_funcs": [
+    "checkDekuLeafGlide",
+    "checkDekuLeafTakeoffRising",
+    "updateDekuLeafGustFx",
+    "updateDekuLeafBombDrop",
+    "stowDekuLeaf",
+    "updateDekuLeafGlideState",
+    "checkDekuLeafTakeoff",
+    "startDekuLeafTakeoff",
+    "updateDekuLeafTakeoff",
+    "dekuLeafJointCB",
+    "updateDekuLeafModel"
+  ],
+  "substitutions": [],
+  "diag_zero": [],
+  "engine_symbols": [
+    "daAlink_c",
+    "daPy_py_c",
+    "J3DJoint",
+    "cXyz",
+    "csXyz",
+    "f32",
+    "s16",
+    "u8",
+    "u32",
+    "int",
+    "bool"
+  ]
+}

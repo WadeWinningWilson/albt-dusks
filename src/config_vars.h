@@ -40,6 +40,7 @@ extern ConfigVarHandle g_boss_refinement;
 extern ConfigVarHandle g_postman_rental;
 extern ConfigVarHandle g_true_albw;
 extern ConfigVarHandle g_end_game_transform;
+extern ConfigVarHandle g_deku_leaf;
 extern ConfigVarHandle g_master_quest;
 extern ConfigVarHandle g_shade_refuge;
 extern ConfigVarHandle g_outfit_stats;

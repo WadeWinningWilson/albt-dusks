@@ -7,3 +7,7 @@
 # Build products and downloaded tools — CI produces release artifacts itself.
 /dist/
 /tools/bin/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

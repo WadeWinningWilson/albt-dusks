@@ -81,10 +81,13 @@ namespace {
 // Consumption wiring (reproduces the fork's cc_at_check FA hooks).
 // ============================================
 DEFINE_HOOK(cc_at_check, FaCcAtCheck);
-DEFINE_HOOK(&daAlink_c::procCutTurnChargeInit, CutTurnChargeInit);
+// fork calls dFocusedArts_onHiddenSkillChargeStart() ONLY from procCutLargeJumpChargeInit
+// (d_a_alink_cut.inc:2732 - the Jump Strike hidden-skill charge). Hooking the turn/spin
+// charge instead drained fill during ordinary sword combos, which pass through it.
+DEFINE_HOOK(&daAlink_c::procCutLargeJumpChargeInit, CutLargeJumpChargeInit);
 DEFINE_HOOK(&daAlink_c::procDamageInit, ProcDamageInit);
 
-void on_cut_turn_charge_post(ModContext*, void*, void*, void*) {
+void on_cut_large_jump_charge_post(ModContext*, void*, void*, void*) {
     if (dFocusedArts_isEnabled() && dAlbw_isHiddenSkillReworkEnabled()) {
         dFocusedArts_onHiddenSkillChargeStart();
     }
@@ -164,8 +167,8 @@ bool install(ModError* error, const char* name, ModResult r) {
 ModResult albw_focused_arts_init(ModError* error) {
     if (!install(error, "FaCcAtCheckPost",
                  mods::hook_add_post<FaCcAtCheck>(svc_hook, on_cc_at_check_post)) ||
-        !install(error, "FaCutTurnChargePost",
-                 mods::hook_add_post<CutTurnChargeInit>(svc_hook, on_cut_turn_charge_post)) ||
+        !install(error, "FaCutLargeJumpChargePost",
+                 mods::hook_add_post<CutLargeJumpChargeInit>(svc_hook, on_cut_large_jump_charge_post)) ||
         !install(error, "FaDamageInitPost",
                  mods::hook_add_post<ProcDamageInit>(svc_hook, on_damage_init_post)))
     {

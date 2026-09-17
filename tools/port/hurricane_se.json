@@ -1,0 +1,29 @@
+{
+  "fork": "../dusklight/src/dusk/hurricane_test.cpp",
+  "stock": "tools/port/_empty_stock.cpp",
+  "out": "build/port/hurricane_se_port.inc",
+  "renames": {},
+  "port_funcs": [
+    "initHurricaneSpinSe",
+    "maintainHurricaneSpinSe",
+    "stopHurricaneSpinSe"
+  ],
+  "substitutions": [],
+  "diag_zero": [],
+  "engine_symbols": [
+    "daAlink_c",
+    "Z2SoundObjSimple",
+    "Z2SoundHandlePool",
+    "JAISound",
+    "JAISe",
+    "JASTrack",
+    "JASChannel",
+    "JASOscillator",
+    "f32",
+    "u32",
+    "u8",
+    "s32",
+    "int",
+    "bool"
+  ]
+}

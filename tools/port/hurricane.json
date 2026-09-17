@@ -1,0 +1,26 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_alink_hurricane.inc",
+  "stock": "tools/port/_empty_stock.cpp",
+  "out": "build/port/hurricane_port.inc",
+  "renames": {},
+  "port_funcs": [
+    "procCutGsHurricaneInit",
+    "procCutGsHurricane",
+    "procCutGsHurricaneTiredInit",
+    "procCutGsHurricaneTired"
+  ],
+  "substitutions": [],
+  "diag_zero": [],
+  "engine_symbols": [
+    "daAlink_c",
+    "daPy_py_c",
+    "daPy_frameCtrl_c",
+    "daAlinkHIO_anm_c",
+    "daAlinkHIO_cutTurn_c1",
+    "f32",
+    "s16",
+    "u16",
+    "u8",
+    "int"
+  ]
+}

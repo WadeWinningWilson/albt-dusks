@@ -57,9 +57,13 @@ def parse_decls(src):
     """Return dict name -> {'kind','text','refs'} for top-level decls."""
     decls = {}
     # functions / classes / structs / enums with a body { ... }
-    for m in re.finditer(r'^([A-Za-z_][\w:<>*&\s]*?\b)(\w+)\s*(\([^;{}]*\))?\s*'
+    # The optional (\w+::) qualifier captures out-of-line method definitions
+    # (`int daAlink_c::procX(args) {`) so they key on the METHOD name (group 3), not
+    # the class - otherwise `::procX(args)` gets eaten by the initializer-list branch
+    # and every method of a class collides on the bare class name.
+    for m in re.finditer(r'^([A-Za-z_][\w:<>*&\s]*?\b)(?:(\w+)\s*::\s*)?(~?\w+)\s*(\([^;{}]*\))?\s*'
                          r'(?:const\s*)?(?::[^;{]*)?\{', src, re.M):
-        name = m.group(2)
+        name = m.group(3)
         if name in ('if','for','while','switch','do','else','return'): continue
         s = m.start(); ob = src.index('{', m.start()); e = brace_end(src, ob)
         if e < 0: continue

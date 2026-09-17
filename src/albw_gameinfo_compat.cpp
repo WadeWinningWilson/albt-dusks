@@ -179,6 +179,10 @@ BOOL dComIfGs_isTransformLV(int i_no) {
 void dComIfGs_onTransformLV(int i_no) {
     g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusB().onTransformLV(i_no);
 }
+// stock d_com_inf_game.h:5183 (hurricane spin sets player status 0)
+void dComIfGp_setPlayerStatus0(int param_0, u32 flag) {
+    g_dComIfG_gameInfo.play.setPlayerStatus(param_0, 0, flag);
+}
 
 // ============================================
 // Focused Arts port dependencies. These are DUSK_NOINLINE-declared on PC (no
@@ -250,6 +254,29 @@ JPABaseEmitter* dComIfGp_particle_setColor(u16 param_0, const cXyz* i_pos,
     return g_dComIfG_gameInfo.play.getParticle()->setNormal(param_0, i_pos, param_2, param_7,
                                                             param_8, param_6, param_9, param_10,
                                                             param_3, param_4, param_11, param_5);
+}
+
+// ============================================
+// Deku Leaf glide (deku_leaf.cpp) particle deps. DUSK_NOINLINE accessors — bodies from
+// stock d_com_inf_game.h inline branch (setStopContinue :4190, getEmitter :4216, and the
+// full-parameter setNormal overload used by the takeoff gust).
+// ============================================
+u32 dComIfGp_particle_setStopContinue(u32 param_0) {
+    return g_dComIfG_gameInfo.play.getParticle()->setStopContinue(param_0);
+}
+
+JPABaseEmitter* dComIfGp_particle_getEmitter(u32 param_0) {
+    return g_dComIfG_gameInfo.play.getParticle()->getEmitter(param_0);
+}
+
+u32 dComIfGp_particle_set(u32 param_0, u16 param_1, const cXyz* i_pos, const dKy_tevstr_c* param_3,
+                          const csXyz* i_rotation, const cXyz* i_scale, u8 i_alpha,
+                          dPa_levelEcallBack* param_7, s8 param_8, const GXColor* param_9,
+                          const GXColor* param_10, const cXyz* param_11) {
+    return g_dComIfG_gameInfo.play.getParticle()->setNormal(param_0, param_1, i_pos, param_3,
+                                                            i_rotation, i_scale, i_alpha, param_7,
+                                                            param_8, param_9, param_10, param_11,
+                                                            1.0f);
 }
 
 // ============================================

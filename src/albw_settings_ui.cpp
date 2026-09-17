@@ -199,6 +199,10 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
                            "Grants the free wolf transform (shadow crystal + Midna + LV0-3) so "
                            "Wolf Combat is usable. Always on when True ALBW is enabled.",
                            g_end_game_transform) != MOD_OK ||
+        albw_ui_add_toggle(left, "Deku Leaf glide",
+                           "WW Deku Leaf: R+A launches a gust takeoff, hold to keep rising, then "
+                           "glide (drains the meter). Bomb button drops a live bomb mid-glide.",
+                           g_deku_leaf) != MOD_OK ||
         albw_ui_add_toggle(left, "Master Quest hearts",
                            "MQ heart tiers + stamina meter bonus (shop rows when rental ships).",
                            g_master_quest) != MOD_OK)

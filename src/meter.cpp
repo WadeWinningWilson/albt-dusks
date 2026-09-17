@@ -32,6 +32,7 @@
 #include "shield.h"
 #include "shield_adapt.h"
 #include "focused_arts.h"
+#include "hurricane_spin.h"
 #include "flurry_rush.h"
 #include "hidden_skill_charge.h"
 #include "mods/hook.hpp"
@@ -72,6 +73,15 @@ constexpr int kCostDoubleHook = 1362;
 constexpr int kCostDomRodPer100ms = 36;
 constexpr int kCostSpinnerBase = 156;
 constexpr int kCostHiddenSkill = 5450;
+// ============================================
+// NEW CODE — ALBW Port (Deku Leaf glide)
+// Continuous drain, modelled on the Spinner (fork d_meter2.cpp:2306). Rate is
+// faithful to WW: 0.75 magic/sec off a 32-point bar = 2.34%/sec, which on the
+// base pool (kBaseMax) is ~25 units per 100ms tick -> ~43s of glide at base tier.
+// The up-front charge mirrors WW's initial -1 magic (1/32 of the base bar).
+// ============================================
+constexpr int kCostDekuLeafPer100ms = (kBaseMax * 234) / 100000;
+constexpr int kCostDekuLeafStart = kBaseMax / 32;
 
 enum daAlink_CutFinishParamType {
     CUT_FINISH_PARAM_LEFT,
@@ -103,6 +113,7 @@ bool g_flag_ironball = false;
 bool g_flag_hidden_skill = false;
 bool g_spinner_active = false;
 bool g_domrod_active = false;
+bool g_deku_leaf_active = false;
 
 bool g_bow_had_arrow = false;
 u8 g_bow_was_bomb = 0;
@@ -123,6 +134,7 @@ bool g_armor_hit_pending = false;
 std::chrono::steady_clock::time_point g_lastRecover{};
 std::chrono::steady_clock::time_point g_lastSpinnerDrain{};
 std::chrono::steady_clock::time_point g_lastDomRodDrain{};
+std::chrono::steady_clock::time_point g_lastDekuLeafDrain{};
 
 bool g_player_idle = false;
 
@@ -512,6 +524,7 @@ void tick_continuous_and_recover() {
         g_lastRecover = now;
         g_lastSpinnerDrain = now;
         g_lastDomRodDrain = now;
+        g_lastDekuLeafDrain = now;
         return;
     }
 
@@ -538,6 +551,20 @@ void tick_continuous_and_recover() {
             }
         }
         g_domrod_active = false;
+    }
+    // Deku Leaf glide: continuous drain, fixed rate (not tier-scaled), mirroring
+    // the fork's d_meter2.cpp:2306 leaf drain. Set every frame by the glide proc.
+    if (g_deku_leaf_active) {
+        if (!g_locked) {
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                now - g_lastDekuLeafDrain)
+                                .count();
+            if (ms >= 100) {
+                drain_meter(kCostDekuLeafPer100ms);
+                g_lastDekuLeafDrain = now;
+            }
+        }
+        g_deku_leaf_active = false;
     }
 
     daPy_py_c* player = static_cast<daPy_py_c*>(g_dComIfG_gameInfo.play.getPlayer(0));
@@ -835,6 +862,16 @@ HookAction gate_cut_turn_pre(ModContext*, void* args, void* retval, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link != nullptr && dAlbw_isHiddenSkillReworkEnabled() && link->checkCutLargeTurnState()) {
         if (!can_hidden_skill()) {
+            if (retval != nullptr) {
+                *static_cast<int*>(retval) = 1;
+            }
+            return HOOK_SKIP_ORIGINAL;
+        }
+        // GS T1 finisher = Hurricane Spin (fork d_a_alink.cpp:13086). When FA is on its
+        // final spend charge, run the hurricane overlay INSTEAD of the normal great-spin
+        // (try_begin spends the FA finisher itself). Costs a hidden-skill meter drain.
+        if (albw_hurricane_try_begin(link)) {
+            signal_drain(g_flag_hidden_skill);
             if (retval != nullptr) {
                 *static_cast<int*>(retval) = 1;
             }
@@ -1516,6 +1553,39 @@ void albw_meter_drain_amount(int amount) {
     albw_meter_impl::drain_meter(amount);
 }
 
+// ============================================
+// NEW CODE — ALBW Port (Deku Leaf glide) — meter bridges.
+// Mirror the fork's dMeter2_canALBWDekuLeaf / onALBWDekuLeaf / onALBWDekuLeafStart
+// and the bomb-drop's dMeter2_canALBWBomb / onALBWBomb (bombs are ammo-gated, not
+// meter-gated in the fork, so canBomb is always true and onBomb runs the normal
+// bomb cost path).
+// ============================================
+bool albw_meter_can_deku_leaf() {
+    if (!albw_meter_is_enabled()) {
+        return true;
+    }
+    return albw_meter_impl::g_locked || albw_meter_impl::g_meter > 0;
+}
+
+void albw_meter_on_deku_leaf() {
+    albw_meter_impl::g_deku_leaf_active = true;
+}
+
+void albw_meter_on_deku_leaf_start() {
+    if (!albw_meter_is_enabled()) {
+        return;
+    }
+    albw_meter_impl::drain_meter(albw_meter_impl::kCostDekuLeafStart);
+}
+
+bool albw_meter_can_bomb() {
+    return true;
+}
+
+void albw_meter_on_bomb() {
+    albw_meter_impl::signal_drain(albw_meter_impl::g_flag_bomb);
+}
+
 void albw_meter_fill_on_death() {
     if (!albw_meter_is_enabled()) {
         return;
@@ -1552,6 +1622,7 @@ ModResult albw_meter_init(ModError* error) {
     g_lastRecover = std::chrono::steady_clock::now();
     g_lastSpinnerDrain = g_lastRecover;
     g_lastDomRodDrain = g_lastRecover;
+    g_lastDekuLeafDrain = g_lastRecover;
 
     refresh_meter_max_from_progress();
 

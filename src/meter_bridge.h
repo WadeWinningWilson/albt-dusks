@@ -12,3 +12,9 @@ void albw_meter_fill_on_death();
 void albw_meter_restore_to_full();
 int albw_meter_get_value();
 int albw_meter_get_max();
+// Deku Leaf glide (fork dMeter2_*ALBWDekuLeaf + the bomb-drop's can/onALBWBomb).
+bool albw_meter_can_deku_leaf();
+void albw_meter_on_deku_leaf();
+void albw_meter_on_deku_leaf_start();
+bool albw_meter_can_bomb();
+void albw_meter_on_bomb();

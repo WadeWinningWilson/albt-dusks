@@ -37,18 +37,26 @@ void albw_end_game_transform_tick() {
 
     // Already granted -> nothing to write (avoids marking the save dirty each frame).
     if (dComIfGs_isEventBit(dSv_event_flag_c::M_077) &&
+        dComIfGs_isEventBit(dSv_event_flag_c::M_067) &&
         dComIfGs_isEventBit(dSv_event_flag_c::F_0250) && dComIfGs_isTransformLV(3)) {
         return;
     }
 
-    // fork editor.cpp: set M_077 (shadow crystal) + F_0250 (Midna revived) + LV 0..3.
-    dComIfGs_onEventBit(dSv_event_flag_c::M_077);
-    dComIfGs_onEventBit(dSv_event_flag_c::F_0250);
+    // The transform only fires when daMidna_c::checkMetamorphoseEnableBase() passes, which
+    // needs BOTH the shadow crystal (M_077) AND Midna actually riding Link
+    // (checkMidnaRide() -> M_067). The fork's editor "End-Game Transform" sets M_077 +
+    // F_0250 + LV0-3; its d_s_menu debug enable sets M_067 (riding) + M_011 (wolf chains
+    // removed). Combine both so the transform is usable on any save.
+    dComIfGs_onEventBit(dSv_event_flag_c::M_077);   // shadow crystal - can transform
+    dComIfGs_onEventBit(dSv_event_flag_c::M_067);   // Midna riding (checkMidnaRide)
+    dComIfGs_onEventBit(dSv_event_flag_c::M_011);   // Midna removed wolf's chains
+    dComIfGs_onEventBit(dSv_event_flag_c::F_0250);  // Midna revived
     for (int i = 0; i <= 3; ++i) {
         dComIfGs_onTransformLV(i);
     }
 
     if (svc_log != nullptr) {
-        svc_log->info(mod_ctx, "[albt] end-game transform granted (M_077 + F_0250 + LV0-3)");
+        svc_log->info(mod_ctx,
+                      "[albt] end-game transform granted (M_077 + M_067 + M_011 + F_0250 + LV0-3)");
     }
 }
