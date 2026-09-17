@@ -1672,5 +1672,10 @@ void albw_meter_update() {
     }
     g_cached_meter = meter;
     tick_continuous_and_recover();
-    push_albw_layout(meter);
+    // Layout is NOT pushed here. dMeter2_c::_execute() calls moveKantera() every frame
+    // the meter runs (after it validates mpMeterDraw natively), and our on_move_kantera_post
+    // hook pushes the ALBW layout there - matching the fork, which applies its meter layout
+    // inside the native meter cycle. Pushing from this free-running tick instead caught the
+    // meter mid-construction on respawn (getMeterClass() live but mpMeterDraw uninitialized)
+    // and crashed dereferencing the garbage draw pointer.
 }

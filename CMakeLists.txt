@@ -43,6 +43,7 @@ add_mod(albt_full_plugin
             src/soul_of_light.cpp
             src/enemy_rupees.cpp
             src/wolf_combat.cpp
+            src/end_game_transform.cpp
             src/wolf_charge_art.cpp
             src/wolf_howl_combat.cpp
             src/midna_arm.cpp

@@ -175,6 +175,10 @@ dVibration_c& dComIfGp_getVibration() {
 BOOL dComIfGs_isTransformLV(int i_no) {
     return g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusB().isTransformLV(i_no);
 }
+// stock d_com_inf_game.h:2358 (end-game transform grant)
+void dComIfGs_onTransformLV(int i_no) {
+    g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusB().onTransformLV(i_no);
+}
 
 // ============================================
 // Focused Arts port dependencies. These are DUSK_NOINLINE-declared on PC (no

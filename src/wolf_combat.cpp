@@ -690,9 +690,11 @@ void dAlbwWolfArts_unlockHowl() {
 bool dAlbwWolfArts_shouldShowHowlShopRow() {
     // Show only while Wolf Combat is on and the howl isn't already unlocked.
     // STORY GATE (user-pinned 2026-07-15): requires the FIRST twilight
-    // (Faron/Ordon, DarkClearLV bit 0) cleared.
+    // (Faron/Ordon, DarkClearLV bit 0) cleared. True ALBW unlocks the full tier
+    // catalog from the start, so it bypasses the story gate (feature-on + not-yet-
+    // unlocked still apply).
     return dAlbwWolfCombat_isEnabled() && !dAlbwWolfArts_isHowlUnlocked() &&
-           albw_game::is_dark_clear_lv(0);
+           (albw_game::is_dark_clear_lv(0) || albw_cfg_bool(g_true_albw, false));
 }
 
 int dAlbwWolfArts_getHowlShopPrice() {
@@ -738,9 +740,10 @@ void dAlbwWolfArts_unlockArm() {
 bool dAlbwWolfArts_shouldShowArmShopRow() {
     // Show only while Wolf Combat is on and the arm isn't already unlocked.
     // STORY GATE (user-pinned 2026-07-15, supersedes the old Lanayru TODO):
-    // requires the Eldin twilight (DarkClearLV bit 1) cleared.
+    // requires the Eldin twilight (DarkClearLV bit 1) cleared. True ALBW bypasses
+    // the story gate (full tier catalog from the start).
     return dAlbwWolfCombat_isEnabled() && !dAlbwWolfArts_isArmUnlocked() &&
-           albw_game::is_dark_clear_lv(1);
+           (albw_game::is_dark_clear_lv(1) || albw_cfg_bool(g_true_albw, false));
 }
 
 int dAlbwWolfArts_getArmShopPrice() {
@@ -783,7 +786,8 @@ void dAlbwWolfArts_unlockChargeUpgrade() {
 
 bool dAlbwWolfArts_shouldShowChargeShopRow() {
     return dAlbwWolfCombat_isEnabled() && !dAlbwWolfArts_isChargeUpgradeUnlocked() &&
-           albw_game::is_event_bit(dSv_event_flag_c::F_0264);
+           (albw_game::is_event_bit(dSv_event_flag_c::F_0264) ||
+            albw_cfg_bool(g_true_albw, false));
 }
 
 int dAlbwWolfArts_getChargeShopPrice() {

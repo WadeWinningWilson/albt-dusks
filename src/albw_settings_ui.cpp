@@ -195,6 +195,10 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
                            "Postman rental shop unlocked at any point, full catalog available "
                            "from the start (bypasses the Talo-rescue story gate).",
                            g_true_albw) != MOD_OK ||
+        albw_ui_add_toggle(left, "End-Game Transform",
+                           "Grants the free wolf transform (shadow crystal + Midna + LV0-3) so "
+                           "Wolf Combat is usable. Always on when True ALBW is enabled.",
+                           g_end_game_transform) != MOD_OK ||
         albw_ui_add_toggle(left, "Master Quest hearts",
                            "MQ heart tiers + stamina meter bonus (shop rows when rental ships).",
                            g_master_quest) != MOD_OK)

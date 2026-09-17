@@ -1031,7 +1031,9 @@ bool dFocusedArts_shouldShowShopTierRow() {
         return false;
     }
     // Unlocks after Hero's Shade teaches Ending Blow (first sword hidden skill).
-    if (!dComIfGs_isEventBit(dSv_event_flag_c::F_0339)) {
+    // True ALBW unlocks the full tier catalog from the start, bypassing this story
+    // gate (feature-on + tier < max still apply below).
+    if (!dComIfGs_isEventBit(dSv_event_flag_c::F_0339) && !albw_cfg_bool(g_true_albw, false)) {
         return false;
     }
     return dFocusedArts_getPurchasedTier() < kFocusedArtsMaxTier;
