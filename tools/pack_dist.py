@@ -28,8 +28,8 @@ WIN = ROOT / "build" / "mods" / "albt_full_plugin.dusk"
 LINUX = ROOT / "build-linux" / "mods" / "albt_full_plugin.dusk"
 LINUX_FALLBACK = ROOT / "dist" / "albw.dusk"
 OUT = ROOT / "dist" / "albt_full_plugin.dusk"
-PLATFORMS_TXT = b"""A Link Between Twilight Full Plugin - multiplatform bundle
-============================================================
+PLATFORMS_TXT = b"""A Link Between Twilight - multiplatform bundle
+==============================================
 
 This ONE .dusk file works on every supported platform. Install the same file on Windows
 and Linux; the game loads the matching native library automatically.

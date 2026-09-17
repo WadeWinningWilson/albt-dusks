@@ -115,8 +115,7 @@ jobs:
 
       - name: Merge bundles
         run: |
-          name=$(basename dist/mod-linux-x86_64/*.dusk)
-          python3 tools/merge_mod.py -o "combined/$name" --symgen ./symgen \
+          python3 tools/merge_mod.py -o "combined/A Link Between Twilight.dusk" --symgen ./symgen \
             dist/*/*.dusk
 
       - name: Upload combined bundle
