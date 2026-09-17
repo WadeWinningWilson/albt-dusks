@@ -20,6 +20,9 @@
 #include "f_op/f_op_actor.h"
 #include "f_op/f_op_actor_mng.h"
 #include "f_pc/f_pc_name.h"
+#include "f_pc/f_pc_method.h"   // fpcMtd_Execute (play-scene tickSpawn point)
+#include "f_pc/f_pc_manager.h"  // fpcM_GetProfile
+#include "f_pc/f_pc_profile.h"  // process_profile_definition
 #include "mods/svc/hook.hpp"
 
 #include <cstring>
@@ -113,7 +116,12 @@ DEFINE_HOOK(&daObjDrop_c::checkGetArea, CheckGetArea);
 DEFINE_HOOK(&daObjDrop_c::checkCompleteDemo, CheckCompleteDemo);
 DEFINE_HOOK(&daObjDrop_c::execute, DropExecute);
 DEFINE_HOOK(&dSv_memBit_c::isTbox, IsTbox);
-DEFINE_HOOK_SYMBOL("fopAc_Execute", int(void*), AcExecute);
+// fork calls dALBWDeathRupees_tickSpawn() at the END of dScnPly_Execute (d_s_play.cpp:855) -
+// after all processes execute, before the draw pass. dScnPly_Execute is static/unhookable, so
+// we post-hook the method dispatcher fpcMtd_Execute and fire only for the PLAY_SCENE process:
+// that runs tickSpawn at the exact fork frame point, so completing the async tear load
+// (entryResourceManager slot 2) never races mid-actor-execute.
+DEFINE_HOOK_SYMBOL("fpcMtd_Execute", int(const process_method_class*, void*), MtdExecute);
 
 bool orbEnabled() {
     return albw_cfg_bool(g_recovery_orb, true);
@@ -367,6 +375,11 @@ void tickSpawn() {
     if (!orbEnabled() || !sOrbPending || sOrbRecovery == 0) {
         return;
     }
+    // fork dALBWDeathRupees_tickSpawn (d_albw_death_rupee.cpp:341) - poll the async tear
+    // load to completion. Runs at the play-scene execute point (see on_mtd_execute_post), so
+    // the swap + entryResourceManager(slot 2) land after all execution, before draw.
+    albw_tear_ensure_scene_res();
+
     const char* stage = startStageName();
     if (!stage || stage[0] == '\0') {
         return;
@@ -444,6 +457,10 @@ void on_dead_post(ModContext*, void*, void*, void*) {
     sOrbPending = true;
     sOrbSpawned = false;
     sOrbSnapshotValid = false;
+    // NOTE: the fork kicks the tear load here (onLinkDeathBegin), but doing the same in the
+    // mod (mDoDvdThd_toMainRam_c::create at the moment of death) corrupts unrelated scene
+    // particles' texture image pointers -> GXLoadTexObj crash (fault 0x41900148). The play-scene
+    // poll (on_mtd_execute_post -> tickSpawn) starts the load safely during gameplay instead.
 }
 
 HookAction on_is_tbox_pre(ModContext*, void*, void* retval, void*) {
@@ -531,9 +548,16 @@ void on_drop_execute_post(ModContext*, void* args, void*, void*) {
     clearLinkTearCollectEffect();
 }
 
-void on_execute_post(ModContext*, void* args, void*, void*) {
-    fopAc_ac_c* actor = static_cast<fopAc_ac_c*>(mods::arg<void*>(args, 0));
-    if (actor == NULL || fopAcM_GetName(actor) != fpcNm_ALINK_e) {
+void on_mtd_execute_post(ModContext*, void* args, void*, void*) {
+    // Fire tickSpawn only after the PLAY_SCENE process's execute (dScnPly_Execute) - the
+    // exact site the fork uses. fpcMtd_Execute runs for every process each frame; filter
+    // by profile name so this is once per frame, after all execution and before draw.
+    void* process = mods::arg<void*>(args, 1);
+    if (process == NULL) {
+        return;
+    }
+    process_profile_definition* prof = fpcM_GetProfile(process);
+    if (prof == NULL || prof->name != fpcNm_PLAY_SCENE_e) {
         return;
     }
     tickSpawn();
@@ -585,8 +609,8 @@ ModResult albw_soul_of_light_init(ModError*) {
         svc_log->error(mod_ctx, "failed to hook daObjDrop_c::execute");
         return MOD_ERROR;
     }
-    if (mods::hook::add_post<AcExecute>(on_execute_post) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook fopAc_Execute (soul of light)");
+    if (mods::hook::add_post<MtdExecute>(on_mtd_execute_post) != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to hook fpcMtd_Execute (soul of light play-scene tick)");
         return MOD_ERROR;
     }
     return MOD_OK;
