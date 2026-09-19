@@ -12,7 +12,9 @@ if (NOT DUSKLIGHT_DIR AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../dusklight-main/
 endif ()
 
 if (NOT DUSKLIGHT_VERSION)
-    set(DUSKLIGHT_VERSION "a775418c667f748724c24283b9bad62ebe2dc48b")
+    # Dusklight v2.0.0 (tag v2.0.0). CI fetches this SDK for all platforms; the
+    # runtime exe players use is v2.0.0, so the mod must build against its ABI.
+    set(DUSKLIGHT_VERSION "e9b120544cb75e81b5aa36777f1688fa61f2d9e8")
 endif ()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchDusklight.cmake")
