@@ -1,48 +1,101 @@
 # A Link Between Twilight Dusk
 
-Stock Dusklight `.dusk` for the full ALBT feature set. Builds against [dusklight-main](https://github.com/TwilitRealm/dusklight) (Game ABI 2), never the ALBT fork.
+A stock Dusklight `.dusk` mod that ports the **A Link Between Twilight** feature
+set onto an unmodified `dusklight` runtime. It builds against
+[dusklight](https://github.com/TwilitRealm/dusklight) **v2.0.0** — never the ALBT
+fork — so it runs on the same `dusklight` executable players already have.
 
-**Display name (Mods panel):** A Link Between Twilight 
-**Mod id:** `dev.albt.albw`  
-**Filename:** `albt_full_plugin.dusk`
+**Display name (Mods panel):** A Link Between Twilight
+**Mod id:** `dev.albt.albw`
+**Filename (per-platform build):** `albt_full_plugin.dusk`
+**Filename (combined release):** `A Link Between Twilight.dusk`
 
-## Where is the file?
+## Install
 
-| Purpose | Path |
-|---------|------|
-| **Ship / install this (all platforms)** | `dist/albt_full_plugin.dusk` — **one file** for Windows amd64 and Linux x86_64 |
-| Windows-only dev build | `build/mods/albt_full_plugin.dusk` |
-| Linux-only dev build | `build-linux/mods/albt_full_p
+1. Download **`A Link Between Twilight.dusk`** from the
+   [Releases page](https://github.com/WadeWinningWilson/A-Link-Between-Twilight/releases)
+   (latest: **v0.2.1**). This one file carries the native library for every
+   supported platform.
+2. Drop it into your Dusklight `mods` folder:
+   - **Windows:** `%AppData%\TwilitRealm\Dusklight\mods\`
+   - Other platforms: the `mods` folder of your Dusklight install.
+3. Launch Dusklight and enable **A Link Between Twilight** in the Mods panel.
 
+## Platforms
 
-Do **not** load the collective bundle alongside standalones that duplicate the same hooks (e.g. collective + `dev.albt.region_hp`).
+The released bundle is built by CI for all 8 Dusklight targets and merged into a
+single `.dusk`:
 
-Soul of Light differs by shape: the collective **halves the wallet on death**; the standalone **only spawns the orb** after something else already took rupees (Lazy Tweaks Lose Rupees).
+| | |
+|---|---|
+| `linux-x86_64` | `linux-aarch64` |
+| `macos-arm64` | `macos-x86_64` |
+| `ios-arm64` | `android-aarch64` |
+| `windows-amd64` | `windows-arm64` |
 
-## Build (Windows)
+## How it works (and is it safe?)
+
+This is a **native code mod** — like any Dusklight code mod, the `.dusk` contains
+a small compiled library per platform (`mod.dll` / `mod.so` / `mod.dylib`) that
+Dusklight loads at startup to install its gameplay hooks. It does **not** reach
+outside the game: the only library it looks up at runtime is **SDL3**, which
+Dusklight already runs on, resolved **by name** (`GetProcAddress` / `dlsym`)
+rather than linked, so one binary works across all 8 platforms where SDL3 ships
+differently. That lookup exists for a single feature — reading the **L1 /
+left-shoulder** button for the Open Item Wheel — and falls back to the keyboard
+if SDL3 isn't found. No files, no network. See
+[`src/albw_l1_input.cpp`](src/albw_l1_input.cpp).
+
+The release is **built reproducibly by GitHub Actions** from this repository
+([`.github/workflows/build.yml`](.github/workflows/build.yml)). The published
+`.dusk` is exactly what CI compiles from the tagged source, so you can verify the
+binary against the code:
+
+```bash
+git checkout v0.2.1   # the exact source the v0.2.1 release was built from
+```
+
+## Build (local — a compile check)
+
+CI is the source of truth for shippable builds (all 8 platforms). Locally you can
+compile-check the native library for your host:
 
 ```bat
 _build_mod.bat
 ```
 
-Output: `build/mods/albt_full_plugin.dusk`
+Output: `build/mods/albt_full_plugin.dusk`, packed to
+`dist/albt_full_plugin.dusk` (via `tools/pack_dist.py`) and installed to your
+local Dusklight `mods` folder.
 
-## Build (Linux cross from Windows)
+Linux cross-build from Windows (requires [Zig](https://ziglang.org) on `PATH`, or
+set the `ZIG` env var):
 
 ```bat
 build-linux.cmd
 ```
 
-Requires [Zig](https://ziglang.org) on your `PATH` (or set the `ZIG` environment
-variable to the executable). Broader cross-platform build support is a work in
-progress, in collaboration with **Lazy Tweaks**.
+The multi-platform release bundle is produced in CI by `tools/merge_mod.py` +
+[symgen](https://github.com/encounter/symgen), merging every platform's artifact
+into one `.dusk`.
 
-## Combined bundle
+## SDK pin
 
-Merge Windows + Linux artifacts into `dist/albt_full_plugin.dusk` (both `lib/windows-amd64/mod.dll` and `lib/linux-x86_64/mod.so`). After `_build_mod.bat`, run `python tools/pack_dist.py` (or CI `merge_mod.py` + symgen).
+The Dusklight SDK version is pinned by `DUSKLIGHT_VERSION` in `CMakeLists.txt`
+(currently `e9b120544c…`, Dusklight **v2.0.0**). The mod declares
+`FEATURES game webgpu` — `webgpu` drives the Tear of Light glow via `GfxService`.
 
-Pin: `DUSKLIGHT_VERSION` in `CMakeLists.txt` (currently `a775418c66…`).
+## Notes
+
+Do **not** load this collective bundle alongside standalone mods that duplicate
+the same hooks (e.g. this + `dev.albt.region_hp`).
+
+Soul of Light differs by shape from the standalone: the collective **halves the
+wallet on death**, whereas the standalone **only spawns the recovery orb** after
+something else has already taken rupees (Lazy Tweaks *Lose Rupees*).
 
 ## ALBT fork
 
-The dusklight fork in `Documents/dusklight` remains the WW / True ALBW / content lab. This repo is the player-facing mod on stock `dusklight.exe`.
+The Dusklight fork in `Documents/dusklight` remains the WW / True ALBW / content
+lab. **This** repo is the player-facing mod that runs on the stock `dusklight`
+runtime.
