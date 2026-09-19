@@ -33,18 +33,6 @@ single `.dusk`:
 | `ios-arm64` | `android-aarch64` |
 | `windows-amd64` | `windows-arm64` |
 
-## How it works (and is it safe?)
-
-This is a **native code mod** — like any Dusklight code mod, the `.dusk` contains
-a small compiled library per platform (`mod.dll` / `mod.so` / `mod.dylib`) that
-Dusklight loads at startup to install its gameplay hooks. It does **not** reach
-outside the game: the only library it looks up at runtime is **SDL3**, which
-Dusklight already runs on, resolved **by name** (`GetProcAddress` / `dlsym`)
-rather than linked, so one binary works across all 8 platforms where SDL3 ships
-differently. That lookup exists for a single feature — reading the **L1 /
-left-shoulder** button for the Open Item Wheel — and falls back to the keyboard
-if SDL3 isn't found. No files, no network. See
-[`src/albw_l1_input.cpp`](src/albw_l1_input.cpp).
 
 The release is **built reproducibly by GitHub Actions** from this repository
 ([`.github/workflows/build.yml`](.github/workflows/build.yml)). The published
