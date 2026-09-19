@@ -2,7 +2,7 @@
   "fork": "../dusklight/src/d/actor/d_a_alink_swim.inc",
   "stock": "../dusklight-main/src/d/actor/d_a_alink_swim.inc",
   "out": "build/port/outfit_swim_port.inc",
-  "renames": {},
+  "renames": { "daAlink_c::": "AlbwSwim_c::" },
   "port_funcs": [
     "getSwimFrontMaxSpeed",
     "getSwimMaxFallSpeed",
