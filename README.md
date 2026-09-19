@@ -33,6 +33,16 @@ single `.dusk`:
 | `ios-arm64` | `android-aarch64` |
 | `windows-amd64` | `windows-arm64` |
 
+
+The release is **built reproducibly by GitHub Actions** from this repository
+([`.github/workflows/build.yml`](.github/workflows/build.yml)). The published
+`.dusk` is exactly what CI compiles from the tagged source, so you can verify the
+binary against the code:
+
+```bash
+git checkout v0.2.1   # the exact source the v0.2.1 release was built from
+```
+
 ## Build (local — a compile check)
 
 CI is the source of truth for shippable builds (all 8 platforms). Locally you can

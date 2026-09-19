@@ -63,13 +63,17 @@ ModResult build_combat_tab(ModContext*, UiWindowHandle, UiElementHandle left, Ui
         albw_ui_add_toggle(left, "Focused Arts",
                            "Hidden-skill rework: mortal draw / large spins bill the ALBW meter "
                            "and respect lockout gates.",
-                           g_focused_arts) != MOD_OK ||
-        albw_ui_add_toggle(left, "Flurry Rush",
-                           "Perfect-dodge slow-mo chain (requires Focused Arts + OC telegraph).",
-                           g_flurry_rush) != MOD_OK)
+                           g_focused_arts) != MOD_OK)
     {
         return MOD_ERROR;
     }
+    // ============================================
+    // Flurry Rush toggle intentionally HIDDEN for now (feature incomplete).
+    // The g_flurry_rush var stays registered (mod.cpp) and the feature code
+    // stays compiled/hooked; it is simply not exposed in the settings pane so
+    // players can't enable an unfinished mechanic. Restore the toggle here when
+    // Flurry Rush is finished.
+    // ============================================
 
     if (svc_ui->pane_add_section(mod_ctx, left, "Shield HUD") != MOD_OK) {
         return MOD_ERROR;
