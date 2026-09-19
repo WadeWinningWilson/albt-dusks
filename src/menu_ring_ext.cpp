@@ -15,6 +15,8 @@
 // Bodies are otherwise unchanged, so they stay diffable against the fork.
 // ============================================
 
+#include "helpers/string.hpp"  // TEXT_SPAN - precede any d_save.h include (via potion.h)
+
 #include "global.h"
 #include <os.h>
 
@@ -22,6 +24,7 @@
 #include "JSystem/J2DGraph/J2DPicture.h"
 #include "JSystem/JUtility/JUTFont.h"
 #include "d/d_com_inf_game.h"
+#include "potion.h"  // dAlbwPotion_* (soulbound red potion ring count branch)
 #include "d/d_item_data.h"
 #include "d/d_meter2_info.h"
 #include "d/d_meter_HIO.h"
@@ -782,6 +785,33 @@ DEFINE_HOOK(&dMenu_Ring_c::setScale, Ring_SetScale);
 DEFINE_HOOK(&dMenu_Ring_c::drawItem, Ring_DrawItem);
 DEFINE_HOOK(&dMenu_Ring_c::drawItem2, Ring_DrawItem2);
 
+// ============================================
+// NEW CODE - ALBW Port (Soulbound Red Potion ring count)
+// Fork d_menu_ring.cpp getItemNum/getItemMaxNum add a RED_BOTTLE case that reads
+// the soulbound bottle charge count / max. Vanilla has no RED case (returns 0),
+// so a post-hook supplies the count when the slot is a soulbound-red bottle.
+// Self-gates on dAlbwPotion_isSoulboundRedInSlot; every other slot is untouched.
+// ============================================
+DEFINE_HOOK(&dMenu_Ring_c::getItemNum, Ring_GetItemNum);
+DEFINE_HOOK(&dMenu_Ring_c::getItemMaxNum, Ring_GetItemMaxNum);
+
+void on_ring_get_item_num_post(ModContext*, void* args, void* retval, void*) {
+    if (retval == nullptr) return;
+    const u8 slotNo = mods::arg<u8>(args, 1);
+    if (dAlbwPotion_isSoulboundRedInSlot(slotNo)) {
+        *static_cast<u8*>(retval) =
+            static_cast<u8>(dComIfGs_getBottleNum(kAlbwPotionSoulboundBottleIdx));
+    }
+}
+
+void on_ring_get_item_max_num_post(ModContext*, void* args, void* retval, void*) {
+    if (retval == nullptr) return;
+    const u8 slotNo = mods::arg<u8>(args, 1);
+    if (dAlbwPotion_isSoulboundRedInSlot(slotNo)) {
+        *static_cast<u8*>(retval) = static_cast<u8>(dAlbwPotion_getMaxUses());
+    }
+}
+
 bool qe_on(dMenu_Ring_c* r) { return r != nullptr && albw_ring_qe(r).usePages; }
 
 // fork ctor hunks 1-3 (d_menu_ring.cpp:447)
@@ -984,7 +1014,11 @@ ModResult albw_menu_ring_ext_init(ModError* error) {
         !install(error, "Ring_DrawItem",
                  mods::hook_add_pre<Ring_DrawItem>(svc_hook, on_ring_draw_item_pre)) ||
         !install(error, "Ring_DrawItem2",
-                 mods::hook_add_pre<Ring_DrawItem2>(svc_hook, on_ring_draw_item2_pre)))
+                 mods::hook_add_pre<Ring_DrawItem2>(svc_hook, on_ring_draw_item2_pre)) ||
+        !install(error, "Ring_GetItemNum",
+                 mods::hook_add_post<Ring_GetItemNum>(svc_hook, on_ring_get_item_num_post)) ||
+        !install(error, "Ring_GetItemMaxNum",
+                 mods::hook_add_post<Ring_GetItemMaxNum>(svc_hook, on_ring_get_item_max_num_post)))
     {
         return MOD_ERROR;
     }
