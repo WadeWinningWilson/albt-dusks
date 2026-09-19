@@ -12,25 +12,8 @@ Stock Dusklight `.dusk` for the full ALBT feature set. Builds against [dusklight
 |---------|------|
 | **Ship / install this (all platforms)** | `dist/albt_full_plugin.dusk` — **one file** for Windows amd64 and Linux x86_64 |
 | Windows-only dev build | `build/mods/albt_full_plugin.dusk` |
-| Linux-only dev build | `build-linux/mods/albt_full_plugin.dusk` |
+| Linux-only dev build | `build-linux/mods/albt_full_p
 
-### Multiplatform (one `.dusk`, not two)
-
-A `.dusk` is a zip archive. The ship file contains **both** native libraries; Dusklight loads the one that matches your OS:
-
-| Path inside bundle | Used on |
-|--------------------|---------|
-| `lib/windows-amd64/mod.dll` | Windows x64 |
-| `lib/linux-x86_64/mod.so` | Linux x64 |
-
-Install the **same** `albt_full_plugin.dusk` on Windows and Linux. Open `PLATFORMS.txt` inside the bundle (rename to `.zip` if you want to inspect) to confirm both libs are present.
-
-## Two product shapes (both stay supported)
-
-| Shape | Id | When to use |
-|-------|-----|-------------|
-| **Collective** | `dev.albt.albw` | One file: meter (P3 partial) + stick-cycle + region HP/damage + Soul of Light (owns wallet half) + enemy death rupees |
-| **Standalone features** | `dev.albt.stick_cycle_lockon`, `dev.albt.region_hp`, `dev.albt.soul_of_light`, `dev.albt.enemy_death_rupees` | Mix-and-match; also offered as standalone **Lazy Tweaks** partner builds |
 
 Do **not** load the collective bundle alongside standalones that duplicate the same hooks (e.g. collective + `dev.albt.region_hp`).
 
