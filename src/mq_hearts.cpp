@@ -107,8 +107,26 @@ void on_get_max_life_gauge_post(ModContext*, void*, void* retval, void*) {
         return;
     }
     const int bonus = mqBonusMaxLifeQuarters();
+    u16* gauge = static_cast<u16*>(retval);
+    // TEMP DIAG — MQ-HEART. Confirms (a) whether getMaxLifeGauge is even CALLED during
+    // play/draw (if this never logs while hearts draw, stock inlines (getMaxLife/5)*4 and
+    // the hook is bypassed -> the bonus never reaches the hearts), and (b) the values.
+    // Throttled. Parse tag: "MQ-HEART". STRIP before release.
+    if (svc_log != nullptr && albw_cfg_bool(g_master_quest, false)) {
+        static u16 s_thr = 0;
+        if ((s_thr++ % 60) == 0) {
+            char buf[128];
+            const int maxLife =
+                (int)g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getMaxLife();
+            std::snprintf(buf, sizeof(buf),
+                          "[MQ-HEART] getMaxLifeGauge fired: maxLife=%d gaugeBase=%d bonusQ=%d "
+                          "final=%d halves=%d quarters=%d",
+                          maxLife, (int)*gauge, bonus, (int)(*gauge + bonus),
+                          (int)readReg(kBonusHalfHeartsReg), (int)readReg(kBonusQuarterHeartsReg));
+            svc_log->info(mod_ctx, buf);
+        }
+    }
     if (bonus != 0) {
-        u16* gauge = static_cast<u16*>(retval);
         *gauge = static_cast<u16>(*gauge + bonus);
     }
 }
@@ -160,11 +178,18 @@ int albw_mq_heart_shop_price() {
 }
 
 const char* albw_mq_heart_shop_name() {
-    return "Heart Container Upgrade";
+    return "Heart Upgrade";  // fork dAlbwMQ_getHeartShopName (d_albw_master_quest.cpp:46)
 }
 
+// fork dAlbwMQ_getHeartShopDesc (d_albw_master_quest.cpp:53) — dynamic by tier.
 const char* albw_mq_heart_shop_desc() {
-    return "Master Quest shrinks heart rewards — buy back capacity here, one half-heart at a time.";
+    if (!albw_mq_can_purchase_heart_shop()) {
+        return "Sold out.";
+    }
+    if (pastSoftCap(heartTier())) {
+        return "Permanently increases your maximum health by a quarter heart.";
+    }
+    return "Permanently increases your maximum health by half a heart.";
 }
 
 int albw_mq_get_meter_shop_tiers() {
@@ -206,7 +231,7 @@ const char* albw_mq_meter_shop_name() {
 }
 
 const char* albw_mq_meter_shop_desc() {
-    return "Raises ALBW meter capacity. Sold at the Postman shop when rental UI ships.";
+    return "Permanently expands your ALBW stamina meter.";  // fork d_albw_master_quest.cpp:68
 }
 
 // ============================================

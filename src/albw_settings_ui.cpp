@@ -203,6 +203,10 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
                            "WW Deku Leaf: R+A launches a gust takeoff, hold to keep rising, then "
                            "glide (drains the meter). Bomb button drops a live bomb mid-glide.",
                            g_deku_leaf) != MOD_OK ||
+        albw_ui_add_toggle(left, "Outfit Stats",
+                           "Per-outfit combat + swim traits: outgoing/incoming damage scaling "
+                           "(Sumo glass-cannon, etc.) and human underwater swimming.",
+                           g_outfit_stats) != MOD_OK ||
         albw_ui_add_toggle(left, "Master Quest hearts",
                            "MQ heart tiers + stamina meter bonus (shop rows when rental ships).",
                            g_master_quest) != MOD_OK)

@@ -1,0 +1,46 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_alink_swim.inc",
+  "stock": "../dusklight-main/src/d/actor/d_a_alink_swim.inc",
+  "out": "build/port/outfit_swim_port.inc",
+  "renames": {},
+  "port_funcs": [
+    "getSwimFrontMaxSpeed",
+    "getSwimMaxFallSpeed",
+    "checkOxygenTimer",
+    "offOxygenTimer",
+    "setSpeedAndAngleSwim",
+    "checkNextActionSwim",
+    "checkSwimAction",
+    "checkSwimUpAction",
+    "setSwimMoveAnime",
+    "procSwimUpInit",
+    "procSwimMove"
+  ],
+  "whole_funcs": [
+    "getSwimFrontMaxSpeed",
+    "getSwimMaxFallSpeed",
+    "checkOxygenTimer",
+    "offOxygenTimer",
+    "setSpeedAndAngleSwim",
+    "checkNextActionSwim",
+    "checkSwimAction",
+    "checkSwimUpAction",
+    "setSwimMoveAnime",
+    "procSwimUpInit",
+    "procSwimMove"
+  ],
+  "diag_zero": [],
+  "substitutions": [],
+  "engine_symbols": [
+    "daAlink_c",
+    "daPy_py_c",
+    "cXyz",
+    "csXyz",
+    "f32",
+    "s16",
+    "u32",
+    "int",
+    "bool",
+    "BOOL"
+  ]
+}

@@ -232,15 +232,18 @@ static const ALBWRentalEntry kItems[] = {
      "from getting this nasty splinter.",
      CAT_SHIELDS, true, false},
     {"Hylian Shield", (u8)dItemNo_HYLIA_SHIELD_e, -1, 500,
-     "An expert duelists' shield of choice, passed down by the Hyrulean Royal family.", CAT_SHIELDS,
-     true, false},
+     "An expert duelists' shield of choice, passed down by the Hyrulean Royal family. A "
+     "small inscription along the border reads: \" May the Goddess reunite us \".",
+     CAT_SHIELDS, true, false},
     {"Ordon Clothes", (u8)dItemNo_WEAR_CASUAL_e, -1, 50,
      "Humble small town wear fit for any...unassuming explorer.", CAT_ARMOR, false, true},
     {"Hero's Clothes", (u8)dItemNo_WEAR_KOKIRI_e, -1, 50,
      "You know, I had an ancestor that swore he saw a legendary hero wear a garb like this.",
      CAT_ARMOR, false, true},
-    {"Zora Armor", (u8)dItemNo_WEAR_ZORA_e, -1, 200,
-     "Scaly and sleek — for diving where others drown.", CAT_ARMOR, false, true},
+    {"Zora Armor", (u8)dItemNo_WEAR_ZORA_e, -1, 50,
+     "Sleek and slippery. Smells like the lake I used to fish at...when the Zoras weren't "
+     "looking....sigh...",
+     CAT_ARMOR, false, true},
 };
 static constexpr int kItemCount = sizeof(kItems) / sizeof(kItems[0]);
 
@@ -359,6 +362,25 @@ static dAlbwOutfitKind outfitKindForItemNo(u8 itemNo) {
 
 // fork d_albw_rental.cpp:559
 static bool appendStorageRowsForItem(u8 itemNo, const char* desc) {
+    // TEMP DIAG — MAGIC-GATE. For Magic Armor (ARMOR), log every gate result so we see
+    // exactly why its storage row is/isn't produced. Parse tag: "MAGIC-GATE". STRIP later.
+    if (itemNo == (u8)dItemNo_ARMOR_e && svc_log != nullptr) {
+        static int s_mg = 0;
+        if (s_mg < 8) {
+            s_mg++;
+            char buf[176];
+            std::snprintf(buf, sizeof(buf),
+                          "[MAGIC-GATE] dpad=%d storable=%d stored=%d firstBit=%d owned=%d "
+                          "trueAlbw=%d",
+                          dusk::isDpadQuickSwapEnabled() ? 1 : 0,
+                          dAlbwWardrobe_isStorableItemNo(itemNo) ? 1 : 0,
+                          dAlbwWardrobe_isStoredItemNo(itemNo) ? 1 : 0,
+                          dComIfGs_isItemFirstBit(itemNo) ? 1 : 0,
+                          dAlbwOutfit_isOwned(D_ALBW_OUTFIT_MAGIC) ? 1 : 0,
+                          albw_is_true_albw_enabled() ? 1 : 0);
+            svc_log->info(mod_ctx, buf);
+        }
+    }
     if (!dusk::isDpadQuickSwapEnabled() || !dAlbwWardrobe_isStorableItemNo(itemNo)) {
         return false;
     }

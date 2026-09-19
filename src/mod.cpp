@@ -28,6 +28,7 @@
 #include "end_game_transform.h"
 #include "hurricane_spin.h"
 #include "deku_leaf.h"
+#include "outfit_swim.h"
 #include "modules.h"
 #include "mq_hearts.h"
 #include "shield_mod.h"
@@ -181,6 +182,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_focused_arts_init(error) != MOD_OK ||
         albw_hurricane_init(error) != MOD_OK ||
         albw_deku_leaf_init(error) != MOD_OK ||
+        albw_outfit_swim_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
         albw_wolf_combat_init(error) != MOD_OK ||
         albw_wolf_charge_art_init(error) != MOD_OK ||

@@ -91,6 +91,7 @@ add_mod(albt_full_plugin
             src/potion.cpp
             src/shade_refuge.cpp
             src/outfit_stats.cpp
+            src/outfit_swim.cpp
             src/outfit.cpp
             src/outfit_debug.cpp
             src/sumo_test.cpp

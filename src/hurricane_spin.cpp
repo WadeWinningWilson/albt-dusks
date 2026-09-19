@@ -22,6 +22,10 @@
 
 #include "d/actor/d_a_alink.h"
 #include "d/d_com_inf_game.h"
+#include "d/d_particle_name.h"
+#include "m_Do/m_Do_mtx.h"
+#include "SSystem/SComponent/c_math.h"
+#include "JSystem/JParticle/JPAEmitter.h"
 
 #include "JSystem/JAudio2/JAISe.h"
 #include "JSystem/JAudio2/JASTrack.h"
@@ -64,6 +68,75 @@ void stopHurricaneSpinSe(daAlink_c* link);
 // The full 3-layer spin SE (Zant + tornado + spinner, pitch/volume, forced wave loop),
 // verbatim from the fork via port_tool.py - see tools/port/hurricane_se.json.
 #include "hurricane_se_port.inc"
+
+// ============================================
+// Sustained great-spin VFX — port of the fork's setCutTurnEffect gsSustainedVfx path
+// (d_a_alink_effect.inc:951-1145). The fork gates the sustained/tilted ring on
+// mProcID == PROC_CUT_GS_HURRICANE, which the overlay never sets (it rides PROC_CUT_TURN),
+// so the stock setCutTurnEffect only ever draws the vanilla one-shot ring. We reproduce
+// just the "Large" great-spin branch here and drive it per-frame while the overlay owns
+// the spin: emitters are positioned at Link's backbone-1 (sword) joint, tilted, and made
+// immortal so the ring persists for the whole spin rather than flashing once at the swing.
+// ============================================
+static const u16 kHurricaneVfxNames[6] = {
+    ID_ZI_J_KAITENGIRID_A, ID_ZI_J_KAITENGIRID_B, ID_ZI_J_KAITENGIRID_C,
+    ID_ZI_J_KAITENGIRID_D, ID_ZI_J_KAITENGIRID_E, ID_ZI_J_KAITENGIRID_F,
+};
+static const s16 kHurricaneVfxRot[18] = {
+    cM_deg2s(180), cM_deg2s(45), cM_deg2s(13), cM_deg2s(180), cM_deg2s(45), cM_deg2s(13),
+    cM_deg2s(180), cM_deg2s(60), cM_deg2s(13), cM_deg2s(180), cM_deg2s(60), cM_deg2s(13),
+    cM_deg2s(180), cM_deg2s(60), cM_deg2s(13), cM_deg2s(180), cM_deg2s(60), cM_deg2s(13),
+};
+static const Vec kHurricaneVfxTrans[6] = {
+    {0.0f, 0.0f, 0.0f},  {0.0f, 35.0f, 0.0f}, {0.0f, 0.0f, 0.0f},
+    {0.0f, 45.0f, 0.0f}, {0.0f, 30.0f, 0.0f}, {0.0f, 50.0f, 0.0f},
+};
+
+void hurricane_emit_vfx(daAlink_c* link) {
+    cXyz pos;
+    mDoMtx_multVecZero(link->getLinkBackBone1Matrix(), &pos);
+    csXyz effectRot = link->shape_angle;
+
+    u32* emitterId = link->field_0x3204;
+    // Retire spent emitters so they re-fire (sustained ring). Fork gsSustainedVfx path.
+    for (int i = 0; i < 6; i++) {
+        JPABaseEmitter* e = dComIfGp_particle_getEmitter(emitterId[i]);
+        if (emitterId[i] == 0 || e == NULL || e->getParticleNumber() == 0) {
+            if (emitterId[i] != 0) {
+                link->stopDrawParticle(emitterId[i]);
+            }
+            emitterId[i] = 0;
+        }
+    }
+
+    const JGeometry::TVec3<s16>* rot = reinterpret_cast<const JGeometry::TVec3<s16>*>(kHurricaneVfxRot);
+    const JGeometry::TVec3<f32>* trans = reinterpret_cast<const JGeometry::TVec3<f32>*>(kHurricaneVfxTrans);
+    for (int i = 0; i < 6; i++, emitterId++, rot++, trans++) {
+        JPABaseEmitter* emitter = link->setEmitter(emitterId, kHurricaneVfxNames[i], &pos, &effectRot);
+        if (emitter != NULL) {
+            emitter->setLocalRotation(*rot);
+            if (trans->y > 1.0f) {
+                emitter->setLocalTranslation(*trans);
+            }
+            emitter->becomeImmortalEmitter();
+            emitter->playCreateParticle();
+        }
+    }
+}
+
+// Retire the sustained ring when the spin ends (immortal emitters do not self-expire).
+void hurricane_stop_vfx(daAlink_c* link) {
+    for (int i = 0; i < 6; i++) {
+        if (link->field_0x3204[i] != 0) {
+            JPABaseEmitter* e = dComIfGp_particle_getEmitter(link->field_0x3204[i]);
+            if (e != NULL) {
+                e->becomeInvalidEmitter();
+            }
+            link->stopDrawParticle(link->field_0x3204[i]);
+            link->field_0x3204[i] = 0;
+        }
+    }
+}
 
 // ============================================
 // Hurricane proc bodies - adapted from d_a_alink_hurricane.inc: daAlink_c methods -> free
@@ -183,7 +256,30 @@ void hurricane_begin(daAlink_c* link, int param_direction) {
     dComIfGp_setPlayerStatus0(0, 0x8000);
     link->onResetFlg0(daAlink_c::RFLG0_UNK_2);
     initHurricaneSpinSe(link);
-    link->setCutTurnEffect();
+    // ============================================
+    // TEMP DIAG — HURR-SE (residency vs playback). After the mix starts, report each
+    // layer's LIVE handle: 1 = the wave is resident and the sound actually STARTED, 0 =
+    // null handle (wave missing / start failed). voiceCtrl is a resident Link voice
+    // (control). Branch: voiceCtrl=1 but zant/tornado/spinner=0 -> waves NOT resident ->
+    // a scene-wave loader (Z2SceneMgr::loadSceneWave) would fix it. All =1 but still
+    // silent -> resident-but-not-playing -> exe DSP loop (a loader won't help).
+    // Parse tag: "HURR-SE". STRIP before release.
+    // ============================================
+    if (svc_log != nullptr) {
+        auto live = [&](u32 id) -> int {
+            Z2SoundHandlePool* h = link->mZ2Link.mSoundObjSimple2.getHandleSoundID(id);
+            if (h == nullptr || !*h) {
+                h = link->mZ2Link.mSoundObjSimple1.getHandleSoundID(id);
+            }
+            return (h != nullptr && *h) ? 1 : 0;
+        };
+        char buf[128];
+        std::snprintf(buf, sizeof(buf), "[HURR-SE] zant=%d tornado=%d spinner=%d voiceCtrl=%d",
+                      live(kHurricaneSeMix.primarySe), live(kHurricaneSeMix.secondarySe),
+                      live(kHurricaneSeMix.tertiarySe), live(kHurricanePlaceholderVoiceSe));
+        svc_log->info(mod_ctx, buf);
+    }
+    hurricane_emit_vfx(link);  // sustained tilted ring (fork gsSustainedVfx), not the vanilla one-shot
 
     s_phase = HP_SPIN;
     s_frames = l_hurricaneDurationFrames;
@@ -206,6 +302,7 @@ bool hurricane_spin_frame(daAlink_c* link) {
 
     hurricaneUpdateFrozenSpin(link);
     maintainHurricaneSpinSe(link);
+    hurricane_emit_vfx(link);  // per-frame: keep the great-spin ring alive for the whole spin
     hurricaneApplyMovement(link);
     link->field_0x2fe4 = link->shape_angle.y;
 
@@ -217,6 +314,7 @@ bool hurricane_spin_frame(daAlink_c* link) {
     s_frames--;
     if (s_frames <= 0) {
         stopHurricaneSpinSe(link);
+        hurricane_stop_vfx(link);  // retire the immortal ring emitters
         link->mAtSph.OffAtSetBit();
         link->field_0x2fd0 = 0;
         return true;

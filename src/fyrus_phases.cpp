@@ -295,6 +295,26 @@ HookAction on_fm_execute_phases_pre(ModContext*, void* args, void*, void*) {
     if (fm == nullptr || !dAlbwBossRefinement_isEnabled()) {
         return HOOK_CONTINUE;
     }
+    // ============================================
+    // TEMP DIAG — FYRUS-FREEZE. probeState() only logs on action/mode CHANGE, so a
+    // freeze (constant state) is invisible. Log the full state UNCONDITIONALLY every
+    // ~30 frames so a stuck phase-1 Fyrus reveals which action/mode/anim he is parked
+    // in, whether the attack morf is frozen (isStop), and whether a phase predicate
+    // mis-fired. Parse tag: "FYRUS-TICK". STRIP before release.
+    // ============================================
+    {
+        static u16 s_fzTick = 0;
+        if ((s_fzTick++ % 30) == 0) {
+            DuskLog.info(
+                "[FYRUS-TICK] action={} mode={} anm={} morfFrame={} isStop={} hp={} "
+                "golemWin={} ablaze={} vulnOpen={} hollow={}",
+                (int)fm->mAction, (int)fm->mMode, (int)fm->mAnm,
+                (int)fm->mpFmModelMorf->getFrame(), (int)fm->mpFmModelMorf->isStop(),
+                (int)fm->health, dAlbwBoss_fyrusGolemWindowIsLive(),
+                dAlbwBoss_fyrusAblazePhase(), dAlbwBoss_fyrusAblazeVulnOpen(),
+                dAlbwBoss_fyrusHollowPhase());
+        }
+    }
     s_prev790 = fm->field_0x790;
 
     // fork damage_check:2661 - resolve the previous frame's queued commit.

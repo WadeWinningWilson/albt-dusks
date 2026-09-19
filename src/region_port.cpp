@@ -25,6 +25,7 @@
 #include "modules.h"
 #include "region_mult_port.h"
 #include "hp_mult_port.h"
+#include "outfit_stats.h"
 
 #include "d/d_com_inf_game.h"
 #include "d/d_stage.h"
@@ -143,11 +144,17 @@ void on_damage_mag_post(ModContext*, void*, void* retval, void*) {
     if (retval == NULL) {
         return;
     }
-    const f32 mult = dAlbwRegionMult_getDamageMult();
-    if (mult <= 1.0f) {
-        return;
+    // Fork order (d_a_alink_damage.inc:172-173): received outfit mult first, then region
+    // mult, both composed onto base_mag. The outfit mult can be <1 (damage reduction), so
+    // it is applied whenever it differs from 1.0, unlike the region mult (boost-only).
+    const f32 outfitMult = dAlbwOutfitStats_getReceivedDamageMult();
+    if (outfitMult != 1.0f) {
+        *static_cast<f32*>(retval) *= outfitMult;
     }
-    *static_cast<f32*>(retval) *= mult;
+    const f32 mult = dAlbwRegionMult_getDamageMult();
+    if (mult > 1.0f) {
+        *static_cast<f32*>(retval) *= mult;
+    }
 }
 
 // Hold the DamageScaleScope across setDamagePoint for COVER hits — reproduces the

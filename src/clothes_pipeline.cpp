@@ -48,6 +48,12 @@ DEFINE_HOOK(&daAlink_c::setClothesChange, SetClothesChangeCloth);
 DEFINE_HOOK(&daAlink_c::create, AlinkCreate);
 DEFINE_HOOK(&daAlink_c::changeLink, ChangeLinkStamp);
 DEFINE_HOOK(&daAlink_c::changeWolf, ChangeWolfStamp);
+// fork d_a_alink.cpp:19744 - execute() drives the outfit reconciler every frame. Stock
+// execute has no such call, so the mod must supply it: without this per-frame tick the
+// sumo worn-bit gets set (shop buy / quick-swap) but syncLinkModel never runs and no
+// clothes rebuild is ever kicked -> "buying sumo does nothing". This is the outfit
+// counterpart to the shield reload driver's per-frame execute hook.
+DEFINE_HOOK(&daAlink_c::execute, OutfitExecDriver);
 DEFINE_HOOK(&daAlink_c::draw, AlinkDrawGuard);
 DEFINE_HOOK(&daAlink_c::setMagicArmorBrk, SetMagicArmorBrk);
 DEFINE_HOOK(&daAlink_c::setWaterDropColor, SetWaterDropColor);
@@ -80,6 +86,18 @@ void on_change_link_post(ModContext*, void* args, void*, void*) {
 }
 
 // fork d_a_alink_wolf.inc:328 - wolf models also live in mpArcHeap.
+// fork d_a_alink.cpp:19744 - the per-frame outfit reconciler, missing in stock execute.
+// Runs BEFORE stock execute's body (so a swap it kicks is picked up by execute's own
+// loadModelDVD the same frame). dAlbwSumoTest_exec self-gates (null + worn-bit/settings),
+// so it is inert unless an outfit is in play.
+HookAction on_outfit_exec_driver_pre(ModContext*, void* args, void*, void*) {
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link != nullptr) {
+        dAlbwSumoTest_exec(link);
+    }
+    return HOOK_CONTINUE;
+}
+
 void on_change_wolf_post(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) return;
@@ -693,6 +711,8 @@ ModResult albw_clothes_pipeline_init(ModError* error) {
                  mods::hook_add_post<ChangeLinkStamp>(svc_hook, on_change_link_post)) ||
         !install(error, "ChangeWolfStampToken",
                  mods::hook_add_post<ChangeWolfStamp>(svc_hook, on_change_wolf_post)) ||
+        !install(error, "OutfitExecDriver",
+                 mods::hook_add_pre<OutfitExecDriver>(svc_hook, on_outfit_exec_driver_pre)) ||
         !install(error, "AlinkDrawConsistencyGuard",
                  mods::hook_add_pre<AlinkDrawGuard>(svc_hook, on_alink_draw_pre)) ||
         !install(error, "ChangeLinkMagicReady",

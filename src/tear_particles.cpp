@@ -43,6 +43,12 @@
 #include "JSystem/JParticle/JPAEmitter.h"
 #include "JSystem/JParticle/JPABaseShape.h"
 
+// Tear orb actor — private->public so the body-effect emitters (mpBodyEffEmtrs) are
+// readable for the emitter-state probe (point 4).
+#define private public
+#include "d/actor/d_a_obj_drop.h"
+#undef private
+
 #include "albw_common.h"
 #include "modules.h"
 #include "mods/svc/hook.hpp"
@@ -71,6 +77,45 @@ DEFINE_HOOK(&dPa_control_c::getRM_ID, TearGetRmId);
 // transition (the archive heap is being rebuilt then), which crashes in JPATexture::load.
 DEFINE_HOOK(&dPa_control_c::createCommon, TearCreateCommon);
 DEFINE_HOOK(&JPAResource::drawP, TearDrawP);
+DEFINE_HOOK(&daObjDrop_c::execute, TearObjDropExec);
+
+// TEMP DIAG — TEAR-EMTR (point 4): every frame the tear/light-drop orb executes, read
+// its six body emitters LIVE from the actor (no stale pointers) and log null-state +
+// particle count. This is the branch decider: -1 (null emitter) = routing/lookup
+// problem; 0 across frames = resource/calc/init problem; >0 but invisible = draw/texture
+// problem. Fires for any light-drop (recovery orb AND twilight-area tears -> point 6
+// diff). Throttled + sample-capped. Parse tag: "TEAR-EMTR". STRIP before release.
+void on_obj_drop_exec_post(ModContext*, void* args, void*, void*) {
+    auto* drop = mods::arg<daObjDrop_c*>(args, 0);
+    if (drop == nullptr || svc_log == nullptr) {
+        return;
+    }
+    bool anyEmtr = false;
+    for (int i = 0; i < 6; i++) {
+        if (drop->mpBodyEffEmtrs[i] != NULL) {
+            anyEmtr = true;
+            break;
+        }
+    }
+    static int s_samples = 0;
+    static u16 s_throttle = 0;
+    if (!anyEmtr || s_samples >= 40) {
+        return;
+    }
+    if ((s_throttle++ % 12) != 0) {
+        return;
+    }
+    s_samples++;
+    int pc[6];
+    for (int i = 0; i < 6; i++) {
+        JPABaseEmitter* e = drop->mpBodyEffEmtrs[i];
+        pc[i] = (e != NULL) ? (int)e->getParticleNumber() : -1;
+    }
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "[TEAR-EMTR] suppReady=%d parts=%d,%d,%d,%d,%d,%d (-1=null)",
+                  sTearResMng != NULL ? 1 : 0, pc[0], pc[1], pc[2], pc[3], pc[4], pc[5]);
+    svc_log->info(mod_ctx, buf);
+}
 
 // TEMP DIAGNOSTIC: JPALoadTex (the crash site) is too short to hook, so instrument
 // its hookable caller drawP and replicate JPALoadTex's index math:
@@ -198,8 +243,17 @@ bool ensure_tear_heap() {
 
 // fork dPa_control_c ctor:1294 - allocate the tear heap at particle init, once.
 void on_create_common_post(ModContext*, void*, void*, void*) {
+    // New stage: the previous stage's archive heap — and our child sTearHeap allocated
+    // from it, plus sTearResMng/sTearResCommand living on it — has been rebuilt/freed, so
+    // those pointers now DANGLE. The emitter manager is also new, so our slot-2
+    // registration is gone (log: slot2IsOurs=0). Drop the stale handles (do NOT free —
+    // the parent archive heap already did) so the tear reloads fresh for this stage.
+    sTearHeap = nullptr;
+    sTearResMng = nullptr;
+    sTearResCommand = nullptr;  // freed with the old sTearHeap; never destroy() it here
+    sTearResFailed = false;
     if (svc_log != nullptr) {
-        svc_log->info(mod_ctx, "[tear] createCommon hook fired - pre-creating heap");
+        svc_log->info(mod_ctx, "[tear] createCommon hook fired - reset stale handles, re-creating heap");
     }
     ensure_tear_heap();
 }
@@ -266,6 +320,34 @@ bool albw_tear_ensure_scene_res() {
         sTearResFailed = true;
         return false;
     }
+    // ============================================
+    // TEMP DIAG — TEAR-RES (6-point pipeline instrumentation, per the review plan).
+    // Prove the supplemental resource is valid BEFORE touching architecture: (1) the JPC
+    // header version at +4 must read "2-10"; (2) getResource() non-null for the six tear
+    // ids; (3) each resource's shape/dynamics blocks + user-work. Parse tag: "TEAR-RES".
+    // STRIP before release.
+    // ============================================
+    if (svc_log != nullptr) {
+        const u8* hdr = static_cast<const u8*>(data);
+        char hb[80];
+        std::snprintf(hb, sizeof(hb), "[TEAR-RES] hdr='%.4s%.4s' resReg=%u texReg=%u",
+                      reinterpret_cast<const char*>(hdr), reinterpret_cast<const char*>(hdr + 4),
+                      (unsigned)sTearResMng->resRegNum, (unsigned)sTearResMng->texRegNum);
+        svc_log->info(mod_ctx, hb);
+        static const u16 kTearIds[6] = {0x838B, 0x838C, 0x838D, 0x838E, 0x838F, 0x842B};
+        for (int i = 0; i < 6; i++) {
+            const u16 id = kTearIds[i];
+            const bool dup = sTearResMng->checkUserIndexDuplication(id);
+            JPAResource* r = dup ? sTearResMng->getResource(id) : NULL;
+            char rb[176];
+            std::snprintf(rb, sizeof(rb),
+                          "[TEAR-RES] id=0x%04X dup=%d res=%p bsp=%p dyn=%p userWork=0x%08X",
+                          id, dup ? 1 : 0, (void*)r, (void*)(r ? r->getBsp() : NULL),
+                          (void*)(r ? r->getDyn() : NULL),
+                          (unsigned)sTearResMng->getResUserWork(id));
+            svc_log->info(mod_ctx, rb);
+        }
+    }
     ResTIMG* fbTimg = mDoGph_gInf_c::getFrameBufferTimg();
     const ResTIMG* oldDummy = sTearResMng->swapTexture(fbTimg, "dummy");
     if (svc_log != nullptr) {
@@ -305,12 +387,16 @@ void on_get_rm_id_post(ModContext*, void* args, void* retval, void*) {
             const bool su = (sTearResMng != NULL) && sTearResMng->checkUserIndexDuplication(resID);
             const int texReg = (sTearResMng != NULL) ? (int)sTearResMng->texRegNum : -1;
             const int resReg = (sTearResMng != NULL) ? (int)sTearResMng->resRegNum : -1;
-            char buf[144];
+            // Point 5: prove emitter slot 2 still holds OUR supplemental manager.
+            JPAEmitterManager* em = dPa_control_c::getEmitterManager();
+            JPAResourceManager* slot2 = (em != NULL) ? em->getResourceManager((u16)kTearRmSlot) : NULL;
+            char buf[176];
             std::snprintf(
                 buf, sizeof(buf),
-                "[tear] getRM_ID res=0x%04X inSlot=%d sceneHas=%d supp=%d mng=%d slot2:res=%d tex=%d",
+                "[tear] getRM_ID res=0x%04X inSlot=%d sceneHas=%d supp=%d mng=%d slot2:res=%d tex=%d "
+                "slot2IsOurs=%d",
                 resID, (int)*rmID, sh ? 1 : 0, su ? 1 : 0, sTearResMng != NULL ? 1 : 0, resReg,
-                texReg);
+                texReg, (slot2 != NULL && slot2 == sTearResMng) ? 1 : 0);
             svc_log->info(mod_ctx, buf);
         }
     }
@@ -323,6 +409,15 @@ void on_get_rm_id_post(ModContext*, void* args, void* retval, void*) {
     }
     if (sceneHasRes(pa, resID)) {
         return;  // current stage already has it — leave on slot 1
+    }
+    // Only remap when emitter slot 2 GENUINELY still holds our supplemental manager. A
+    // stage transition rebuilds the emitter manager (dropping our registration) and can
+    // put the stage's own manager in slot 2 (log: slot2IsOurs=0, res=142). Remapping then
+    // would route tear ids to a foreign manager and deref a stale sTearResMng. Compare
+    // pointers only (no deref) before touching sTearResMng.
+    JPAEmitterManager* em = dPa_control_c::getEmitterManager();
+    if (em == NULL || em->getResourceManager((u16)kTearRmSlot) != sTearResMng) {
+        return;
     }
     if (sTearResMng->checkUserIndexDuplication(resID)) {
         *rmID = kTearRmSlot;
@@ -344,6 +439,9 @@ ModResult albw_tear_particles_init(ModError*) {
     }
     if (mods::hook::add_pre<TearDrawP>(on_draw_p_pre) != MOD_OK) {
         svc_log->error(mod_ctx, "failed to hook JPAResource::drawP (tear diag)");
+    }
+    if (mods::hook::add_post<TearObjDropExec>(on_obj_drop_exec_post) != MOD_OK) {
+        svc_log->error(mod_ctx, "failed to hook daObjDrop_c::execute (tear emitter diag)");
     }
     return MOD_OK;
 }
