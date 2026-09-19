@@ -204,7 +204,8 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
                            g_true_albw) != MOD_OK ||
         albw_ui_add_toggle(left, "End-Game Transform",
                            "Grants the free wolf transform (shadow crystal + Midna + LV0-3) so "
-                           "Wolf Combat is usable. Always on when True ALBW is enabled.",
+                           "Wolf Combat is usable. WARNING: writes end-game story flags to your "
+                           "save — use on a backup. Not tied to True ALBW.",
                            g_end_game_transform) != MOD_OK ||
         albw_ui_add_toggle(left, "Deku Leaf glide",
                            "WW Deku Leaf: R+A launches a gust takeoff, hold to keep rising, then "

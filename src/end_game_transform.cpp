@@ -3,8 +3,9 @@
 // Port of the fork editor toggle "End-Game Transform (Midna + Crystal)"
 // (src/dusk/ui/editor.cpp): it grants the free wolf transform by setting
 // event bits M_077 + F_0250 and transform levels 0..3. Here it is applied
-// each frame in gameplay when its own toggle or True ALBW is on, so the Wolf
-// Combat that True ALBW unlocks in the shop is actually usable.
+// each frame in gameplay ONLY when its own dedicated toggle is on. It is NOT
+// driven by True ALBW: True ALBW is shop-unlocks only and must not write story
+// bits (see the save-safety note in the tick below).
 //
 // Grant-only: we never CLEAR the bits when the toggle is turned off, so a legit
 // save that already has the shadow crystal / Midna-revived story state is never
@@ -23,8 +24,14 @@
 // Grant the end-game transform save state, once, when in gameplay.
 // ============================================
 void albw_end_game_transform_tick() {
-    const bool enabled =
-        albw_cfg_bool(g_end_game_transform, false) || albw_cfg_bool(g_true_albw, false);
+    // SAVE-SAFETY (Code Red): this grant WRITES end-game STORY-PROGRESSION bits
+    // (M_067 Midna riding, M_011 chains removed, F_0250 Midna revived / Hyrule
+    // Castle barrier). Forcing those onto a mid-game save changes how the story
+    // unfolds and corrupts normal saves, so it must NEVER be driven by True ALBW
+    // (which is shop-unlocks only). Gated SOLELY on the explicit End-Game Transform
+    // toggle, which a player enables knowingly. (A save-write-free runtime version
+    // is planned; until then this stays opt-in and off by default.)
+    const bool enabled = albw_cfg_bool(g_end_game_transform, false);
     if (!enabled) {
         return;
     }

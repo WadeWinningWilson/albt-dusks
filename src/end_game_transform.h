@@ -7,8 +7,8 @@
 //   event bit M_077 (Get shadow crystal - can now transform)
 //   event bit F_0250 (Midna revived / Hyrule Castle barrier)
 //   transform LV 0..3
-// Enabled by its own config toggle (g_end_game_transform) OR by True ALBW
-// (g_true_albw), so the Wolf Combat that True ALBW unlocks in the shop is usable.
+// Enabled ONLY by its own config toggle (g_end_game_transform). It is NOT tied to
+// True ALBW: True ALBW is shop-unlocks only and must never write story save bits.
 // ============================================
 void albw_end_game_transform_tick();
 
