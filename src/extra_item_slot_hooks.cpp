@@ -33,6 +33,13 @@
 
 #include "mods/hook.hpp"
 
+// TEMP DIAG - RINGX probe counters (read by the [RINGX] ring-frame probe in
+// menu_ring_ext.cpp). Parse tag: "RINGX". STRIP with the probe.
+volatile u32 g_albwRingProbeSuppressUD = 0;  // UP/DOWN triggers zeroed by reservation
+volatile u32 g_albwRingProbeSuppressL = 0;   // LEFT triggers zeroed by reservation
+volatile u32 g_albwRingProbeZCommits = 0;    // ring Z-commits (setActiveCursor post)
+volatile u32 g_albwRingProbeSetSelDown = 0;  // dComIfGp_setSelectItem(DOWN) resolves
+
 namespace {
 
 bool item_wheel_trig() {
@@ -59,13 +66,36 @@ DEFINE_HOOK(dMw_RIGHT_TRIGGER, MwRightTrigger);
 DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_SELECT_ITEM, void(int), SetSelectItem);
 DEFINE_HOOK(&dMenu_Ring_c::setActiveCursor, RingSetActiveCursor);
 
+// ============================================
+// SOFTLOCK FIX (item-ring back-out): stock dMenu_Ring_c::isMoveEnd closes the
+// ring ONLY on dMw_UP/DOWN/B triggers (stock d_menu_ring.cpp:821-826), and the
+// collect screens navigate with LEFT/RIGHT. These field-only D-pad reservations
+// used to gate on !isPauseFlag() alone, which does not hold on every menu frame
+// - the reservation then ate the ring's own back-out input and the menu could
+// never close (assign works, exit hangs). Bail whenever the menu system is
+// engaged (pause, message, menu heap lock - the same signals can_use_quick_swap
+// trusts), so the reservations apply only to true field navigation. Donor
+// intent: the fork suppresses FIELD D-pad, never subscreen input.
+// ============================================
+bool menu_system_engaged() {
+    if (g_dComIfG_gameInfo.play.isPauseFlag()) {
+        return true;
+    }
+    const int heapLock = g_dComIfG_gameInfo.play.isHeapLockFlag();
+    if (heapLock != 0 && heapLock != 5) {
+        return true;
+    }
+    return g_dComIfG_gameInfo.play.getMesgStatus() != 0;
+}
+
 bool quick_swap_suppresses_dpad() {
-    return albw_is_dpad_quick_swap_enabled() && !g_dComIfG_gameInfo.play.isPauseFlag();
+    return albw_is_dpad_quick_swap_enabled() && !menu_system_engaged();
 }
 
 bool extra_slot_reserves_left_dpad() {
     return albw_is_extra_item_slot_enabled();
 }
+
 
 HookAction on_midna_talk_trigger_pre(ModContext*, void* args, void* retval, void*) {
     if (!albw_is_extra_item_slot_enabled() || retval == nullptr) {
@@ -229,6 +259,8 @@ HookAction on_set_select_item_pre(ModContext*, void* args, void*, void*) {
     auto& status = g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA();
     auto& item = g_dComIfG_gameInfo.info.getPlayer().getItem();
 
+    g_albwRingProbeSetSelDown++;  // RINGX
+
     if (status.getSelectItemIndex(idx) != 0xFF) {
         const u8 resolved = item.getItem(status.getSelectItemIndex(idx), false);
         g_dComIfG_gameInfo.play.setSelectItem(idx, resolved);
@@ -261,6 +293,7 @@ void on_up_trigger_post(ModContext*, void*, void* retval, void*) {
 
     // Quick Swap: D-pad Up is sword cycle — never open the stock item wheel in field.
     if (quick_swap_suppresses_dpad()) {
+        if (*static_cast<BOOL*>(retval) != FALSE) g_albwRingProbeSuppressUD++;  // RINGX
         *static_cast<BOOL*>(retval) = FALSE;
     }
 }
@@ -269,6 +302,7 @@ void on_down_trigger_post(ModContext*, void*, void* retval, void*) {
     if (retval == nullptr || !quick_swap_suppresses_dpad()) {
         return;
     }
+    if (*static_cast<BOOL*>(retval) != FALSE) g_albwRingProbeSuppressUD++;  // RINGX
     *static_cast<BOOL*>(retval) = FALSE;
 }
 
@@ -280,11 +314,13 @@ void on_right_trigger_post(ModContext*, void*, void* retval, void*) {
 }
 
 void on_left_trigger_post(ModContext*, void*, void* retval, void*) {
-    if (retval == nullptr || !extra_slot_reserves_left_dpad() ||
-        g_dComIfG_gameInfo.play.isPauseFlag())
-    {
+    // SOFTLOCK FIX: same menu-aware gate as the quick-swap reservations — this
+    // one is armed by Extra Item Slot ALONE (any mode), which is why the hang
+    // also reproduced without Quick Swap.
+    if (retval == nullptr || !extra_slot_reserves_left_dpad() || menu_system_engaged()) {
         return;
     }
+    if (*static_cast<BOOL*>(retval) != FALSE) g_albwRingProbeSuppressL++;  // RINGX
     *static_cast<BOOL*>(retval) = FALSE;
 }
 
@@ -351,6 +387,7 @@ void on_ring_set_active_cursor_post(ModContext*, void* args, void*, void*) {
 
     status.setSelectItemIndex(SELECT_ITEM_DOWN, invSlot);
     ring->field_0x6ac = ring->mCurrentSlot;
+    g_albwRingProbeZCommits++;  // RINGX
     dComIfGp_setSelectItem(SELECT_ITEM_DOWN);
 
     dMeter2Info_set2DVibrationM();
