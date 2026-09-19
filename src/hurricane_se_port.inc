@@ -94,7 +94,7 @@ static void excludeVoiceWaveArams(Z2CreatureLink* link, u32 seId) {
                 continue;
             }
 
-            if (jasCh->field_0xdc.mChannelType != CHANNEL_WAVE) {
+            if (jasCh->mAnon.mChannelType != CHANNEL_WAVE) {
                 continue;
             }
 
@@ -144,11 +144,11 @@ static void forceHurricaneSpinSeWaveLoop(JAISound* sound) {
                 continue;
             }
 
-            if (jasCh->field_0xdc.mChannelType != CHANNEL_WAVE) {
+            if (jasCh->mAnon.mChannelType != CHANNEL_WAVE) {
                 continue;
             }
 
-            const JASWaveInfo& wave = jasCh->field_0xdc.mWaveInfo;
+            const JASWaveInfo& wave = jasCh->mAnon.mWaveInfo;
             const u32 sampleCount = wave.mSampleCount > 0 ? wave.mSampleCount : jasCh->mDspCh->mChannel->mSampleCount;
             const u32 aramAddress = jasCh->mDspCh->mChannel->mWaveAramAddress;
             if (sampleCount == 0 || aramAddress == 0 || audio::isHurricaneSpinWaveExcluded(aramAddress)) {
@@ -180,7 +180,7 @@ static void forceHurricaneSpinSeWaveLoop(JAISound* sound) {
                 continue;
             }
 
-            if (jasCh->field_0xdc.mChannelType != CHANNEL_WAVE) {
+            if (jasCh->mAnon.mChannelType != CHANNEL_WAVE) {
                 continue;
             }
 
@@ -198,7 +198,7 @@ static void forceHurricaneSpinSeWaveLoop(JAISound* sound) {
 
     audio::registerHurricaneSpinWaveAram(dspCh->mWaveAramAddress);
 
-    const JASWaveInfo& wave = loopChannel->field_0xdc.mWaveInfo;
+    const JASWaveInfo& wave = loopChannel->mAnon.mWaveInfo;
     dspCh->mLoopFlag = 0xff;
     dspCh->mLoopStartSample = 0;
     dspCh->mEndSample = loopSampleCount;

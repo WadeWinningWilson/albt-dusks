@@ -2,7 +2,7 @@
   "fork": "../dusklight/src/dusk/hurricane_test.cpp",
   "stock": "tools/port/_empty_stock.cpp",
   "out": "build/port/hurricane_se_port.inc",
-  "renames": {},
+  "renames": { "field_0xdc": "mAnon" },
   "port_funcs": [
     "initHurricaneSpinSe",
     "maintainHurricaneSpinSe",
