@@ -244,6 +244,14 @@ static const ALBWRentalEntry kItems[] = {
      "Sleek and slippery. Smells like the lake I used to fish at...when the Zoras weren't "
      "looking....sigh...",
      CAT_ARMOR, false, true},
+    // ============================================
+    // NEW CODE - ALBW Port (Magic Armor purchase row)
+    // Restores the fork's pre-alpha-cleanup Magic Armor row (fork d_albw_rental.cpp
+    // f99a5bd6bb^): native item dItemNo_ARMOR_e, 500r, CAT_ARMOR. Grants + equips
+    // through the outfit module (see grantClothes) so it can't crash quick-swap.
+    // ============================================
+    {"Magic Armor", (u8)dItemNo_ARMOR_e, -1, 500,
+     "Legendary Golden protection, keep an eye on your wallet with this!", CAT_ARMOR, false, true},
 };
 static constexpr int kItemCount = sizeof(kItems) / sizeof(kItems[0]);
 
@@ -257,6 +265,10 @@ bool clothesEligible(const ALBWRentalEntry& e) {
                albw_game::is_item_first_bit((u8)dItemNo_WEAR_KOKIRI_e);
     case (u8)dItemNo_WEAR_ZORA_e:
         return albw_game::is_item_first_bit((u8)dItemNo_WEAR_ZORA_e);
+    case (u8)dItemNo_ARMOR_e:
+        // Magic Armor uses the permanent rental-eligibility bit (fork row gate
+        // dMeter2_isALBWRentalEligible(ARMOR)); True ALBW bypasses via entryEligible.
+        return albw_rental_is_eligible((u8)dItemNo_ARMOR_e);
     default:
         return false;
     }
@@ -740,6 +752,19 @@ void grantShield(u8 itemNo) {
 }
 
 void grantClothes(u8 itemNo) {
+    if (itemNo == (u8)dItemNo_ARMOR_e) {
+        // ============================================
+        // NEW CODE - ALBW Port (Magic Armor grant)
+        // Magic Armor must grant + auto-equip through the outfit module, NOT the
+        // plain setSelectEquip path below: the fork (d_albw_rental.cpp:1326-1332)
+        // warns that clearWorn + grantRentalClothes alone leaves a skip-path
+        // window that crashes on the next quick-swap.
+        // ============================================
+        g_dComIfG_gameInfo.info.getPlayer().getGetItem().onFirstBit(itemNo);
+        dAlbwOutfit_recordOwnedByItemNo(itemNo);
+        dAlbwOutfit_equip(D_ALBW_OUTFIT_MAGIC);
+        return;
+    }
     g_dComIfG_gameInfo.info.getPlayer().getGetItem().onFirstBit(itemNo);
     g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().setSelectEquip(COLLECT_CLOTHING, itemNo);
     if (itemNo == (u8)dItemNo_WEAR_KOKIRI_e) {
