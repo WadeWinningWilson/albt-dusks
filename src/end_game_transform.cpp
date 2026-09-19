@@ -18,11 +18,9 @@
 // Link at create; the wolf arc streams from disc via loadModelDVD's meta branch),
 // and the wolf form works at transform LV0.
 //
-// Input: D-pad Down toggles the form. Precedence mirrors the fork
-// (dpad_quick_swap.cpp:45-47 unbinds quick-transform from Down in favor of the
-// D-pad Quick Swap): when Quick Swap is enabled it owns Down in HUMAN form
-// (outfit cycle), so the transform fires only from wolf form; with Quick Swap
-// off, Down transforms in both forms.
+// Input: D-pad LEFT toggles the form (user-pinned; Left is the Midna direction —
+// transforming is a Midna action — and it avoids the D-pad Down outfit-cycle /
+// quick-equip conflict entirely).
 //
 // D_MN08 (Hyrule Castle) is excluded: the native forced-wolf path sets event bit
 // F_0776 there (procCoMetamorphoseInit, d_a_alink.cpp:19513) - the ONLY save
@@ -75,7 +73,7 @@ void albw_end_game_transform_tick() {
         return;
     }
 
-    if (mDoCPd_c::getTrigDown(PAD_1) == 0) {
+    if (mDoCPd_c::getTrigLeft(PAD_1) == 0) {
         return;
     }
 
@@ -86,11 +84,6 @@ void albw_end_game_transform_tick() {
     }
 
     const bool wolf = daPy_py_c::checkNowWolf() != 0;
-
-    // Fork precedence: D-pad Quick Swap owns Down in human form (outfit cycle).
-    if (!wolf && albw_cfg_bool(g_dpad_quick_swap, false)) {
-        return;
-    }
 
     if (wolf) {
         player->onEndResetFlg0(daPy_py_c::ERFLG0_UNK_1);
