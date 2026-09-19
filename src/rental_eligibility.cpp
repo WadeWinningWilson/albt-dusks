@@ -13,7 +13,19 @@
 namespace {
 
 static constexpr u16 kPostmanUnlockFlag = 0x4c01u;  // F_0625 — Talo rescued
-static constexpr int kRentalFlagRegBase = 106;        // event mEvent bytes (MQ uses 100–104)
+
+// ============================================
+// SAVE-DATA FIX (reg-collision repair): eligibility storage now matches the FORK
+// exactly — saveBitLabels[673+i] (fork d_meter2.cpp kRentalEligibleBase = 673,
+// "indices 673-784 confirmed free in the TP save layout"). The dusk previously
+// deviated onto event regs 106-120, which COLLIDED with sword_atp's fork-verbatim
+// regs 106-113 (sword ATP writes marked rentals eligible and vice versa). Shields
+// take the next free bits, 685-687. Old reg-stored eligibility is not migrated
+// (the colliding bytes are unreliable); eligibility re-arms on the next death
+// strip, and True ALBW is unaffected.
+// ============================================
+static constexpr int kRentalEligibleBase = 673;       // fork parity: 673..684
+static constexpr int kShieldEligibleBase = 685;       // 685..687
 
 static const u8 kRentalItems[] = {
     (u8)dItemNo_BOOMERANG_e,    (u8)dItemNo_SPINNER_e,      (u8)dItemNo_BOW_e,
@@ -28,15 +40,6 @@ static const u8 kShieldRentalItems[] = {
     (u8)dItemNo_HYLIA_SHIELD_e,
 };
 
-static constexpr int kShieldFlagRegBase = kRentalFlagRegBase + 12;
-
-u16 flagReg(int idx) {
-    return static_cast<u16>((kRentalFlagRegBase + idx) << 8) | 0xFFu;
-}
-
-u16 shieldFlagReg(int idx) {
-    return static_cast<u16>((kShieldFlagRegBase + idx) << 8) | 0xFFu;
-}
 
 int rentalIndex(u8 itemNo) {
     for (int i = 0; i < 12; ++i) {
@@ -190,7 +193,7 @@ bool albw_rental_postman_unlocked() {
 void albw_rental_on_eligible(u8 itemNo) {
     const int idx = rentalIndex(itemNo);
     if (idx >= 0) {
-        albw_game::set_event_reg(flagReg(idx), 1);
+        dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[kRentalEligibleBase + idx]);
     }
 }
 
@@ -199,13 +202,13 @@ bool albw_rental_is_eligible(u8 itemNo) {
     if (idx < 0) {
         return false;
     }
-    return albw_game::get_event_reg(flagReg(idx)) != 0;
+    return albw_game::is_event_bit(dSv_event_flag_c::saveBitLabels[kRentalEligibleBase + idx]);
 }
 
 void albw_rental_on_shield_eligible(u8 itemNo) {
     const int idx = shieldRentalIndex(itemNo);
     if (idx >= 0) {
-        albw_game::set_event_reg(shieldFlagReg(idx), 1);
+        dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[kShieldEligibleBase + idx]);
     }
 }
 
@@ -214,7 +217,7 @@ bool albw_rental_is_shield_eligible(u8 itemNo) {
     if (idx < 0) {
         return false;
     }
-    return albw_game::get_event_reg(shieldFlagReg(idx)) != 0;
+    return albw_game::is_event_bit(dSv_event_flag_c::saveBitLabels[kShieldEligibleBase + idx]);
 }
 
 void albw_rental_strip_all_on_death() {

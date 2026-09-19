@@ -51,8 +51,18 @@ static constexpr const char* kSwordNames[kAlbwSwordAtpCount] = {
 };
 
 // Event regs 106–109 = Atp bonus u8 ×4; 110–113 = purchase step u8 ×4.
-static constexpr u16 kBonusRegBase = static_cast<u16>(106 << 8) | 0xFF;
-static constexpr u16 kStepRegBase  = static_cast<u16>(110 << 8) | 0xFF;
+// ============================================
+// SAVE-DATA FIX (encoding repair, deliberate divergence from the fork): the fork
+// (d_albw_sword_atp.cpp:45-63) adds swordId to the ENCODED value ((106<<8)|0xFF
+// + id), which corrupts the low-byte clear-mask for swords 1-3 (they alias reg
+// 107/111 with masks 0x00-0x02 — setEventReg clears ~mask then ORs, so values
+// pile up unreadably). Encode per-index like every other reg user in this mod:
+// ((base + id) << 8) | 0xFF. The fork has the same latent bug upstream.
+// (These regs also used to collide with rental eligibility, which has moved to
+// its fork-native saveBitLabels[673+] storage — see rental_eligibility.cpp.)
+// ============================================
+static constexpr int kBonusRegIndexBase = 106;
+static constexpr int kStepRegIndexBase  = 110;
 
 static char sDescBuf[kAlbwSwordAtpCount][256];
 
@@ -65,11 +75,11 @@ static void writeReg(u16 reg, u8 value) {
 }
 
 static u16 bonusRegFor(int swordId) {
-    return static_cast<u16>(kBonusRegBase + swordId);
+    return static_cast<u16>((kBonusRegIndexBase + swordId) << 8) | 0xFFu;
 }
 
 static u16 stepRegFor(int swordId) {
-    return static_cast<u16>(kStepRegBase + swordId);
+    return static_cast<u16>((kStepRegIndexBase + swordId) << 8) | 0xFFu;
 }
 
 static int countInsectFirstBits() {
