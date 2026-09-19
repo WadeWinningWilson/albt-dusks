@@ -1,0 +1,31 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_alink_bottle.inc",
+  "stock": "../dusklight-main/src/d/actor/d_a_alink_bottle.inc",
+  "out": "build/port/potion_bottle_port.inc",
+  "renames": { "daAlink_c::": "AlbwPotionLink_c::" },
+  "port_funcs": [
+    "commonBottleDrink"
+  ],
+  "whole_funcs": [
+    "commonBottleDrink"
+  ],
+  "diag_zero": [],
+  "substitutions": [
+    ["dMeter2_addALBWFraction", "albw_meter_add_base_fraction"]
+  ],
+  "engine_symbols": [
+    "daAlink_c",
+    "daPy_py_c",
+    "daPy_demo_c",
+    "daPy_frameCtrl_c",
+    "fopAc_ac_c",
+    "cXyz",
+    "f32",
+    "s16",
+    "u16",
+    "u32",
+    "int",
+    "bool",
+    "BOOL"
+  ]
+}

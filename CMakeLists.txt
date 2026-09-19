@@ -95,6 +95,7 @@ add_mod(albt_full_plugin
             src/sword_atp.cpp
             src/potion.cpp
             src/potion_grant.cpp
+            src/potion_bottle.cpp
             src/shade_refuge.cpp
             src/outfit_stats.cpp
             src/outfit_swim.cpp

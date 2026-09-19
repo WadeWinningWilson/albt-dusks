@@ -32,6 +32,7 @@
 #include "modules.h"
 #include "tear_actor.hpp"  // albw_tear_actor_init / albw_tear_glow_init (Dusklight 2.0 tear)
 #include "potion_grant.h"  // albw_potion_grant_init / albw_potion_grant_tick (soulbound potion)
+#include "potion_bottle.h"  // albw_potion_bottle_init (soulbound potion drink/heal/consume)
 #include "mq_hearts.h"
 #include "shield_mod.h"
 #include "boss_refinement_hooks.h"
@@ -220,6 +221,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_menu_window_ext_init(error) != MOD_OK ||
         albw_menu_ring_ext_init(error) != MOD_OK ||
         albw_potion_grant_init(error) != MOD_OK ||
+        albw_potion_bottle_init(error) != MOD_OK ||
         albw_epona_spur_hud_init(error) != MOD_OK)
     {
         return MOD_ERROR;
