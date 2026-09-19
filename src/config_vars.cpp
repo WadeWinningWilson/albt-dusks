@@ -34,6 +34,7 @@ ConfigVarHandle g_parry_master = 0;
 ConfigVarHandle g_boss_hp_bars = 0;
 ConfigVarHandle g_enemy_hp_bars = 0;
 ConfigVarHandle g_link_damage_decrease = 0;
+ConfigVarHandle g_incoming_damage_scale = 0;
 ConfigVarHandle g_boss_refinement = 0;
 ConfigVarHandle g_postman_rental = 0;
 ConfigVarHandle g_true_albw = 0;

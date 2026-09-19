@@ -136,10 +136,13 @@ ModResult build_qol_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiEle
 
 ModResult build_difficulty_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiElementHandle,
                                void*, ModError* error) {
-    if (svc_ui->pane_add_section(mod_ctx, left, "Region & economy") != MOD_OK) {
+    if (svc_ui->pane_add_section(mod_ctx, left, "Difficulty") != MOD_OK) {
         return MOD_ERROR;
     }
     if (albw_region_hp_build_panel(left, error) != MOD_OK) {
+        return MOD_ERROR;
+    }
+    if (svc_ui->pane_add_section(mod_ctx, left, "Economy") != MOD_OK) {
         return MOD_ERROR;
     }
     if (albw_ui_add_toggle(left, "Enemy death rupees",

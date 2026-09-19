@@ -36,6 +36,7 @@ extern ConfigVarHandle g_parry_master;
 extern ConfigVarHandle g_boss_hp_bars;
 extern ConfigVarHandle g_enemy_hp_bars;
 extern ConfigVarHandle g_link_damage_decrease;
+extern ConfigVarHandle g_incoming_damage_scale;  // index: 0=0.5x 1=1x 2=2x 3=4x incoming damage
 extern ConfigVarHandle g_boss_refinement;
 extern ConfigVarHandle g_postman_rental;
 extern ConfigVarHandle g_true_albw;

@@ -65,9 +65,11 @@ ModResult register_all_config(ModError* error) {
         albw_register_int("hp_boss", 1, &g_hp_boss) != MOD_OK ||
         albw_register_int("hp_final", 1, &g_hp_final) != MOD_OK ||
         albw_register_int("link_damage_decrease", 1, &g_link_damage_decrease) != MOD_OK ||
-        albw_register_bool("region_hp", false, &g_region_hp) != MOD_OK ||
+        albw_register_int("incoming_damage_scale", 1, &g_incoming_damage_scale) != MOD_OK ||
+        // Fork parity (settings.cpp:117-120): region master OFF, health axis pre-armed.
+        albw_register_bool("region_hp", true, &g_region_hp) != MOD_OK ||
         albw_register_bool("region_damage", false, &g_region_damage) != MOD_OK ||
-        albw_register_bool("region_mult", true, &g_region_mult) != MOD_OK ||
+        albw_register_bool("region_mult", false, &g_region_mult) != MOD_OK ||
         albw_register_bool("region_mult_rupees", true, &g_region_mult_rupees) != MOD_OK ||
         albw_register_bool("recovery_orb", true, &g_recovery_orb) != MOD_OK ||
         albw_register_bool("kill_rupees", true, &g_kill_rupees) != MOD_OK ||

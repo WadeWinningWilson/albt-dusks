@@ -138,6 +138,22 @@ void on_delete_post(ModContext*, void* args, void* retval, void*) {
     }
 }
 
+// ============================================
+// NEW CODE - ALBW (incoming-damage scaler)
+// Player-facing multiplier on the damage Link TAKES (index -> float), reproducing
+// the fork's damageMultiplier factor (d_a_alink_damage.inc:168) as a mod-owned,
+// fractional (can be <1) scaler. Composes multiplicatively with the outfit + region
+// incoming mults below. index: 0=0.5x 1=1x(default) 2=2x 3=4x.
+// ============================================
+f32 albw_incoming_damage_scale_mult() {
+    switch (albw_cfg_int(g_incoming_damage_scale, 1)) {
+    case 0:  return 0.5f;
+    case 2:  return 2.0f;
+    case 3:  return 4.0f;
+    default: return 1.0f;
+    }
+}
+
 // Fork damageMagnification (d_a_alink_damage.inc:173): base_mag *= getDamageMult().
 // getDamageMult self-gates on regionDamage + the COVER scope depth.
 void on_damage_mag_post(ModContext*, void*, void* retval, void*) {
@@ -150,6 +166,11 @@ void on_damage_mag_post(ModContext*, void*, void* retval, void*) {
     const f32 outfitMult = dAlbwOutfitStats_getReceivedDamageMult();
     if (outfitMult != 1.0f) {
         *static_cast<f32*>(retval) *= outfitMult;
+    }
+    // Player incoming-damage scaler: multiplicative, can reduce (<1) or raise damage.
+    const f32 inMult = albw_incoming_damage_scale_mult();
+    if (inMult != 1.0f) {
+        *static_cast<f32*>(retval) *= inMult;
     }
     const f32 mult = dAlbwRegionMult_getDamageMult();
     if (mult > 1.0f) {
@@ -222,6 +243,16 @@ ModResult albw_region_hp_shutdown(ModError*) {
     return MOD_OK;
 }
 
+// Incoming-damage scaler options (index-aligned with albw_incoming_damage_scale_mult).
+static const char* const kIncomingDamageScales[] = {"0.5x", "1x", "2x", "4x"};
+
+// Region multipliers master gate: the HP and rupee axes are dependents — grey them
+// out (and they self-gate functionally) whenever the master is off. Fork parity:
+// regionMult is the master; regionDamage is standalone (no gate).
+static bool region_mult_master_off(ModContext*, void*) {
+    return !albw_cfg_bool(g_region_mult, false);
+}
+
 ModResult albw_region_hp_build_panel(UiElementHandle panel, ModError* error) {
     if (albw_ui_add_number(panel, "Common HP",
                            "True max-HP multiplier for ordinary enemies. 1x is vanilla.",
@@ -235,19 +266,28 @@ ModResult albw_region_hp_build_panel(UiElementHandle panel, ModError* error) {
         albw_ui_add_number(panel, "Link damage decrease",
                            "Divide the damage Link's own hits deal (1x = vanilla).",
                            g_link_damage_decrease, 1, 16) != MOD_OK ||
-        albw_ui_add_toggle(panel, "Region HP",
-                           "Multiply spawn HP by the province/dungeon table after category HP.",
-                           g_region_hp) != MOD_OK ||
-        albw_ui_add_toggle(panel, "Region damage",
-                           "Multiply incoming COVER damage to Link by the same table.",
-                           g_region_damage) != MOD_OK ||
-        albw_ui_add_toggle(panel, "Region multipliers (master)",
-                           "Master switch for region table on HP and rupee axes.", g_region_mult) !=
+        albw_ui_add_select(panel, "Incoming damage",
+                           "Scale the damage Link takes (0.5x easier ... 4x harder). Composes on "
+                           "top of Outfit Stats and Region Damage. 1x is vanilla.",
+                           g_incoming_damage_scale, kIncomingDamageScales,
+                           sizeof(kIncomingDamageScales) / sizeof(kIncomingDamageScales[0])) !=
             MOD_OK ||
+        // Region Damage: standalone (independent of the master), placed first per fork order.
+        albw_ui_add_toggle(panel, "Region damage",
+                           "Multiply incoming COVER damage to Link by the province/dungeon table.",
+                           g_region_damage) != MOD_OK ||
+        // Region Multipliers master, then its two dependent axes (greyed when master off).
+        albw_ui_add_toggle(panel, "Region multipliers (master)",
+                           "Master switch for the region table on the HP and rupee axes.",
+                           g_region_mult) != MOD_OK ||
+        albw_ui_add_toggle(panel, "Region HP",
+                           "Multiply spawn HP by the province/dungeon table after category HP. "
+                           "Requires the region master.",
+                           g_region_hp, &region_mult_master_off) != MOD_OK ||
         albw_ui_add_toggle(panel, "Region rupees",
                            "Scale enemy-death rupee grants by the region table (x3 extra when "
-                           "Region damage is on).",
-                           g_region_mult_rupees) != MOD_OK) {
+                           "Region damage is on). Requires the region master.",
+                           g_region_mult_rupees, &region_mult_master_off) != MOD_OK) {
         if (error != nullptr) {
             error->code = MOD_ERROR;
         }
