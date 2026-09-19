@@ -75,10 +75,19 @@ bool outfit_zora_swim(const daAlink_c* link) {
     if (!dAlbwOutfitStats_allowsSubmergedSwim(link)) {
         return false;
     }
-    if (const_cast<daAlink_c*>(link)->checkZoraWearAbility()) {
+    daAlink_c* l = const_cast<daAlink_c*>(link);
+    if (l->checkZoraWearAbility()) {
         return false;  // a real Zora — the stock path already handles diving
     }
-    return const_cast<daAlink_c*>(link)->checkModeFlg(daAlink_c::MODE_SWIMMING);
+    if (!l->checkModeFlg(daAlink_c::MODE_SWIMMING)) {
+        return false;
+    }
+    // SUBMERGED only. The inlined execute()/posMove() buoyancy + no-ground-snap sites
+    // read getZoraSwim(); forcing it true at the SURFACE (while resurfacing, when
+    // FLG0_SWIM_UP/checkSwimUp is set) keeps buoyancy on and Link swims in place. Mirror
+    // isSubmergedHumanSwim's submerged test — but WITHOUT calling getZoraSwim() (which we
+    // hook -> recursion): submerged = going down (!checkSwimUp) or mid dive.
+    return !l->checkSwimUp() || l->mProcID == daAlink_c::PROC_SWIM_DIVE;
 }
 
 // getZoraSwim() POST: OR the outfit-human-swim condition into the engine's predicate, so

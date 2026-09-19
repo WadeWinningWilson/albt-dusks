@@ -179,6 +179,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_rupee_popup_init(error) != MOD_OK ||
         albw_tear_particles_init(error) != MOD_OK ||
         albw_mq_hearts_init(error) != MOD_OK ||
+        albw_mq_heart_meter_init(error) != MOD_OK ||
         albw_shield_init(error) != MOD_OK ||
         albw_focused_arts_init(error) != MOD_OK ||
         albw_hurricane_init(error) != MOD_OK ||

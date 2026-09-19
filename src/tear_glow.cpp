@@ -53,6 +53,8 @@ GfxDrawTypeHandle  g_drawType = 0;
 GfxStageHookHandle g_stageHook = 0;
 ResourceBuffer     g_wgsl = RESOURCE_BUFFER_INIT;
 float              g_time = 0.0f;
+volatile uint32_t  g_drawFired = 0;      // incremented on the render worker (no logging there)
+volatile bool      g_drawPipelineOk = false;
 
 WGPUShaderModule makeShader(const ResourceBuffer& src) {
     WGPUShaderSourceWGSL wgsl = WGPU_SHADER_SOURCE_WGSL_INIT;
@@ -131,7 +133,12 @@ void on_draw(ModContext*, const GfxDrawContext* ctx, const void* payload, size_t
     if (ctx == nullptr || size != sizeof(DrawPayload)) {
         return;
     }
-    if (!ensurePipeline(ctx->layout)) {
+    // NOTE: render worker thread — NO service calls (svc_log etc.) allowed here.
+    // Record state in plain globals; on_scene (game thread) logs them.
+    g_drawFired++;
+    const bool haveP = ensurePipeline(ctx->layout);
+    g_drawPipelineOk = haveP;
+    if (!haveP) {
         return;
     }
     DrawPayload data;
@@ -157,18 +164,18 @@ void on_draw(ModContext*, const GfxDrawContext* ctx, const void* payload, size_t
 
 // Game thread: snapshot camera + tear state, push the uniform + a draw.
 void on_scene(ModContext*, const GfxStageContext* stageCtx, void*) {
-    if (stageCtx == nullptr || stageCtx->game_view == nullptr) {
-        return;
-    }
+    const bool hasView = stageCtx != nullptr && stageCtx->game_view != nullptr;
     cXyz pos;
     f32 sizeWorld = 26.0f;
     f32 alpha = 1.0f;
-    if (!albw_tear_actor_get_draw(&pos, &sizeWorld, &alpha)) {
+    const bool hasTear = albw_tear_actor_get_draw(&pos, &sizeWorld, &alpha);
+    if (!hasView || !hasTear) {
         return;
     }
 
     CameraInfo cam = CAMERA_INFO_INIT;
-    if (svc_camera->get_camera(mod_ctx, stageCtx->game_view, &cam) != MOD_OK) {
+    const ModResult camRc = svc_camera->get_camera(mod_ctx, stageCtx->game_view, &cam);
+    if (camRc != MOD_OK) {
         return;
     }
 

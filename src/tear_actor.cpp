@@ -27,7 +27,7 @@ bool  g_tearActive = false;
 bool  g_tearCollected = false;  // latched on pickup; soul_of_light stops respawning
 ActorId g_tearId = 0;           // tracked spawn (for despawn on a new death)
 cXyz  g_tearPos = {0.0f, 0.0f, 0.0f};
-f32   g_tearScale = 26.0f;   // glow radius in world units
+f32   g_tearScale = 150.0f;  // glow half-extent in world units (~6x the initial speck)
 f32   g_tearAlpha = 0.0f;    // fade-in / fade-out
 
 static constexpr f32 kPickupRange = 250.0f;   // fork checkGetArea distance
@@ -103,6 +103,10 @@ int maAlbwTear_c::Execute() {
         if (daPy_py_c* player = playerActor()) {
             if (current.pos.abs(player->current.pos) < kPickupRange) {
                 grantRecovery(mRecovery);
+                // Douse Link in the blue light-absorb glow like a regular tear
+                // pickup (sets ERFLG0_UNK_20000000 + FLG3_UNK_200000, which drive
+                // the field_0x346c glow animation; clears naturally in wolf form).
+                player->onWolfLightDropGet();
                 mPicked = true;
                 g_tearCollected = true;
             }
@@ -185,7 +189,8 @@ ActorId albw_tear_actor_spawn(const cXyz& pos, s8 room, u16 recovery) {
 
     g_tearCollected = false;  // fresh tear for this death
     ActorId id = 0;
-    if (svc_actor->create_actor_from_name(mod_ctx, MA_ALBW_TEAR_NAME, &params, &id) != MOD_OK) {
+    ModResult r = svc_actor->create_actor_from_name(mod_ctx, MA_ALBW_TEAR_NAME, &params, &id);
+    if (r != MOD_OK) {
         return 0;
     }
     g_tearId = id;
@@ -198,6 +203,7 @@ void albw_tear_actor_despawn() {
     }
     g_tearId = 0;
     g_tearActive = false;
+    g_tearCollected = false;  // new death = fresh tear cycle (fixes "happened once, never again")
 }
 
 bool albw_tear_actor_is_active() {

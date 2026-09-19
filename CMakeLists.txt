@@ -38,6 +38,7 @@ add_mod(albt_full_plugin
             src/tear_particles.cpp
             src/tear_actor.cpp
             src/tear_glow.cpp
+            src/mq_heart_meter.cpp
             src/shield.cpp
             src/shield_adapt.cpp
             src/shield_game.cpp

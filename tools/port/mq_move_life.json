@@ -1,0 +1,19 @@
+{
+  "fork": "../dusklight/src/d/d_meter2.cpp",
+  "stock": "../dusklight-main/src/d/d_meter2.cpp",
+  "out": "build/port/mq_move_life_port.inc",
+  "renames": {
+    "dMeter2_c::": "AlbwMeter2_c::",
+    "dAlbwMQ_isEnabled": "albw_mq_is_enabled",
+    "dAlbwMQ_getDisplayMaxLifeInternal": "albw_mq_display_max_internal"
+  },
+  "port_funcs": ["moveLife"],
+  "whole_funcs": ["moveLife"],
+  "diag_zero": [],
+  "substitutions": [
+    ["dusk::getSettings().game.hudScale.getValue()", "1.0f"]
+  ],
+  "engine_symbols": [
+    "dMeter2_c", "s16", "u16", "u8", "f32", "int", "bool", "BOOL"
+  ]
+}
