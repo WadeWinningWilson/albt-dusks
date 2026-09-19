@@ -211,6 +211,10 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
                            "Per-outfit combat + swim traits: outgoing/incoming damage scaling "
                            "(Sumo glass-cannon, etc.) and human underwater swimming.",
                            g_outfit_stats) != MOD_OK ||
+        albw_ui_add_toggle(left, "Sumo Fists Only",
+                           "Hide Link's sword/shield for a bare-knuckle look while the "
+                           "Sumo Outfit is worn.",
+                           g_sumo_outfit_fists) != MOD_OK ||
         albw_ui_add_toggle(left, "Master Quest hearts",
                            "MQ heart tiers + stamina meter bonus (shop rows when rental ships).",
                            g_master_quest) != MOD_OK)
