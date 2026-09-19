@@ -27,33 +27,53 @@ Several handles are pre-declared/registered but **not fully wired** — audit ea
 
 ## GET (port from fork)
 
-- [ ] **1. Soulbound Red potion** — Souls-flask red potion, SLOT_11: 2-heart
-  heal, 2→3 charges via 80r shop upgrade. Handle `g_soulbound_potion` exists.
-  Ref memory: project_albw_soulbound_potion. Fork src TBD.
-- [ ] **2. Finish Quick Swap port** — regression: Zora **crashes with Sumo** on
-  swap (never crashed before). `src/quick_swap.cpp` present. Needs crash
-  root-cause (symbolicate) + fork diff.
-- [ ] **3. Magic Armor in shop** — add Magic Armor to the Postman/rental
-  catalog (`src/rental_shop.cpp`). Fork shop entry TBD.
-- [ ] **4. Wolf Link howl songs (rest)** — port remaining howl songs;
-  fork gates them by story progress — **make all accessible, no save bits.**
-  `src/wolf_howl_combat.cpp` present.
-- [ ] **5. Sumo fists only** — wire `g_sumo_outfit_fists`: Sumo outfit fights
-  unarmed (fists), no weapon. Ref memory: project_sumo_outfit.
-- [ ] **6. Darknut enemy changes for parry system** — port fork's Darknut
-  (d_a_e_dn?) changes that integrate with the parry system.
-- [ ] **7. Region damage multiplier master + deps organization** — wire the
-  region damage-multiplier master toggle + its dependents; organize the settings
-  pane with the fork's **left/right pane ordering** and master→dependent nesting.
+- [~] **1. Soulbound Red potion** — slice 1 (grant driver) DONE (f9d056e): potion
+  now appears in SLOT_11 on toggle. Remaining slices 2-4 (drink=2-heart heal +
+  charge decrement via port_tool subclass, HUD/ring/save counts, refill on
+  death/rest) delegated to an implementation agent. **IN PROGRESS.**
+- [~] **2. Finish Quick Swap port (Zora+Sumo crash)** — **NEEDS USER DECISION.**
+  Root cause: stock daAlink_c::changeLink NULL-derefs al_face.bmd on a Zora↔Sumo
+  swap because Zora's Zmdl arc has no al_face (only zl_face). The fork fixes it
+  INSIDE changeLink (borrows Kmdl's al_face for the Zora base). The dusk already
+  has the fix primitives (dAlbwSumoTest_sumoFaceData + Kmdl donor) but nothing
+  consumes them because changeLink isn't replaced. Options:
+    (A) DN-10 step 1 (fork-faithful): replace changeLink via HOOK_SKIP_ORIGINAL +
+        ported body. Blocked as a DN-10 escalation — its Magic branch drags 5
+        no-linkage file-statics + a model callback; cannot self-approve. Needs go.
+    (B) Interim stopgap (DN-10 step 2): force the swap-transient flags so stock
+        picks the resident zl_face over al_face-from-Zmdl (edits in
+        clothes_pipeline.cpp). Stops the crash; trades it for a 1-frame cosmetic
+        (zl_face on the sumo body). Lower risk but touches live swap flag logic.
+  Not implementing blind — awaiting user's pick of (A) or (B).
+- [x] **3. Magic Armor in shop** — restored fork purchase row (500r), grant via
+  dAlbwOutfit_equip. Commit 8b60a34.
+- [x] **4. Wolf Link howl songs (rest)** — all 6 duets ungated (no save bits) in
+  both pool builders. Commit 6e6d571.
+- [x] **5. Sumo fists only** — mechanic was already wired; exposed the settings
+  toggle. Commit e8f598d.
+- [~] **6. Darknut enemy changes for parry system** — **NEEDS USER DECISION.**
+  Research found the fork's Darknut changes are ALL confuse/lockout/wolf/rupee,
+  ZERO parry content; the dusk parry system is player-side/hook-based so Darknuts
+  are already parryable with nothing ported. No parry source exists on either
+  side. Options for the user: (a) a parry *fix* (player-side shield_hooks) if a
+  specific behavior is wrong in-game, or (b) port the fork's Darknut
+  confuse/lockout feature (a different, non-parry feature). Not building blind.
+- [x] **7. Region damage multiplier master + deps organization** — defaults
+  aligned to fork, master→dependent nesting w/ is_disabled gating, Difficulty +
+  Economy sections. Commit 42c5866.
 
 ## ADD (new, fork-referenced)
 
-- [ ] **8. Incoming-damage multiplier scaler** — new player damage-TAKEN
-  multiplier. Model on **Outfit Stats** (`src/outfit_stats.*`,
-  `dAlbwOutfitStats_get*Mult`) and the existing `g_link_damage_decrease` int.
+- [x] **8. Incoming-damage multiplier scaler** — g_incoming_damage_scale
+  (0.5x/1x/2x/4x) composed in on_damage_mag_post; select next to Link damage
+  decrease. Commit 42c5866.
 
 ---
 
 ## Log
 
-- Flurry toggle hidden.
+- Flurry toggle hidden (d30ecba).
+- Magic Armor (8b60a34), wolf howl ungate (6e6d571), sumo fists toggle (e8f598d).
+- Region org + incoming scaler (42c5866).
+- Darknut: flagged for user — no parry source; do not fabricate.
+- Soulbound potion: starting (grant path + init first).
