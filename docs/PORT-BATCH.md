@@ -27,10 +27,12 @@ Several handles are pre-declared/registered but **not fully wired** — audit ea
 
 ## GET (port from fork)
 
-- [~] **1. Soulbound Red potion** — slice 1 (grant driver) DONE (f9d056e): potion
-  now appears in SLOT_11 on toggle. Remaining slices 2-4 (drink=2-heart heal +
-  charge decrement via port_tool subclass, HUD/ring/save counts, refill on
-  death/rest) delegated to an implementation agent. **IN PROGRESS.**
+- [x] **1. Soulbound Red potion** — DONE, all 4 slices built green: grant
+  (f9d056e), drink/heal/consume via AlbwPotionLink_c subclass (f1d627c),
+  HUD/ring/save counts (883e1f4), refills on death + refuge return (d64a017).
+  Notes: green-potion addALBWFraction is dead code on the always-RED path
+  (link-only stub); Shade-Watcher rest NPC isn't ported here so refill sits on
+  the refuge return-warp. Needs in-game verification of hook resolution.
 - [~] **2. Finish Quick Swap port (Zora+Sumo crash)** — **NEEDS USER DECISION.**
   Root cause: stock daAlink_c::changeLink NULL-derefs al_face.bmd on a Zora↔Sumo
   swap because Zora's Zmdl arc has no al_face (only zl_face). The fork fixes it
