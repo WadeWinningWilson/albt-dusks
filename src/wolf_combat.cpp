@@ -19,6 +19,7 @@
 
 #include "wolf_combat.h"
 #include "wolf_charge_hud.h"
+#include "focused_arts.h"  // dFocusedArts_isMdForcedWolfActive (charge-heal parity)
 #include "albw_game.h"
 #include "albw_common.h"
 #include "config_vars.h"
@@ -940,9 +941,24 @@ void addWolfChargeSteps(int i_steps) {
         }
         const u16 curHP = g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getLife();
         const u16 maxHP = albw_game::max_life_gauge();
-        if (curHP * 2 <= maxHP) {
+        // ============================================
+        // NEW CODE - ALBW Port (fork d_albw_wolf_stun.cpp:899)
+        // Gate the charge-completion quarter-heart heal behind !MD-forced-wolf so
+        // it doesn't double up with the forced-wolf per-attack full-heart heal.
+        // ============================================
+        if (!dFocusedArts_isMdForcedWolfActive() && curHP * 2 <= maxHP) {
             g_dComIfG_gameInfo.play.setItemLifeCount(1.0f, 0);
         }
+    }
+
+    // ============================================
+    // NEW CODE - ALBW Port (fork d_albw_wolf_stun.cpp:903-906)
+    // While Focused-Arts MD forced-wolf is active, every damaging wolf attack
+    // restores one full heart. The mod omitted this, so forced-wolf felt far
+    // more fragile than the fork.
+    // ============================================
+    if (dFocusedArts_isMdForcedWolfActive()) {
+        g_dComIfG_gameInfo.play.setItemLifeCount(4.0f, 0);
     }
 }
 

@@ -344,6 +344,21 @@ HookAction on_proc_guard_slip_init_pre(ModContext*, void* args, void* retval, vo
         const int atp = objinf != nullptr ? static_cast<int>(objinf->GetAtAtp()) : 0;
         dParryMaster_onFailedBlock(link, atp);
     }
+
+    // ============================================
+    // NEW CODE - ALBW Port (shield durability drain on a normal block)
+    // Fork d_a_alink_damage.inc:756-760 runs this right after onFailedGuardBlock:
+    // a blocked hit drains durability, and when it reaches 0 the shield breaks.
+    // The mod ported dShield_onBlockHit/destroyFromDurability but never called
+    // them here, so durability never took and shields never broke. Reproduce the
+    // fork's call at the same seam.
+    // ============================================
+    if (link != nullptr && dShield_isDurabilityEnabled() &&
+        dShield_onBlockHit(link, at_spl, false, attacker)) {
+        dShield_destroyFromDurability(link);
+        *static_cast<int*>(retval) = 0;
+        return HOOK_SKIP_ORIGINAL;
+    }
     return HOOK_CONTINUE;
 }
 
