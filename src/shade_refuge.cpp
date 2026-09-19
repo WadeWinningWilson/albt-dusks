@@ -20,6 +20,7 @@
 #include "d/actor/d_a_alink.h"
 #include "d/actor/d_a_player.h"  // daPy_py_c::setParamData (getup warp-in spawn param)
 #include "d/d_com_inf_game.h"
+#include "potion.h"  // dAlbwPotion_refillSoulboundToMax (refill on Shade-Watcher return/rest)
 // fork: #include "dusk/settings.h" for game.shadeRefuge - host settings are
 // unreachable from a mod, so the gate reads the mod's own shade_refuge key.
 #include <cstring>
@@ -183,6 +184,14 @@ void dShadeRefuge_executePendingWarp() {
     // watcher snaps the camera behind Link and tops the fall damage back to full
     // on arrival.
     albw_game::set_life(albw_game::max_life_gauge());
+    // ============================================
+    // NEW CODE - ALBW Port (Soulbound Red Potion refill on Shade-Watcher return)
+    // Fork d_a_albw_shade_watcher.cpp:1913 tops the soulbound bottle to max on the
+    // Shade-Watcher rest branch. That NPC is not ported in this .dusk; the refuge
+    // return-warp is the equivalent heal-at-the-watcher moment, so the refill rides
+    // it here. Self-gates (no-op without the potion).
+    // ============================================
+    dAlbwPotion_refillSoulboundToMax();
     albw_game::set_restart_room(sPos, sAngleY, sRoom);
     albw_game::set_restart_room_param(daPy_py_c::setParamData(sRoom, 0, 0xC9, 0));
     dComIfGp_setNextStage(sStage, -1, sRoom, -1, 0.0f, 0x45, 0, 0, 0, 1, 0);

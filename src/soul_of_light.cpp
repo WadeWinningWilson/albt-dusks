@@ -1,5 +1,7 @@
 // Soul of Light — part of dev.albt.albw (owns wallet half on stock Dusklight).
 
+#include "helpers/string.hpp"  // TEXT_SPAN - precede any d_save.h include (via potion.h)
+
 #include "global.h"
 
 #include "albw_common.h"
@@ -18,6 +20,7 @@
 #include "d/d_bg_s_gnd_chk.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_save.h"
+#include "potion.h"  // dAlbwPotion_refillSoulboundToMax (refill soulbound potion on death)
 #include "f_op/f_op_actor.h"
 #include "f_op/f_op_actor_mng.h"
 #include "f_pc/f_pc_name.h"
@@ -407,6 +410,15 @@ HookAction on_dead_pre(ModContext*, void* args, void*, void*) {
 }
 
 void on_dead_post(ModContext*, void*, void*, void*) {
+    // ============================================
+    // NEW CODE - ALBW Port (Soulbound Red Potion refill on death)
+    // Fork d_gameover.cpp:490 tops the soulbound bottle back to its current max
+    // charges on the death/respawn path. procCoDeadInit is the .dusk's death seam
+    // it already hooks. refillSoulboundToMax self-gates (no-op without the potion),
+    // so this is independent of the Soul-of-Light orb feature gated below.
+    // ============================================
+    dAlbwPotion_refillSoulboundToMax();
+
     if (!orbEnabled()) {
         return;
     }
