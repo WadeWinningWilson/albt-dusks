@@ -31,6 +31,7 @@
 #include "outfit_swim.h"
 #include "modules.h"
 #include "tear_actor.hpp"  // albw_tear_actor_init / albw_tear_glow_init (Dusklight 2.0 tear)
+#include "potion_grant.h"  // albw_potion_grant_init / albw_potion_grant_tick (soulbound potion)
 #include "mq_hearts.h"
 #include "shield_mod.h"
 #include "boss_refinement_hooks.h"
@@ -218,6 +219,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_clothes_pipeline_init(error) != MOD_OK ||
         albw_menu_window_ext_init(error) != MOD_OK ||
         albw_menu_ring_ext_init(error) != MOD_OK ||
+        albw_potion_grant_init(error) != MOD_OK ||
         albw_epona_spur_hud_init(error) != MOD_OK)
     {
         return MOD_ERROR;
@@ -248,6 +250,7 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     albw_rental_shop_tick();
     albw_end_game_transform_tick();
     albw_deku_leaf_tick();
+    albw_potion_grant_tick();
     albw_meter_update();
     return MOD_OK;
 }
