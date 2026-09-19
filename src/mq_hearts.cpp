@@ -46,6 +46,10 @@ void writeReg(u16 reg, u8 value) {
     albw_game::set_event_reg(reg, value);
 }
 
+// Fork grantHalfHeartMaxCapacity (d_albw_master_quest.cpp:63): bump the bonus
+// half-heart reg (grows getMaxLifeGauge) and queue a +2 current-life heal. The
+// queued heal is what makes moveLife animate the row up into the new capacity;
+// the container growth itself comes from moveLife tracking getDisplayMaxLifeInternal.
 void grantHalfHeart() {
     const u8 halves = readReg(kBonusHalfHeartsReg);
     if (halves >= 255) {
@@ -108,24 +112,6 @@ void on_get_max_life_gauge_post(ModContext*, void*, void* retval, void*) {
     }
     const int bonus = mqBonusMaxLifeQuarters();
     u16* gauge = static_cast<u16*>(retval);
-    // TEMP DIAG — MQ-HEART. Confirms (a) whether getMaxLifeGauge is even CALLED during
-    // play/draw (if this never logs while hearts draw, stock inlines (getMaxLife/5)*4 and
-    // the hook is bypassed -> the bonus never reaches the hearts), and (b) the values.
-    // Throttled. Parse tag: "MQ-HEART". STRIP before release.
-    if (svc_log != nullptr && albw_cfg_bool(g_master_quest, false)) {
-        static u16 s_thr = 0;
-        if ((s_thr++ % 60) == 0) {
-            char buf[128];
-            const int maxLife =
-                (int)g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getMaxLife();
-            std::snprintf(buf, sizeof(buf),
-                          "[MQ-HEART] getMaxLifeGauge fired: maxLife=%d gaugeBase=%d bonusQ=%d "
-                          "final=%d halves=%d quarters=%d",
-                          maxLife, (int)*gauge, bonus, (int)(*gauge + bonus),
-                          (int)readReg(kBonusHalfHeartsReg), (int)readReg(kBonusQuarterHeartsReg));
-            svc_log->info(mod_ctx, buf);
-        }
-    }
     if (bonus != 0) {
         *gauge = static_cast<u16>(*gauge + bonus);
     }

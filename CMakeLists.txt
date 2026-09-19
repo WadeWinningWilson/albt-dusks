@@ -21,7 +21,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchDusklight.cmake")
 add_subdirectory("${DUSKLIGHT_DIR}/sdk" dusklight-sdk EXCLUDE_FROM_ALL)
 
 add_mod(albt_full_plugin
-        FEATURES game
+        FEATURES game webgpu
         SOURCES
             src/mod.cpp
             src/albw_common.cpp
@@ -36,6 +36,9 @@ add_mod(albt_full_plugin
             src/magic_jar.cpp
             src/rupee_popup.cpp
             src/tear_particles.cpp
+            src/tear_actor.cpp
+            src/tear_glow.cpp
+            src/mq_heart_meter.cpp
             src/shield.cpp
             src/shield_adapt.cpp
             src/shield_game.cpp

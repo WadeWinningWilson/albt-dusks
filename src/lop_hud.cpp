@@ -265,10 +265,11 @@ void draw_lop_health_bar(dMeter2Draw_c* d) {
         return;
     }
 
-    // Fill against the TRUE full-life basis: drawLife() treats a full heart row as
-    // (maxLife/5)*4 life units, so that value fills the bar to exactly 32/32.
-    const s16 maxHearts = (s16)(albw_game::max_life_gauge() / 5);
-    const s16 fullLife = (s16)(maxHearts * 4);
+    // Fill against the TRUE full-life basis. Route through dComIfGs_getMaxLifeGauge()
+    // (which the mod hooks to add MQ bonus hearts) instead of raw getMaxLife, so
+    // bought hearts — which live in the gauge as quarter-hearts, not in the 5-per-heart
+    // raw max — extend the LoP bar. gauge is already in (maxLife/5)*4 + bonus quarters.
+    const s16 fullLife = (s16)dComIfGs_getMaxLifeGauge();
     s16 life = (s16)albw_game::life();
     if (life < 0) {
         life = 0;

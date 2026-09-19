@@ -5,6 +5,7 @@
 #include "albw_common.h"
 #include "config_vars.h"
 #include "modules.h"
+#include "tear_actor.hpp"  // Dusklight 2.0 custom tear actor (replaces daObjDrop spawn)
 
 #include "SSystem/SComponent/c_m3d.h"
 #include "SSystem/SComponent/c_phase.h"
@@ -228,10 +229,9 @@ void destroySpawnedOrbActor() {
 
 void resetOrbState(bool deleteActor) {
     if (deleteActor) {
-        destroySpawnedOrbActor();
-    } else {
-        sOrbActorId = fpcM_ERROR_PROCESS_ID_e;
+        albw_tear_actor_despawn();  // remove any live custom tear (new death / cleanup)
     }
+    sOrbActorId = fpcM_ERROR_PROCESS_ID_e;
     popTearRenderFlags();
     sOrbPending = false;
     sOrbSpawned = false;
@@ -322,6 +322,13 @@ bool grantOrbRecovery() {
     return true;
 }
 
+// ============================================
+// NEW CODE - ALBW Port (Dusklight 2.0 custom tear actor)
+// Spawns the custom "altear" actor (tear_actor.cpp) at the death spot instead of
+// the vanilla daObjDrop_c. The actor owns float / proximity-pickup / recovery /
+// sounds, and tear_glow.cpp draws its visible glow via GfxService — so this drops
+// the daObjDrop hook web and the fragile Pscene011 supplemental-archive path.
+// ============================================
 void trySpawnOrbInRoom(const char* stageName, int roomNo) {
     if (!orbEnabled() || !sOrbPending || sOrbRecovery == 0 || !stageName) {
         return;
@@ -330,44 +337,41 @@ void trySpawnOrbInRoom(const char* stageName, int roomNo) {
         return;
     }
 
+    // Collected: stop respawning and clear the pending state.
+    if (albw_tear_actor_was_collected()) {
+        resetOrbState(false);
+        return;
+    }
+
     if (sOrbSpawnCooldown > 0) {
         sOrbSpawnCooldown--;
         return;
     }
 
+    // Still alive? nothing to do. It stays until collected or the stage unloads.
     if (sOrbSpawned) {
-        if (sOrbDropCreatePending) {
-            return;
-        }
-        if (sOrbActorId != fpcM_ERROR_PROCESS_ID_e && fopAcM_SearchByID(sOrbActorId)) {
+        if (albw_tear_actor_is_active()) {
             sOrbMissingFrames = 0;
             return;
         }
+        // Gone (stage reload while away) — respawn after a short grace.
         if (++sOrbMissingFrames < 30) {
             return;
         }
         sOrbMissingFrames = 0;
         sOrbSpawned = false;
-        sOrbActorId = fpcM_ERROR_PROCESS_ID_e;
     }
 
-    static const csXyz kAngle(0, 0, 0);
-    static const cXyz kScale(1.35f, 1.35f, 1.35f);
+    // Float above the resolved floor, matching the fork's tear placement.
+    const f32 floorY = resolveOrbFloorY(sOrbPos.x, sOrbPos.z, sOrbRefY);
+    cXyz spawnPos(sOrbPos.x, floorY + kOrbFloatAboveGround, sOrbPos.z);
 
-    pushTearRenderFlags();
-    sOrbDropCreatePending = true;
-    sOrbCreateGate = true;
-    fopAc_ac_c* actor = fast_create_drop(fpcNm_Obj_Drop_e, kRecoveryDropParams, &sOrbPos, roomNo,
-                                         &kAngle, &kScale, -1);
-    sOrbCreateGate = false;
-    if (!actor) {
-        sOrbDropCreatePending = false;
+    ActorId id = albw_tear_actor_spawn(spawnPos, static_cast<s8>(roomNo), sOrbRecovery);
+    if (id == 0) {
         sOrbSpawnCooldown = 30;
-        svc_log->warn(mod_ctx, "soul of light: tear create failed");
+        svc_log->warn(mod_ctx, "soul of light: tear actor spawn failed");
         return;
     }
-
-    sOrbActorId = fopAcM_GetID(actor);
     sOrbSpawned = true;
 }
 
