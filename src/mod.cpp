@@ -30,6 +30,7 @@
 #include "deku_leaf.h"
 #include "outfit_swim.h"
 #include "modules.h"
+#include "tear_actor.hpp"  // albw_tear_actor_init / albw_tear_glow_init (Dusklight 2.0 tear)
 #include "mq_hearts.h"
 #include "shield_mod.h"
 #include "boss_refinement_hooks.h"
@@ -208,6 +209,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_rental_shop_init(error) != MOD_OK ||
         albw_stick_cycle_init(error) != MOD_OK ||
         albw_region_hp_init(error) != MOD_OK || albw_soul_of_light_init(error) != MOD_OK ||
+        albw_tear_actor_init(error) != MOD_OK || albw_tear_glow_init(error) != MOD_OK ||
         albw_enemy_rupees_init(error) != MOD_OK ||
         albw_colossal_wallet_init(error) != MOD_OK ||
         albw_clothes_pipeline_init(error) != MOD_OK ||
