@@ -96,10 +96,10 @@ void try_wolf_howl_burst() {
     for (u32 solo : s_wolfHowlSolo) {
         pool[n++] = solo;
     }
+    // ALBW divergence: all duets always available, no save-bit gating
+    // (see wolf_howl_combat.cpp). eventFlag retained for provenance.
     for (const WolfHowlDuo& duo : s_wolfHowlDuos) {
-        if (albw_game::is_event_bit(dSv_event_flag_c::saveBitLabels[duo.eventFlag])) {
-            pool[n++] = duo.bgm;
-        }
+        pool[n++] = duo.bgm;
     }
     int idx = static_cast<int>(cM_rndF(static_cast<f32>(n)));
     if (idx < 0 || idx >= n) {

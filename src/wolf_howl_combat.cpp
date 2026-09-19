@@ -271,10 +271,14 @@ void albw_wolf_howl_arm_combat_request() {
     for (int i = 0; i < kSolo; i++) {
         pool[n++] = s_wolfHowlSolo[i];
     }
+    // ============================================
+    // ALBW divergence from fork: NO story gating. The fork gates each duet behind
+    // its Golden-Wolf unlock bit (F_0472..F_0477), which never gets set on an ALBW
+    // save, so the 6 duets would be dead. Make every duet always available.
+    // (eventFlag field retained for provenance; gate intentionally dropped.)
+    // ============================================
     for (int i = 0; i < kDuo; i++) {
-        if (dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[s_wolfHowlDuos[i].eventFlag])) {
-            pool[n++] = s_wolfHowlDuos[i].bgm;  // duet learned -> add to the pool
-        }
+        pool[n++] = s_wolfHowlDuos[i].bgm;
     }
     int idx = (int)cM_rndF((f32)n);
     if (idx < 0 || idx >= n) {
