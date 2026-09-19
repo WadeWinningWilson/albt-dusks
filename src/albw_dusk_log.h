@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <type_traits>
 
 namespace albw_log_detail {
 
@@ -26,11 +27,18 @@ inline void append(std::string& out, const void* v) {
     std::snprintf(buf, sizeof(buf), "%p", v);
     out += buf;
 }
-template <typename T>
+// Non-const void* (fork log lines cast pointers as (void*), not (const void*)).
+inline void append(std::string& out, void* v) { append(out, static_cast<const void*>(v)); }
+// Arithmetic / enum fallback ONLY. SFINAE keeps this from greedily out-matching the
+// pointer and array overloads above (a `void*` or `const char[N]` arg is an exact
+// template match otherwise, and then static_cast<long long>(ptr/array) fails to compile).
+template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<std::decay_t<T>> ||
+                                                  std::is_enum_v<std::decay_t<T>>>>
 inline void append(std::string& out, T v) {
     char buf[64];
-    if (static_cast<double>(static_cast<long long>(v)) == static_cast<double>(v)) {
-        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v));
+    const long long asLL = static_cast<long long>(v);
+    if (static_cast<double>(asLL) == static_cast<double>(v)) {
+        std::snprintf(buf, sizeof(buf), "%lld", asLL);
     } else {
         std::snprintf(buf, sizeof(buf), "%g", static_cast<double>(v));
     }

@@ -7,6 +7,7 @@
 #include "config_vars.h"
 #include "colossal_wallet.h"
 #include "clothes_pipeline.h"
+#include "changelink.h"
 #include "menu_window_ext.h"
 #include "menu_ring_ext.h"
 #include "focused_arts.h"
@@ -219,6 +220,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_enemy_rupees_init(error) != MOD_OK ||
         albw_colossal_wallet_init(error) != MOD_OK ||
         albw_clothes_pipeline_init(error) != MOD_OK ||
+        albw_changelink_init(error) != MOD_OK ||
         albw_menu_window_ext_init(error) != MOD_OK ||
         albw_menu_ring_ext_init(error) != MOD_OK ||
         albw_potion_grant_init(error) != MOD_OK ||

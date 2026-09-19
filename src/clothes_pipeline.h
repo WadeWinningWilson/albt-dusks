@@ -25,8 +25,14 @@
 #include "mods/api.h"
 
 class daAlink_c;
+class daMidna_c;
 
 ModResult albw_clothes_pipeline_init(ModError* error);
+
+// fork daMidna_c::resetDemoBck + removeDemoBodyBck, ported as a free function (both
+// are fork ADDITIONS absent from stock daMidna_c). Exposed so the ported changeLink
+// (changelink.cpp) can reach it where the fork body calls midna->resetDemoBck().
+void albw_midna_reset_demo_bck(daMidna_c* midna);
 
 // Real implementations of two fork helpers that alink_compat previously could
 // only log about, now that the alt-heap pipeline exists in the mod.

@@ -1,0 +1,25 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_alink_wolf.inc",
+  "stock": "../dusklight-main/src/d/actor/d_a_alink_wolf.inc",
+  "out": "build/port/changelink_port.inc",
+  "renames": { "daAlink_c::": "AlbwChangeLink_c::" },
+  "port_funcs": ["changeLink"],
+  "whole_funcs": ["changeLink"],
+  "diag_zero": ["D_ALBW_ARC_LIFECYCLE_DEBUG"],
+  "substitutions": [],
+  "engine_symbols": [
+    "daAlink_c",
+    "daPy_py_c",
+    "J3DModelData",
+    "J3DModel",
+    "J3DTexture",
+    "J3DAnmTextureSRTKey",
+    "JUTNameTab",
+    "ResTIMG",
+    "Vec",
+    "cXyz",
+    "dCcD_Cyl",
+    "dJntColData_c",
+    "daMidna_c"
+  ]
+}

@@ -179,6 +179,9 @@ void on_alink_create_post(ModContext*, void* args, void*, void*) {
     link->setOriginalHeap(&s_arcHeapB, 0x100000);
 }
 
+}  // leave the anonymous namespace so albw_midna_reset_demo_bck has EXTERNAL linkage
+   // (the ported changeLink in changelink.cpp calls it via clothes_pipeline.h).
+
 // fork daMidna_c::resetDemoBck + removeDemoBodyBck (d_a_midna.cpp). Both are
 // fork ADDITIONS to a stock actor, so a mod cannot add them as members - but
 // every field they touch is present in stock (mBckHeap / mBtpHeap / mBtkHeap /
@@ -232,6 +235,9 @@ void albw_midna_reset_demo_bck(daMidna_c* midna) {
                              -1, false);
     }
 }
+
+namespace {  // reopen the anonymous namespace (all anon namespaces in a TU merge,
+             // so s_arcHeapB / s_swapActive / the hook aliases stay in scope)
 
 // fork d_a_alink_swindow.inc:114-313, ported branch for branch.
 HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
