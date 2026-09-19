@@ -6,6 +6,16 @@
 #include "mods/svc/log.h"
 #include "mods/svc/ui.h"
 
+// ============================================
+// Debug file-dump gate. The *_debugLog / dump* helpers write albw_*_debug.txt
+// into the player's Documents/dusklight/ folder — diagnostic scaffolding only.
+// Ships OFF: 0 = no writes and no path strings in the binary. Flip to 1 in a
+// local build to re-enable a trace. Keep 0 for any release/CI build.
+// ============================================
+#ifndef ALBW_DEBUG_DUMPS
+#define ALBW_DEBUG_DUMPS 0
+#endif
+
 extern ModContext* mod_ctx;
 extern const LogService* svc_log;
 extern const HookService* svc_hook;

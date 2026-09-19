@@ -99,6 +99,7 @@ static bool mod_kkFreezeUnsafe(const fopAc_ac_c* i_enemy) {
 
 // RelWithDebInfo strips OS_REPORT (DEBUG=0). Write playtest traces to a file instead.
 void wolfStun_debugLog(const char* fmt, ...) {
+#if ALBW_DEBUG_DUMPS
     if (!dAlbwWolfCombat_isEnabled()) {
         return;
     }
@@ -133,6 +134,9 @@ void wolfStun_debugLog(const char* fmt, ...) {
     vfprintf(fp, fmt, args);
     va_end(args);
     fclose(fp);
+#else
+    (void)fmt;  // release: debug file dumps disabled (ALBW_DEBUG_DUMPS)
+#endif
 }
 
 struct WolfStunEntry {

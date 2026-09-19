@@ -2144,6 +2144,7 @@ void dALBWShop_c::cacheRowLetterSlotBounds(int row) {
     mRowIconSlot[row].valid   = slot.valid;
 }
 
+#if ALBW_DEBUG_DUMPS
 void dALBWShop_c::dumpRowIconDebug(JKRArchive* iconArc, int visCount,
                                    const dALBWVisibleEntry* visList, f32 listIconLeft) {
     char path[512];
@@ -2252,6 +2253,7 @@ void dALBWShop_c::dumpRowIconDebug(JKRArchive* iconArc, int visCount,
     }
     fclose(fp);
 }
+#endif  // ALBW_DEBUG_DUMPS
 
 void dALBWShop_c::drawRowWheelIcons(J2DGrafContext* gfx, int visCount) {
     // ============================================
@@ -2594,10 +2596,12 @@ void dALBWShop_c::draw() {
                                  visCount, visList);
         hideRentableCenterBloIcons(visCount, listIconLeft);
         mpMenuScreen->draw(0.0f, 0.0f, gfx);
+#if ALBW_DEBUG_DUMPS
         static u32 sIconDbgFrame = 0;
         if ((sIconDbgFrame++ % 90) == 0) {
             dumpRowIconDebug(g_dComIfG_gameInfo.play.getItemIconArchive(), visCount, visList, listIconLeft);
         }
+#endif
         drawRowListText(gfx, visCount);
         drawRowWheelIcons(gfx, visCount);
         restoreScissor(gfx, savedL, savedT, savedW, savedH);
@@ -2624,10 +2628,12 @@ void dALBWShop_c::draw() {
                                  visCount, visList);
         hideRentableCenterBloIcons(visCount, listIconLeft);
         mpMenuScreen->draw(0.0f, 0.0f, gfx);
+#if ALBW_DEBUG_DUMPS
         static u32 sIconDbgFrameNoArea = 0;
         if ((sIconDbgFrameNoArea++ % 90) == 0) {
             dumpRowIconDebug(g_dComIfG_gameInfo.play.getItemIconArchive(), visCount, visList, listIconLeft);
         }
+#endif
         drawRowListText(gfx, visCount);
         drawRowWheelIcons(gfx, visCount);
         const f32 ruledPitch = measureParchmentLinePitch(mpDescTextScreen);

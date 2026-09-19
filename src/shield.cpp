@@ -884,6 +884,7 @@ void applyParryIcons(ShieldTier i_tier) {
 // Documents/dusklight/albw_shield_icon_debug.txt so we can see why normal-play
 // shields don't trigger the icon. Remove once the cause is found.
 void shieldIconDbg(const char* fmt, ...) {
+#if ALBW_DEBUG_DUMPS
     char path[512];
     path[0] = '\0';
     const char* user = getenv("USERPROFILE");
@@ -906,6 +907,9 @@ void shieldIconDbg(const char* fmt, ...) {
     vfprintf(fp, fmt, args);
     va_end(args);
     fclose(fp);
+#else
+    (void)fmt;  // release: debug file dumps disabled (ALBW_DEBUG_DUMPS)
+#endif
 }
 
 // TEMP diagnostic: dump the haku_n / haku_b_n pane subtrees once so we can
@@ -933,6 +937,7 @@ void hakuDumpWalk(FILE* fp, J2DPane* p, int depth) {
 }
 
 void dumpHakushaSubtree() {
+#if ALBW_DEBUG_DUMPS
     static bool sDumped = false;
     if (sDumped) {
         return;
@@ -960,6 +965,7 @@ void dumpHakushaSubtree() {
         hakuDumpWalk(fp, sHud.mpIconOff->getPanePtr(), 1);
     }
     fclose(fp);
+#endif
 }
 // ============================================
 // NEW CODE ENDS HERE

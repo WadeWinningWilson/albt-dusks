@@ -2,7 +2,7 @@
 #define D_ALBW_OUTFIT_DEBUG_H
 
 // Temporary outfit-cycle diagnostics. Set to 0 before ship.
-#define D_ALBW_OUTFIT_SWAP_DEBUG 1
+#define D_ALBW_OUTFIT_SWAP_DEBUG 0
 
 #if TARGET_PC && D_ALBW_OUTFIT_SWAP_DEBUG
 
