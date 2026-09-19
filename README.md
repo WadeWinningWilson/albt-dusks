@@ -1,8 +1,8 @@
-# A Link Between Twilight Full Plugin (`dev.albt.albw`)
+# A Link Between Twilight Dusk
 
 Stock Dusklight `.dusk` for the full ALBT feature set. Builds against [dusklight-main](https://github.com/TwilitRealm/dusklight) (Game ABI 2), never the ALBT fork.
 
-**Display name (Mods panel):** A Link Between Twilight Full Plugin  
+**Display name (Mods panel):** A Link Between Twilight 
 **Mod id:** `dev.albt.albw`  
 **Filename:** `albt_full_plugin.dusk`
 
