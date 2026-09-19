@@ -567,8 +567,44 @@ void albw_ring_ctor_init(dMenu_Ring_c* r) {
     if (qe.usePages) {
         s_liveQuickRing = r;
         dQe_seedTpBuiltin();
+        // ============================================
+        // CRASH FIX - equip->exit access violation (fork-faithful allocation).
+        // The fork sets mTotalItemTexToAlloc = dQe_kSlotsPerPage BEFORE the ctor's
+        // buffer loop (fork d_menu_ring.cpp:670 -> 737-739), so all 24 slots get
+        // real 0xC00 ResTIMG buffers and page-0 QE icons are built in-ctor. This
+        // _create pre-hook runs AFTER the stock ctor, which allocated only
+        // lineupCount buffers and built LINEUP icons - raising the count without
+        // allocating left slots [lineupCount..23] NULL/mismatched, so exit-path
+        // texture rebuilds memcpy'd garbage ResTIMGs (AV in ucrtbase). Allocate
+        // the missing slots exactly as the fork does (stock ctor NULLed every
+        // mpItemBuf/mpItemTex entry up front, d_menu_ring.cpp:210-211), then
+        // rebuild page 0 for real so icons match the repacked QE sockets.
+        // ============================================
+        const int stockAlloc = r->mTotalItemTexToAlloc;
+        bool allocOk = true;
+        for (int i = stockAlloc; i < (int)dQe_kSlotsPerPage; i++) {
+            for (int j = 0; j < 3; j++) {
+                if (r->mpItemBuf[i][j] == NULL) {
+                    r->mpItemBuf[i][j] = (ResTIMG*)r->mpHeap->alloc(0xC00, 0x20);  // fork :739
+                }
+                if (r->mpItemBuf[i][j] == NULL) {
+                    allocOk = false;
+                }
+            }
+        }
+        if (!allocOk) {
+            // LOUD failure, no silent fallback: the ring heap couldn't fit the QE
+            // page. Keep the stock wheel (count untouched) rather than ever
+            // drawing over unallocated buffers.
+            if (svc_log != nullptr) {
+                svc_log->error(mod_ctx,
+                               "quick-equip ring: item-buf alloc failed; paged wheel disabled");
+            }
+            qe.usePages = false;
+            return;
+        }
         r->mTotalItemTexToAlloc = dQe_kSlotsPerPage;
-        albw_ring_applyQuickEquipPage(r, 0, false);
+        albw_ring_applyQuickEquipPage(r, 0, true);
     }
 }
 
