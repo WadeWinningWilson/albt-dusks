@@ -34,6 +34,7 @@
 #define private public
 #include "d/d_menu_window.h"
 #include "d/d_menu_collect.h"
+#include "d/d_menu_ring.h"  // dMenu_Ring_c::advanceSelectItem (frozen-wheel fix)
 #undef private
 
 #include "menu_window_ext.h"
@@ -145,6 +146,19 @@ HookAction on_mw_execute_pre(ModContext*, void* args, void* retval, void*) {
     auto* mw = mods::arg<dMw_c*>(args, 0);
     if (mw == nullptr || retval == nullptr) {
         return HOOK_CONTINUE;
+    }
+
+    // ============================================
+    // FROZEN-WHEEL FIX: stock _execute's FIRST act (d_menu_window.cpp:1598-1602)
+    // is the per-frame ring stepper - it advances the staged select-item counters
+    // (dMenu_Ring_c::field_0x674[i], armed by setItem on an assignment) and
+    // commits at 10 via setSelectItemForce. This replacement omitted it, so on
+    // the stock binary every X/Y assignment froze at 674[i]==1: the item never
+    // finished assigning and isClose (which waits on 674==0) never let the menu
+    // shut. Restored verbatim.
+    // ============================================
+    if (mw->mpMenuRing != NULL) {
+        mw->mpMenuRing->advanceSelectItem();
     }
 
     if (mw->field_0x151 != 0) {
