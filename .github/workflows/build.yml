@@ -77,7 +77,11 @@ jobs:
       - name: Configure CMake
         shell: bash
         run: |
-          args=(-G Ninja ${{matrix.cmake_args}})
+          # CMAKE_BUILD_TYPE must be explicit. Left unset, the MSVC legs selected the
+          # DEBUG CRT (MSVCP140D / VCRUNTIME140D / ucrtbased), which only exists on
+          # machines with Visual Studio installed - every player without it got
+          # "mod.dll: The specified module could not be found" (Win32 error 126).
+          args=(-G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo ${{matrix.cmake_args}})
           if [[ -n "${{matrix.android_ndk}}" ]]; then
             args+=(-DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/${{matrix.android_ndk}}/build/cmake/android.toolchain.cmake"
                    -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28)
@@ -86,6 +90,21 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: Verify redistributable CRT
+        if: matrix.msvc_arch
+        shell: bash
+        run: |
+          # A debug-CRT import is not a warning: the mod cannot load on a player's
+          # machine at all. Fail the build rather than ship it.
+          dll=$(find build -name 'albt_full_plugin.dll' | head -n1)
+          test -n "$dll" || { echo "::error::albt_full_plugin.dll not found"; exit 1; }
+          deps=$(dumpbin -dependents "$dll")
+          echo "$deps"
+          if echo "$deps" | grep -qiE 'ucrtbased\.dll|VCRUNTIME140_?1?D\.dll|MSVCP140D\.dll'; then
+            echo "::error::$dll links the DEBUG CRT - it would fail to load for anyone without Visual Studio"
+            exit 1
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
