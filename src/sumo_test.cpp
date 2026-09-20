@@ -853,12 +853,27 @@ void dAlbwSumoTest_evictAliasedClothesArcs(const char* liveArc) {
         if (info == NULL || info->getArchive() != liveArchive) {
             continue;  // distinct archives (healthy) or not mounted
         }
-        DuskLog.warn("[ALBW-ARC] evicting stale {} row aliasing live {} (archive {}, count {})",
+        DuskLog.warn("[ALBW-ARC] neutralizing stale {} row aliasing live {} (archive {}, count {})",
                      arc, liveArc, (void*)liveArchive, (int)info->getCount());
         if (strcmp(arc, "Kmdl") == 0) {
             cPhs_Reset(&albw_sumo_impl_kmdl_phase_ref());
         }
-        purgeObjectRes(arc);
+        // ============================================
+        // CRITICAL: do NOT purgeObjectRes() here. That calls
+        // dComIfG_deleteObjectResMain, which FREES the archive - and this row's
+        // pointer ALIASES the LIVE arc's archive (address reuse after the
+        // build-then-swap heap ping-pong), so purging destroyed the models the
+        // game was actively drawing (crash observed on Zora/Sumo cycles, right
+        // after "[ALBW-ARC] evicting ..."). The pointer is DANGLING, not
+        // genuinely shared: nothing of this arc's own data lives there anymore.
+        // Neutralize instead - clear the row's archive pointer and refcount so
+        // the name stops resolving to the live arc's memory. That is exactly
+        // the "zombie" shape (archive == NULL) the existing machinery already
+        // handles safely: dRes_info_c::setRes re-mounts on the next resLoad,
+        // and purgeZombieClothesArc can reclaim the slot later. No frees here.
+        // ============================================
+        info->mArchive = NULL;
+        info->mCount = 0;
     }
 }
 
