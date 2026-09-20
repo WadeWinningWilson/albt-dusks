@@ -182,6 +182,9 @@ DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_ITEM_MAGIC_COUNT, void(s16), SetItemMagicCount);
 // header-declared with no inline definition, so it takes the portable typed
 // form; setItemArrowNumCount has an inline twin and must go by symbol.
 DEFINE_HOOK(&dComIfGp_addSelectItemNum, AddSelectItemNum);
+// Zero-count item gate: see the block above on_check_new_item_change_pre.
+DEFINE_HOOK(&daAlink_c::checkNewItemChange, CheckNewItemChange);
+DEFINE_HOOK(&dComIfGp_getSelectItemNum, GetSelectItemNum);
 DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_ITEM_ARROW_NUM_COUNT, void(s16), SetItemArrowNumCount);
 DEFINE_HOOK_SYMBOL(ALBT_SYM_FASTCREATE,
                    fopAc_ac_c*(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, createFunc,
@@ -1329,6 +1332,56 @@ void restore_ammo_counts() {
     }
 }
 
+// ============================================
+// NEW CODE - ALBW Port (zero-count item gate)
+//
+// With ammo decoupled, a save that already reached 0 bombs stays unusable:
+// stock refuses the item before anything of ours runs. The fork removes the
+// count from BOTH tests in daAlink_c::checkNewItemChange, on PC only:
+//
+//   fork d_a_alink.cpp:16298-16307 (vs stock :14714) - the router gate
+//       `checkBombItem(sel_item) && !dComIfGp_getSelectItemNum(idx)` is dropped
+//       from the ITEM_PROC_NONE condition; every other clause, including the
+//       mActiveBombNum >= 3 concurrency cap, is preserved.
+//   fork d_a_alink.cpp:16273-16279 (vs stock :14704) - the bombling test
+//       `sel_item == POKE_BOMB && getSelectItemNum(idx) && field_0x2fcf < 2`
+//       loses the count term: "bag count is cosmetic on PC".
+//
+// Those are the ONLY two reads of the count in that function, and the fork
+// neutralises both. So instead of a whole-function port of a ~170-line giant -
+// which would have to hook a file-local static and would therefore be inert on
+// Linux - the count is scoped: while checkNewItemChange is on the stack, a
+// count of zero reads as one. Both fork edits fall out exactly, with two
+// header-declared typed hooks that resolve on every platform.
+//
+// Only 0 is bumped, and only inside the window: an item with real ammo reports
+// its real count, so nothing else that runs under this call sees a wrong value.
+// ============================================
+static int g_item_change_depth = 0;
+
+HookAction on_check_new_item_change_pre(ModContext*, void*, void*, void*) {
+    if (meter_enabled()) {
+        g_item_change_depth++;
+    }
+    return HOOK_CONTINUE;
+}
+
+void on_check_new_item_change_post(ModContext*, void*, void*, void*) {
+    if (g_item_change_depth > 0) {
+        g_item_change_depth--;
+    }
+}
+
+void on_get_select_item_num_post(ModContext*, void*, void* retval, void*) {
+    if (g_item_change_depth <= 0 || retval == nullptr) {
+        return;
+    }
+    s16& count = *static_cast<s16*>(retval);
+    if (count == 0) {
+        count = 1;
+    }
+}
+
 // The two decrement entry points. Skipping the original is the plugin
 // equivalent of the fork's #if !TARGET_PC around the call: no write happens, so
 // nothing has to be put back.
@@ -2050,7 +2103,15 @@ ModResult albw_meter_init(ModError* error) {
 
     refresh_meter_max_from_progress();
 
-    if (!install(error, "AddSelectItemNumAmmo",
+    if (!install(error, "CheckNewItemChangePre",
+                 mods::hook_add_pre<CheckNewItemChange>(svc_hook,
+                                                        on_check_new_item_change_pre)) ||
+        !install(error, "CheckNewItemChangePost",
+                 mods::hook_add_post<CheckNewItemChange>(svc_hook,
+                                                         on_check_new_item_change_post)) ||
+        !install(error, "GetSelectItemNumZeroGate",
+                 mods::hook_add_post<GetSelectItemNum>(svc_hook, on_get_select_item_num_post)) ||
+        !install(error, "AddSelectItemNumAmmo",
                  mods::hook_add_pre<AddSelectItemNum>(svc_hook, on_add_select_item_num_pre)) ||
         !install(error, "SetItemArrowNumCountAmmo",
                  mods::hook_add_pre<SetItemArrowNumCount>(svc_hook,
