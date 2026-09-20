@@ -52,6 +52,7 @@ namespace {
 //          TEXANM_ANIMAL, TEXANM_OP_DEMO, TEXANM_HANG_WAIT, ... }
 // ============================================
 constexpr s16 kActionNormal = 0;
+constexpr s16 kActionStop = 7;  // daE_FM_ACTION ACTION_STOP (the chain-yank handoff)
 
 constexpr u8 kTexAnmFm = 0;
 constexpr u8 kTexAnmPutOutWait = 3;
@@ -206,8 +207,25 @@ void on_fight_run_post(ModContext*, void* args, void*, void*) {
         fm->speedF = 0.0f;
         return;
     }
+    // ============================================
     // Ablaze holds the chain yank: undo vanilla's transition into ACTION_STOP.
-    if (dAlbwBoss_fyrusAblazePhase() && fm->mAction != s_fightRun.action) {
+    //
+    // BUGFIX (Fyrus never attacked): this used to revert on
+    // `fm->mAction != s_fightRun.action`, i.e. ANY action change fight_run
+    // made. Stock fight_run's whole job is to leave for ACTION_F_FIGHT /
+    // ACTION_N_FIGHT once Link is in range (stock d_a_e_fm.cpp:723-731), so the
+    // broad condition snapped every attack transition straight back to
+    // FIGHT_RUN in the same frame - Fyrus charged Link forever and the
+    // f_fight/fire gates were never even entered.
+    //
+    // The fork's guard is surgical: it wraps ONLY the ACTION_STOP assignment
+    // inside the chain-yank branch (fork d_a_e_fm.cpp:1116-1125), leaving every
+    // other transition alone. Match that - revert only when vanilla chose
+    // ACTION_STOP.
+    // ============================================
+    if (dAlbwBoss_fyrusAblazePhase() && fm->mAction == kActionStop &&
+        s_fightRun.action != kActionStop)
+    {
         fm->mAction = s_fightRun.action;
         fm->mMode = s_fightRun.mode;
     }
@@ -226,7 +244,12 @@ void on_damage_run_post(ModContext*, void* args, void*, void*) {
     if (fm == nullptr || !dAlbwBoss_fyrusAblazePhase()) {
         return;
     }
-    if (fm->mAction != s_damageRun.action) {
+    // Same BUGFIX as on_fight_run_post: the fork's ablaze guard here wraps ONLY
+    // the chain-yank ACTION_STOP assignment (fork d_a_e_fm.cpp:1608-1618), not
+    // every transition. Reverting broadly would pin Fyrus in DAMAGE_RUN after
+    // any ablaze-phase hit, the same way the fight_run version pinned him in
+    // FIGHT_RUN and stopped him ever attacking.
+    if (fm->mAction == kActionStop && s_damageRun.action != kActionStop) {
         fm->mAction = s_damageRun.action;
         fm->mMode = s_damageRun.mode;
     }
