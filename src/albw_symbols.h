@@ -70,6 +70,13 @@
 #define ALBT_SYM_SET_ITEM_MAGIC_COUNT                                                              \
     ALBT_SYM("?dComIfGp_setItemMagicCount@@YAXF@Z", "_Z26dComIfGp_setItemMagicCounts")
 
+// dComIfGp_setItemArrowNumCount(s16) - the bow's arrow decrement. Needs the
+// symbol route rather than DEFINE_HOOK: d_com_inf_game.h declares it at :1895
+// but ALSO defines it inline at :4635, so &dComIfGp_setItemArrowNumCount would
+// bind to a copy inside this DLL instead of the game's function.
+#define ALBT_SYM_SET_ITEM_ARROW_NUM_COUNT                                                          \
+    ALBT_SYM("?dComIfGp_setItemArrowNumCount@@YAXF@Z", "_Z29dComIfGp_setItemArrowNumCounts")
+
 // dComIfGs_setSelectItemIndex(int, u8)
 #define ALBT_SYM_SET_SELECT_ITEM_INDEX                                                             \
     ALBT_SYM("?dComIfGs_setSelectItemIndex@@YAXHE@Z", "_Z27dComIfGs_setSelectItemIndexih")

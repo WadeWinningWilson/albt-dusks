@@ -177,6 +177,12 @@ static u8 player_save_max_magic() {
 
 DEFINE_HOOK(&dMeter2_c::moveKantera, MoveKantera);
 DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_ITEM_MAGIC_COUNT, void(s16), SetItemMagicCount);
+// Ammo decoupling: these two are skipped inside the spend window so the count is
+// never written (fork compiles the calls out entirely). addSelectItemNum is
+// header-declared with no inline definition, so it takes the portable typed
+// form; setItemArrowNumCount has an inline twin and must go by symbol.
+DEFINE_HOOK(&dComIfGp_addSelectItemNum, AddSelectItemNum);
+DEFINE_HOOK_SYMBOL(ALBT_SYM_SET_ITEM_ARROW_NUM_COUNT, void(s16), SetItemArrowNumCount);
 DEFINE_HOOK_SYMBOL(ALBT_SYM_FASTCREATE,
                    fopAc_ac_c*(s16, u32, const cXyz*, int, const csXyz*, const cXyz*, s8, createFunc,
                                void*, u32, u8),
@@ -1270,17 +1276,35 @@ static bool g_pachinko_patched = false;
 // the fork too (fork d_a_alink_bow.inc:193-204 == stock :128-150) - a held bomb
 // arrow force-detonated by damage still costs the bag.
 // ============================================
-static s16 g_bomb_count_backup[dSv_player_item_c::BOMB_BAG_MAX] = {0, 0, 0};
-static s16 g_arrow_count_backup = 0;
-static bool g_ammo_snapshot_held = false;
+// SUPPRESS THE WRITE — DO NOT WRITE AND RESTORE.
+//
+// The fork does not undo the decrement, it never performs it: the call is
+// compiled out and replaced by the meter charge (fork d_a_alink.cpp:15789-15802,
+// "Decrement skipped on PC so game ammo count is purely cosmetic"). An earlier
+// version of this block let the stock write land and then wrote the old value
+// back - two writes to save-backed item counts where the donor does zero. That
+// is both a fidelity gap and a save-write we do not want.
+//
+// Instead the decrement entry points themselves are hooked and skipped while a
+// suppression window is open, so the count is never touched at all:
+//   - dComIfGp_addSelectItemNum  covers bombs, bomblings and the bomb-arrow bag
+//   - dComIfGp_setItemArrowNumCount covers the bow's arrow count
+// The window is opened by the same pre-hooks that used to snapshot and closed
+// by the same posts, so the scope is unchanged - only the mechanism.
+//
+// deleteArrow() is deliberately OUTSIDE every window: the fork keeps that
+// decrement (fork d_a_alink_bow.inc:193-204), so a bomb arrow force-detonated
+// in Link's hand still costs the bag.
+static int g_ammo_suppress_depth = 0;
+
+bool ammo_writes_suppressed() {
+    return g_ammo_suppress_depth > 0;
+}
 
 void snapshot_ammo_counts() {
-    for (int i = 0; i < dSv_player_item_c::BOMB_BAG_MAX; i++) {
-        g_bomb_count_backup[i] =
-            g_dComIfG_gameInfo.play.getItemBombNumCount(static_cast<u8>(i));
-    }
-    g_arrow_count_backup = g_dComIfG_gameInfo.play.getItemArrowNumCount();
-    g_ammo_snapshot_held = true;
+    // Depth-counted so a nested window (an item spawn inside a bow fire) cannot
+    // close suppression early for its caller.
+    g_ammo_suppress_depth++;
 }
 
 // Undo by ADDING BACK THE DELTA, never clear()+set().
@@ -1300,23 +1324,26 @@ void snapshot_ammo_counts() {
 // untouched and a player who disables the mod keeps exactly the ammo the game
 // gave them.
 void restore_ammo_counts() {
-    if (!g_ammo_snapshot_held) {
-        return;
+    if (g_ammo_suppress_depth > 0) {
+        g_ammo_suppress_depth--;
     }
-    g_ammo_snapshot_held = false;
-    for (int i = 0; i < dSv_player_item_c::BOMB_BAG_MAX; i++) {
-        const u8 slot = static_cast<u8>(i);
-        const s16 delta = static_cast<s16>(
-            g_bomb_count_backup[i] - g_dComIfG_gameInfo.play.getItemBombNumCount(slot));
-        if (delta != 0) {
-            g_dComIfG_gameInfo.play.setItemBombNumCount(slot, delta);
-        }
+}
+
+// The two decrement entry points. Skipping the original is the plugin
+// equivalent of the fork's #if !TARGET_PC around the call: no write happens, so
+// nothing has to be put back.
+HookAction on_add_select_item_num_pre(ModContext*, void*, void*, void*) {
+    return ammo_writes_suppressed() ? HOOK_SKIP_ORIGINAL : HOOK_CONTINUE;
+}
+
+HookAction on_set_item_arrow_num_pre(ModContext*, void* args, void*, void*) {
+    if (!ammo_writes_suppressed()) {
+        return HOOK_CONTINUE;
     }
-    const s16 arrowDelta = static_cast<s16>(
-        g_arrow_count_backup - g_dComIfG_gameInfo.play.getItemArrowNumCount());
-    if (arrowDelta != 0) {
-        g_dComIfG_gameInfo.play.setItemArrowNumCount(arrowDelta);
-    }
+    // Only the SPEND is skipped. Pickups and refills call the same function with
+    // a positive count and must still land, or a window left open by a missing
+    // post-hook would silently eat an arrow pickup.
+    return mods::arg<s16>(args, 0) < 0 ? HOOK_SKIP_ORIGINAL : HOOK_CONTINUE;
 }
 // ============================================
 // NEW CODE ENDS HERE
@@ -2023,7 +2050,12 @@ ModResult albw_meter_init(ModError* error) {
 
     refresh_meter_max_from_progress();
 
-    if (!install(error, "MoveKanteraPre",
+    if (!install(error, "AddSelectItemNumAmmo",
+                 mods::hook_add_pre<AddSelectItemNum>(svc_hook, on_add_select_item_num_pre)) ||
+        !install(error, "SetItemArrowNumCountAmmo",
+                 mods::hook_add_pre<SetItemArrowNumCount>(svc_hook,
+                                                          on_set_item_arrow_num_pre)) ||
+        !install(error, "MoveKanteraPre",
                  mods::hook_add_pre<MoveKantera>(svc_hook, on_move_kantera_pre)) ||
         !install(error, "MoveKantera",
                  mods::hook_add_post<MoveKantera>(svc_hook, on_move_kantera_post)) ||
