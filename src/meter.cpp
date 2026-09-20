@@ -1369,6 +1369,22 @@ void snapshot_ammo_counts() {
     g_ammo_snapshot_held = true;
 }
 
+// Undo by ADDING BACK THE DELTA, never clear()+set().
+//
+// These are save-backed item counts, so the restore must not pass through a
+// zero state: clear() followed by set() leaves the count at 0 in between, and
+// anything that interrupts the pair (a crash, a save written from another
+// thread, a future early return added above) would strand the player at zero
+// bombs or arrows. setItemBombNumCount / setItemArrowNumCount ACCUMULATE
+// (stock d_com_inf_game.cpp:97-105, d_com_inf_game.h:642), so cancelling the
+// stock decrement is one additive write of the exact difference - the count is
+// never observably wrong, and a no-op costs nothing.
+//
+// This writes to save data only to put back what the stock body just took; the
+// net change across the hook pair is zero and no save bit or format is touched.
+// With the feature off the hooks never snapshot, so vanilla decrements run
+// untouched and a player who disables the mod keeps exactly the ammo the game
+// gave them.
 void restore_ammo_counts() {
     if (!g_ammo_snapshot_held) {
         return;
@@ -1376,14 +1392,16 @@ void restore_ammo_counts() {
     g_ammo_snapshot_held = false;
     for (int i = 0; i < dSv_player_item_c::BOMB_BAG_MAX; i++) {
         const u8 slot = static_cast<u8>(i);
-        g_dComIfG_gameInfo.play.clearItemBombNumCount(slot);
-        if (g_bomb_count_backup[i] != 0) {
-            g_dComIfG_gameInfo.play.setItemBombNumCount(slot, g_bomb_count_backup[i]);
+        const s16 delta = static_cast<s16>(
+            g_bomb_count_backup[i] - g_dComIfG_gameInfo.play.getItemBombNumCount(slot));
+        if (delta != 0) {
+            g_dComIfG_gameInfo.play.setItemBombNumCount(slot, delta);
         }
     }
-    g_dComIfG_gameInfo.play.clearItemArrowNumCount();
-    if (g_arrow_count_backup != 0) {
-        g_dComIfG_gameInfo.play.setItemArrowNumCount(g_arrow_count_backup);
+    const s16 arrowDelta = static_cast<s16>(
+        g_arrow_count_backup - g_dComIfG_gameInfo.play.getItemArrowNumCount());
+    if (arrowDelta != 0) {
+        g_dComIfG_gameInfo.play.setItemArrowNumCount(arrowDelta);
     }
 }
 // ============================================
