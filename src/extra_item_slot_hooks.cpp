@@ -33,6 +33,12 @@
 
 #include "mods/hook.hpp"
 
+// ============================================
+// Z-ITEM KEEP FIX: the reproduced checkItemChangeFromButton tail compares
+// getRunEventName() against "ANGER"/"ANGER2" (fork d_a_alink.cpp:13470-13471).
+// ============================================
+#include <cstring>
+
 namespace {
 
 bool item_wheel_trig() {
@@ -100,6 +106,66 @@ HookAction on_midna_talk_trigger_pre(ModContext*, void* args, void* retval, void
     return HOOK_SKIP_ORIGINAL;
 }
 
+// ============================================
+// Z-ITEM KEEP FIX (shared helper): Z-aware checkItemSetButton with FORK
+// sentinel semantics — X/Y like stock daAlink_c::checkItemSetButton
+// (stock d_a_alink.cpp:14422-14430), then the Z slot, and 3 = not on any
+// assign button (fork dusk_assignableItemButtonCount()==3 /
+// dusk_itemNotOnAnyAssignButton() -> btn >= 3, fork d_a_alink.cpp:10443-10452).
+// Returns 0 / 1 / SELECT_ITEM_DOWN / 3. File-local on purpose: the reproduced
+// checkItemChangeFromButton body below must NOT re-enter the hooked member
+// checkItemSetButton (the post-hook item-keyed translation would poison the
+// tail's >= 3 test for KANTERA/HVY_BOOTS/SPINNER).
+// ============================================
+int z_aware_item_set_button(daAlink_c* link, int itemNo) {
+    for (int i = 0; i < 2; i++) {
+        if (link->checkGroupItem(itemNo, g_dComIfG_gameInfo.play.getSelectItem(i))) {
+            return i;
+        }
+    }
+
+    if (link->checkGroupItem(itemNo, g_dComIfG_gameInfo.play.getSelectItem(SELECT_ITEM_DOWN))) {
+        return SELECT_ITEM_DOWN;
+    }
+
+    return 3;
+}
+
+// ============================================
+// FIX B (item-keyed sentinel translation): stock callers test
+// checkItemSetButton(...) == 2 / != 2 where 2 means "not assigned" — but
+// SELECT_ITEM_DOWN is ALSO 2 (stock d_save.h:18,125), so a Z-only item reads
+// as unassigned. For exactly these items the stock ==2/!=2 caller must see
+// "assigned" for a Z-only item, so return 3 (never a valid button index to
+// those callers) instead of SELECT_ITEM_DOWN:
+//   dItemNo_KANTERA_e   — stock d_a_alink.cpp:17855 (offKandelaarModel: lit-
+//                         lantern model survives), 14629/14698 (oil pour
+//                         allowed; 0x48 == dItemNo_KANTERA_e, d_item_data.h:172)
+//   dItemNo_HVY_BOOTS_e — stock d_a_alink.cpp:18244 (boots stay on; the else
+//                         branch's dMeter2Info_onDirectUseItem(3) bit is never
+//                         read — cosmetic only)
+//   dItemNo_SPINNER_e   — stock d_a_alink_spinner.inc:214 (==2 dismount test).
+//                         LT-sourced, user-approved usage: LAZY TWEAKS
+//                         d_a_alink_spinner.inc:214 tests == SELECT_ITEM_NUM
+//                         (3 in LT d_save.h:18) — ride continues while the
+//                         spinner sits on Z. The ALBT fork itself left spinner
+//                         UNSWEPT (fork d_a_alink_spinner.inc:260 still ==2),
+//                         so LT is the donor for this caller's semantics.
+// All other items keep the current 2/3 convention (on-Z -> SELECT_ITEM_DOWN,
+// unassigned -> 3): stock rod-group callers 14674/14677, canoe.inc:1716/1721,
+// demo.inc:4157 are unaffected.
+// ============================================
+bool z_only_uses_unassigned_sentinel(int itemNo) {
+    switch (itemNo) {
+    case dItemNo_KANTERA_e:
+    case dItemNo_HVY_BOOTS_e:
+    case dItemNo_SPINNER_e:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void on_check_item_set_button_post(ModContext*, void* args, void* retval, void*) {
     if (!albw_is_extra_item_slot_enabled() || retval == nullptr) {
         return;
@@ -116,12 +182,15 @@ void on_check_item_set_button_post(ModContext*, void* args, void* retval, void*)
         return;
     }
 
-    if (link->checkGroupItem(itemNo, g_dComIfG_gameInfo.play.getSelectItem(SELECT_ITEM_DOWN))) {
-        *out = SELECT_ITEM_DOWN;
+    // Stock already proved X/Y miss (*out == 2), so the helper can only yield
+    // SELECT_ITEM_DOWN (found on Z) or 3 (not on any assign button).
+    const int zAware = z_aware_item_set_button(link, itemNo);
+    if (zAware == SELECT_ITEM_DOWN && z_only_uses_unassigned_sentinel(itemNo)) {
+        *out = 3;  // FIX B: Z-only item must not read as "unassigned" at ==2 callers.
         return;
     }
 
-    *out = 3;
+    *out = zAware;
 }
 
 void on_check_set_item_trigger_post(ModContext*, void* args, void* retval, void*) {
@@ -149,32 +218,139 @@ void on_check_set_item_trigger_post(ModContext*, void* args, void* retval, void*
     }
 }
 
-// Stock only loops X/Y. Fork uses dusk_assignableItemButtonCount()==3 so Z
-// reaches checkNewItemChange + changeItemTriggerKeepProc.
-void on_check_item_change_from_button_post(ModContext*, void* args, void* retval, void*) {
-    if (!albw_is_extra_item_slot_enabled() || retval == nullptr) {
-        return;
-    }
-    if (*static_cast<BOOL*>(retval) != FALSE) {
-        return;
+// ============================================
+// FIX A (Z-ITEM KEEP): pre + HOOK_SKIP_ORIGINAL reproducing the FORK's
+// checkItemChangeFromButton WHOLE (fork d_a_alink.cpp:13401-13486; stock
+// baseline d_a_alink.cpp:12139-12213). The old post-hook here only re-ran the
+// X/Y-style trigger for Z AFTER stock returned FALSE — but stock's tail
+// (stock :12204) had already tested checkItemSetButton(mEquipItem) == 2 and,
+// with the Z slot's SELECT_ITEM_DOWN ALSO being 2, called allUnequip(1) every
+// frame for a Z-only equipped item ("use once then auto-holster"). The fork
+// swept that caller to dusk_itemNotOnAnyAssignButton(...) i.e. >= 3 (fork
+// :13472-13479, helper :10447-10452); reproducing the whole body is the only
+// way to give the tail fork semantics from a hook.
+//
+// Deviations from a byte-literal fork transcription, each deliberate:
+//  - GATE: feature off -> HOOK_CONTINUE, stock body runs byte-identical.
+//  - The fork's PLATFORM_GCN dComIfGs_getSelectEquipSword() guard
+//    (fork :13410-13412) is compiled OUT of the PC binary this mod targets,
+//    so it is omitted here (matches stock PC :12147-12150).
+//  - dusk_assignableItemButtonCount() (fork :13434) is 3 iff the extra slot
+//    is enabled — the gate above guarantees enabled, so the loop is a
+//    constant 3.
+//  - The lantern auto-equip loop is KEPT 2-WIDE (X/Y only) — donor-faithful:
+//    the fork itself keeps 2 there (fork :13459-13463).
+//  - The tail calls file-local z_aware_item_set_button(), NOT the hooked
+//    member checkItemSetButton: calling the member would re-enter the hook
+//    pipeline and Fix B's item-keyed translation would return 3 for a
+//    Z-assigned KANTERA/HVY_BOOTS/SPINNER, making the >= 3 test unequip the
+//    very item this fix keeps out.
+//  - checkKandelaarSwingAnime() is tested twice — donor quirk reproduced
+//    verbatim (fork :13406-13407, stock :12144-12145).
+// ============================================
+HookAction on_check_item_change_from_button_pre(ModContext*, void* args, void* retval, void*) {
+    if (!albw_is_extra_item_slot_enabled()) {
+        return HOOK_CONTINUE;  // feature OFF: stock path, byte-identical.
     }
 
     auto* link = mods::arg<daAlink_c*>(args, 0);
-    if (link == nullptr) {
-        return;
-    }
-    // Same outer gate as stock checkItemChangeFromButton before the X/Y loop.
-    if (!link->checkModeFlg(4) || link->checkEquipAnime() || link->checkBoomerangThrowAnime() ||
-        link->checkCopyRodThrowAnime() || link->checkKandelaarSwingAnime())
-    {
-        return;
+    if (link == nullptr || retval == nullptr) {
+        return HOOK_CONTINUE;
     }
 
-    const int procType = link->checkNewItemChange(SELECT_ITEM_DOWN);
-    if (procType != 0 && link->itemTriggerCheck(daAlink_c::BTN_Z)) {
-        *static_cast<BOOL*>(retval) =
-            link->changeItemTriggerKeepProc(SELECT_ITEM_DOWN, procType) != 0 ? TRUE : FALSE;
+    BOOL* out = static_cast<BOOL*>(retval);
+    *out = 0;
+
+    // Entry guards — fork d_a_alink.cpp:13402-13407, verbatim.
+    if (link->checkModeFlg(4)
+        && !link->checkEquipAnime()
+        && !link->checkBoomerangThrowAnime()
+        && !link->checkCopyRodThrowAnime()
+        && !link->checkKandelaarSwingAnime()
+        && !link->checkKandelaarSwingAnime())
+    {
+        // Sword branch — fork :13409-13423 (PC: no PLATFORM_GCN sword guard).
+        if (!daAlink_c::checkNotBattleStage()
+            && !link->checkCanoeRide()
+            && (!link->checkModeFlg(0x40000) || link->checkEquipHeavyBoots())
+            && link->mEquipItem != 0x103
+            && link->swordTrigger())
+        {
+            if (link->checkEndResetFlg1(daPy_py_c::ERFLG1_SWORD_TRIGGER_NON)) {
+                return HOOK_SKIP_ORIGINAL;  // fork :13419-13421 (return 0).
+            }
+
+            link->swordEquip(TRUE);
+        // Canoe wood-sword branch — fork :13424-13430.
+        } else if (link->checkCanoeRide()
+                    && !daAlink_c::checkStageName("F_SP103")
+                    && !link->checkCanoeSlider()
+                    && !link->checkFisingRodLure()
+                    && link->swordTrigger())
+        {
+            link->itemEquip(0x105);
+        } else {
+            u8 i;
+            // 3-wide trigger loop — fork :13434-13444; buttonCount is the
+            // fork's dusk_assignableItemButtonCount()==3 (gate == enabled).
+            for (i = 0; i < 3; i++) {
+                int proc_type = link->checkNewItemChange(i);
+                if (proc_type != 0 && link->itemTriggerCheck(1 << i)) {
+                    *out = link->changeItemTriggerKeepProc(i, proc_type);
+                    return HOOK_SKIP_ORIGINAL;
+                }
+            }
+
+            // Put-away branch — fork :13446-13455.
+            if (link->doTrigger() && dComIfGp_getDoStatus() == BUTTON_STATUS_PUT_AWAY) {
+                if (link->mEquipItem != dItemNo_KANTERA_e &&
+                    link->checkNoResetFlg2(daPy_py_c::FLG2_UNK_1))
+                {
+                    link->offKandelaarModel();
+                } else if (link->mSwordFlourishTimer != 0 && link->mEquipItem == 0x103 &&
+                           !daPy_py_c::checkWoodSwordEquip() && !link->checkModeFlg(0x402))
+                {
+                    *out = link->procSwordUnequipSpInit();
+                    return HOOK_SKIP_ORIGINAL;
+                } else {
+                    link->allUnequip(TRUE);
+                }
+            // Lantern auto-equip branch — fork :13456-13466, KEPT 2-WIDE
+            // (X/Y only) exactly like the fork.
+            } else if (link->mEquipItem == dItemNo_NONE_e &&
+                       link->mThrowBoomerangAcKeep.getActor() == NULL &&
+                       !link->checkCanoeRide() && link->checkNoUpperAnime() &&
+                       link->checkNoResetFlg2(daPy_py_c::FLG2_UNK_1))
+            {
+                for (i = 0; i < 2; i++) {
+                    if (dComIfGp_getSelectItem(i) == dItemNo_KANTERA_e) {
+                        link->mSelectItemId = i;
+                    }
+                }
+
+                link->itemEquip(dItemNo_KANTERA_e);
+                link->onNoResetFlg1(daPy_py_c::FLG1_UNK_40);
+            // Auto-put-away tail — fork :13467-13481: allUnequip(1) ONLY when
+            // the item sits on NO assign button (Z-aware >= 3), never when it
+            // is Z-only (SELECT_ITEM_DOWN). THE fix for use-once-then-holster.
+            } else if (link->mEquipItem != 0x103 && link->mEquipItem != dItemNo_NONE_e &&
+                       link->mEquipItem != 0x10B && link->mEquipItem != 0x102 &&
+                       (!link->checkCanoeRide() || !link->checkFisingRodLure()))
+            {
+                if (!link->checkEventRun() ||
+                    strcmp(dComIfGp_getEventManager().getRunEventName(), "ANGER") != 0)
+                {
+                    if (strcmp(dComIfGp_getEventManager().getRunEventName(), "ANGER2") != 0 &&
+                        z_aware_item_set_button(link, link->mEquipItem) >= 3)
+                    {
+                        link->allUnequip(1);
+                    }
+                }
+            }
+        }
     }
+
+    return HOOK_SKIP_ORIGINAL;
 }
 
 // Keep mSelectItemId on Z when the equipped item is only assigned there.
@@ -405,9 +581,12 @@ ModResult albw_extra_item_slot_hooks_init(ModError* error) {
         !install(error, "CheckSetItemTrigger",
                  mods::hook_add_post<CheckSetItemTrigger>(svc_hook,
                                                         on_check_set_item_trigger_post)) ||
+        // ============================================
+        // FIX A: pre + skip (was post) — see on_check_item_change_from_button_pre.
+        // ============================================
         !install(error, "CheckItemChangeFromButton",
-                 mods::hook_add_post<CheckItemChangeFromButton>(
-                     svc_hook, on_check_item_change_from_button_post)) ||
+                 mods::hook_add_pre<CheckItemChangeFromButton>(
+                     svc_hook, on_check_item_change_from_button_pre)) ||
         !install(error, "CheckItemButtonChange",
                  mods::hook_add_post<CheckItemButtonChange>(svc_hook,
                                                            on_check_item_button_change_post)) ||
