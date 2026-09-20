@@ -75,6 +75,10 @@ u8   sClothesPhaseFor     = 0xFF;  // equipped-clothes value sClothesPhase was (
 
 request_of_phase_process_class sPhase;
 request_of_phase_process_class sKmdlPhase;
+}  // namespace (reopened below) - accessor so the public alias evictor can reset the donor tracker
+namespace {
+request_of_phase_process_class& albw_sumo_impl_kmdl_phase_ref() { return sKmdlPhase; }
+
 request_of_phase_process_class sClothesPhase;
 request_of_phase_process_class sCapPhase;  // red/blue cap donor (Mmdl/Zmdl), held independent of base
 int sCapDonorKind = 0;                       // arc sCapPhase holds: 0 none, 1 Mmdl (red), 2 Zmdl (blue)
@@ -810,6 +814,53 @@ void purgeZombieClothesArc(const char* arcName) {
 }
 
 }  // namespace — releaseFaceDonor/releaseCapDonor/purgeZombie called from public API below
+
+// ============================================
+// NEW CODE - outfit-cycle crash fix (stale donor-row ALIAS eviction)
+// RESROW evidence (Magic->Ordon->Hero's crash): after a build-then-swap the
+// donor row can survive at count=1 pointing at an archive address that the
+// swap has since re-used for a DIFFERENT arc:
+//     ARM arc=Kmdl cnt=1 archv=...CB320 | old=Bmdl cnt=1 archv=...CB320
+// Both rows name the same JKRArchive. purgeZombieClothesArc cannot see this -
+// it only catches archive==NULL. The row is born in releaseFaceDonor's
+// count<2 branch (fork-verbatim: it abandons the tracker with cPhs_Reset
+// instead of resDelete, to dodge a JKRHeap::destroy(-1) on the sole holder) -
+// a fork bug the fork tolerates because its changeLink re-derives models
+// differently; our pipeline resolves the aliased row first and initModel()s
+// freed bytes.
+//
+// Fix at the consumption boundary: before a swap ARMs a new target arc, evict
+// any OTHER clothes row whose archive pointer aliases a live row. Purely a
+// name-cache eviction (purgeObjectRes, the same call the zombie path uses) -
+// no heap is destroyed, so the crash releaseFaceDonor was avoiding cannot
+// occur here.
+// ============================================
+void dAlbwSumoTest_evictAliasedClothesArcs(const char* liveArc) {
+    static const char* const kClothesArcs[] = {"Bmdl", "Kmdl", "Mmdl", "Zmdl", "Wmdl"};
+    if (liveArc == NULL) {
+        return;
+    }
+    dRes_info_c* liveInfo = dComIfG_getObjectResInfo(liveArc);
+    if (liveInfo == NULL || liveInfo->getArchive() == NULL) {
+        return;
+    }
+    JKRArchive* liveArchive = liveInfo->getArchive();
+    for (const char* arc : kClothesArcs) {
+        if (stricmp(arc, liveArc) == 0) {
+            continue;
+        }
+        dRes_info_c* info = dComIfG_getObjectResInfo(arc);
+        if (info == NULL || info->getArchive() != liveArchive) {
+            continue;  // distinct archives (healthy) or not mounted
+        }
+        DuskLog.warn("[ALBW-ARC] evicting stale {} row aliasing live {} (archive {}, count {})",
+                     arc, liveArc, (void*)liveArchive, (int)info->getCount());
+        if (strcmp(arc, "Kmdl") == 0) {
+            cPhs_Reset(&albw_sumo_impl_kmdl_phase_ref());
+        }
+        purgeObjectRes(arc);
+    }
+}
 
 void dAlbwSumoTest_releaseGlobalDonorsForClothesArc(const char* arcName) {
     // Intentionally a no-op. Dropping the global Kmdl donor before Ordon→Hero's

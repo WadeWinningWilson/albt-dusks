@@ -116,6 +116,9 @@ void dAlbwSumoTest_releaseGlobalDonorsForClothesArc(const char* arcName);
 // Beta FST flips that cPhs_Reset an in-flight donor leave these zombies and pin
 // Ordon→Hero's to resLoad ERROR.
 void dAlbwSumoTest_sanitizeClothesArc(const char* arcName);
+// Outfit-cycle crash fix: evict any clothes row whose archive pointer aliases
+// the live arc's (stale donor row left by releaseFaceDonor's count<2 branch).
+void dAlbwSumoTest_evictAliasedClothesArcs(const char* liveArc);
 
 #endif  // TARGET_PC
 

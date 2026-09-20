@@ -530,6 +530,17 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
                     s_swapOldArc = i_this->mArcName;
                     i_this->setArcName(i_this->checkWolf());
                     dAlbwSumoTest_sanitizeClothesArc(i_this->mArcName);
+                    // ============================================
+                    // OUTFIT-CYCLE CRASH FIX: evict any clothes row still
+                    // aliasing the OLD arc's archive before we load the new
+                    // one. RESROW caught a Kmdl row surviving at count=1 on
+                    // Bmdl's recycled archive pointer (Magic->Ordon->Hero's),
+                    // left behind by releaseFaceDonor's fork-verbatim count<2
+                    // abandon branch; the next resolve of that name returned
+                    // freed bytes -> initModel(NULL)/garbage. Name-cache
+                    // eviction only: no heap is destroyed here.
+                    // ============================================
+                    dAlbwSumoTest_evictAliasedClothesArcs(s_swapOldArc);
                     cPhs_Reset(&s_phaseReqB);
                     s_swapActive = true;
                     resrow_log("ARM", i_this);  // RESROW
