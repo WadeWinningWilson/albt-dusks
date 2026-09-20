@@ -133,6 +133,12 @@ static void sync_select_items_for_slot(u8 slot) {
 }
 
 bool dAlbwPotion_canDrinkSelectItem(int i_selItemIdx, u8 i_itemNo) {
+    // FUNDAMENTAL FIX: with the feature off this must ALWAYS be true - a vanilla
+    // red potion in bottle slot 1 otherwise read the mod's charge counter (0 on a
+    // vanilla save) and drinking was blocked entirely.
+    if (!albw_cfg_bool(g_soulbound_potion, false)) {
+        return true;
+    }
     if (!dAlbwPotion_isSoulboundRedItem(i_itemNo)) {
         return true;
     }

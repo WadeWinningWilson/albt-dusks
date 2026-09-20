@@ -220,7 +220,12 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
                            g_sumo_outfit_fists) != MOD_OK ||
         albw_ui_add_toggle(left, "Master Quest hearts",
                            "MQ heart tiers + stamina meter bonus (shop rows when rental ships).",
-                           g_master_quest) != MOD_OK)
+                           g_master_quest) != MOD_OK ||
+        albw_ui_add_toggle(left, "Soulbound Red Potion",
+                           "Souls-style flask: grants a bound red bottle (slot 1) that heals 2 "
+                           "hearts per charge and refills on death / at the refuge; capacity "
+                           "upgrade in the shop. Off = every bottle behaves vanilla.",
+                           g_soulbound_potion) != MOD_OK)
     {
         return MOD_ERROR;
     }

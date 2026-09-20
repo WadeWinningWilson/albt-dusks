@@ -68,6 +68,7 @@
 #include "albw_dusk_compat.h"   // dusk::getSettings / CapWearMode / MagicArmorMode / custom_assets
 #include "albw_fork_compat.h"   // dMeter2_isALBWArmorDepleted
 #include "albw_common.h"
+#include "config_vars.h"  // outfit-feature gate for the changeLink dispatch
 #include "albw_dusk_log.h"      // DuskLog
 #include "modules.h"
 #include "mods/svc/hook.hpp"
@@ -387,13 +388,26 @@ BOOL AlbwChangeLink_c::setMagicArmorBrk(int i_status) {
 
 namespace {
 
-// Replace every changeLink call (engine-internal + clothes_pipeline's explicit
-// i_this->changeLink(...) sites) with the hardened fork body. changeLink is a general
-// model-rebuild, not outfit-gated, so ALL calls dispatch to the subclass copy.
+// ============================================
+// COMPAT GATE (fix: "loading the mod switches Link's outfit"): the ported fork
+// body re-derives Link's clothes from OUR ALBW outfit state, so it must NOT own
+// the model rebuild unless our outfit machinery is actually in play.
+// Unconditional dispatch re-dressed Link at mod load and trampled every other
+// legitimate rebuild (vanilla state, other mods such as cosmetics). Stock
+// changeLink runs untouched whenever the gate is off; the hardened face cascade
+// (the Zora+Sumo quick-swap crash fix) only matters when these features are on.
+// ============================================
+bool changelink_dispatch_active() {
+    if (albw_cfg_bool(g_dpad_quick_swap, false)) return true;   // outfit cycling
+    if (albw_cfg_bool(g_outfit_stats, false)) return true;      // outfit stats worn-kits
+    if (albw_cfg_int(g_cap_wear, 0) != 0) return true;          // cap-wear variants
+    return dAlbwOutfit_isSumoWorn();                            // sumo body active
+}
+
 DEFINE_HOOK(&daAlink_c::changeLink, ChangeLink);
 HookAction on_change_link_pre(ModContext*, void* args, void*, void*) {
     daAlink_c* link = mods::arg<daAlink_c*>(args, 0);
-    if (link == nullptr) {
+    if (link == nullptr || !changelink_dispatch_active()) {
         return HOOK_CONTINUE;
     }
     static_cast<AlbwChangeLink_c*>(link)->AlbwChangeLink_c::changeLink(mods::arg<int>(args, 1));

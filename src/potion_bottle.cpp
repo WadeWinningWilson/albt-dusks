@@ -116,7 +116,11 @@ HookAction on_ProcBottleOpenInit(ModContext*, void* args, void* retval, void*) {
     if (link == nullptr) {
         return HOOK_CONTINUE;
     }
-    if (dAlbwPotion_isSoulboundBottleSlot(
+    // FUNDAMENTAL FIX: gate on the feature-gated soulbound predicate, NOT the raw
+    // slot number - SLOT_11 is the first VANILLA bottle slot, so the raw check
+    // blocked open/swing (catching, scooping) for ANY bottle there with every
+    // toggle off. isSoulboundRedInSlot requires the toggle AND a red bottle.
+    if (dAlbwPotion_isSoulboundRedInSlot(
             albw_game::get_select_item_index(static_cast<int>(link->mSelectItemId)))) {
         if (retval != nullptr) {
             *static_cast<int*>(retval) = static_cast<int>(link->checkWaitAction());
@@ -134,7 +138,11 @@ HookAction on_ProcBottleSwingInit(ModContext*, void* args, void* retval, void*) 
     if (link == nullptr) {
         return HOOK_CONTINUE;
     }
-    if (dAlbwPotion_isSoulboundBottleSlot(
+    // FUNDAMENTAL FIX: gate on the feature-gated soulbound predicate, NOT the raw
+    // slot number - SLOT_11 is the first VANILLA bottle slot, so the raw check
+    // blocked open/swing (catching, scooping) for ANY bottle there with every
+    // toggle off. isSoulboundRedInSlot requires the toggle AND a red bottle.
+    if (dAlbwPotion_isSoulboundRedInSlot(
             albw_game::get_select_item_index(static_cast<int>(link->mSelectItemId)))) {
         if (retval != nullptr) {
             *static_cast<int*>(retval) = static_cast<int>(link->checkWaitAction());
