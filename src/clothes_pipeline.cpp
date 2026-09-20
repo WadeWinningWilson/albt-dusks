@@ -59,6 +59,30 @@ struct AlbwLoadModelDvdScope {
     ~AlbwLoadModelDvdScope() { s_inLoadModelDvd = false; }
 };
 
+// ============================================
+// TEMP DIAG - RESROW (within-one-life outfit-cycle crash). ONE probe, the
+// hypotheses static analysis could not settle: row refcount drift, dangling
+// archive ptr, phase-request id mismatch on delete, heap ping-pong identity,
+// delete-fallback usage, same-arc vs swap ordering. Fires per transition EVENT
+// (not per frame). Parse tag: "RESROW". STRIP after conviction.
+// ============================================
+void resrow_log(const char* ev, daAlink_c* link) {
+    const char* arc = (link != nullptr && link->mArcName != nullptr) ? link->mArcName : "-";
+    dRes_info_c* ri = (link != nullptr && link->mArcName != nullptr)
+                          ? dComIfG_getObjectResInfo(link->mArcName) : nullptr;
+    dRes_info_c* ro = (s_swapOldArc != nullptr) ? dComIfG_getObjectResInfo(s_swapOldArc) : nullptr;
+    DuskLog.info("[RESROW] {} arc={} cnt={} archv={} | old={} cnt={} archv={} | "
+                 "heapA={} heapB={} reqB={} swap={} t={}",
+                 ev, arc, ri != nullptr ? (int)ri->getCount() : -1,
+                 ri != nullptr ? (void*)ri->getArchive() : (void*)nullptr,
+                 s_swapOldArc != nullptr ? s_swapOldArc : "-",
+                 ro != nullptr ? (int)ro->getCount() : -1,
+                 ro != nullptr ? (void*)ro->getArchive() : (void*)nullptr,
+                 (void*)(link != nullptr ? link->mpArcHeap : nullptr), (void*)s_arcHeapB,
+                 (int)s_phaseReqB.id, (int)s_swapActive,
+                 link != nullptr ? (int)link->mClothesChangeWaitTimer : -1);
+}
+
 // stock's l_mArcName (d_a_alink.cpp:85) is file-static; the resource manager keys
 // on the string, so the literal is the same lookup.
 const char* const ALBW_MMDL_ARC = "Mmdl";
@@ -449,6 +473,7 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
                     dAlbwSumoTest_sanitizeClothesArc(i_this->mArcName);
                     cPhs_Reset(&s_phaseReqB);
                     s_swapActive = true;
+                    resrow_log("ARM", i_this);  // RESROW
                 }
             } else {
                 // In-place free-then-load: wolf metamorphose, or no alt heap.
@@ -457,6 +482,7 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
                 }
                 cPhs_Reset(&i_this->mPhaseReq);
                 i_this->mpArcHeap->freeAll();
+                resrow_log("INPLACE", i_this);  // RESROW
                 dAlbwAlink_invalidateClothesEpoch();  // prior-epoch models are stale
                 i_this->setArcName(isMeta ? !i_this->checkWolf() : i_this->checkWolf());
             }
@@ -476,6 +502,7 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
             // Same arc re-equipped: still resident in mpArcHeap, rebuild in place.
             // (Custom-Model-API section 9: same-arc deliberately does NOT remount.)
             if (i_this->mArcName == s_swapOldArc) {
+                resrow_log("SAMEARC", i_this);  // RESROW
                 i_this->mClothesChangeWaitTimer = 0;
                 s_swapActive = false;
                 s_forceRemount = false;
@@ -484,11 +511,15 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
             }
             const int loadSt = dComIfG_resLoad(&s_phaseReqB, i_this->mArcName, s_arcHeapB);
             if (loadSt == cPhs_COMPLEATE_e) {
+                resrow_log("LOADED", i_this);  // RESROW (pre-changeLink build)
                 i_this->mClothesChangeWaitTimer = 0;
                 i_this->changeLink(1);  // builds from the alt heap; repoints refs
                 // Live ptrs now reference the alt heap, so the old heap can drop.
                 if (!dComIfG_resDelete(&i_this->mPhaseReq, s_swapOldArc)) {
                     dComIfG_deleteObjectResMain(s_swapOldArc);
+                    resrow_log("DEL-FALLBACK", i_this);  // RESROW (req-id mismatch path!)
+                } else {
+                    resrow_log("DEL-OK", i_this);  // RESROW
                 }
                 cPhs_Reset(&i_this->mPhaseReq);
                 i_this->mpArcHeap->freeAll();
@@ -505,9 +536,11 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
                 s_swapActive = false;
                 s_forceRemount = false;
                 dAlbwAlink_resyncClothesEpoch();
+                resrow_log("SWAPPED", i_this);  // RESROW
                 return ret(1);
             }
             if (loadSt == cPhs_ERROR_e) {
+                resrow_log("LOAD-ERR", i_this);  // RESROW
                 // Keep LIVE models, purge abandoned rows, timer=2 retry. Do NOT
                 // reconcile the outfit to Ordon (that pinned the D-pad ring).
                 const char* failedArc = i_this->mArcName;
@@ -921,6 +954,10 @@ void albw_clothes_request_remount() { s_forceRemount = true; }
 // combines this with the wait timer to pick latched vs live gate evaluation.
 // ============================================
 bool albw_clothes_transition_in_flight() { return s_swapActive || s_inLoadModelDvd; }
+
+// TEMP DIAG - RESROW dispatch tap (called from changelink.cpp on every ported
+// changeLink dispatch). STRIP with the probe.
+void albw_clothes_resrow_dispatch_log(daAlink_c* link) { resrow_log("DISPATCH", link); }
 
 ModResult albw_clothes_pipeline_init(ModError* error) {
     if (!install(error, "AlinkCreateClothesHeap",

@@ -447,6 +447,7 @@ HookAction on_change_link_pre(ModContext*, void* args, void*, void*) {
     if (!active) {
         return HOOK_CONTINUE;
     }
+    albw_clothes_resrow_dispatch_log(link);  // RESROW - STRIP with the probe
     static_cast<AlbwChangeLink_c*>(link)->AlbwChangeLink_c::changeLink(mods::arg<int>(args, 1));
     return HOOK_SKIP_ORIGINAL;
 }

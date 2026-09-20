@@ -64,3 +64,6 @@ bool albw_clothes_transition_in_flight();
 // so body and draw consumers could diverge; now they cannot.
 // ============================================
 extern bool s_albwMagicModelReady;
+
+// TEMP DIAG - RESROW dispatch tap. STRIP with the probe.
+void albw_clothes_resrow_dispatch_log(daAlink_c* link);
