@@ -72,7 +72,16 @@ void try_wolf_howl_burst() {
     }
 
     if (!dev_test_bypass()) {
-        if (albw_wolf_get_charge_count() < 2) {
+        // ============================================
+        // SPEND-TO-ZERO FIX (user-arbitrated design): howl costs 1, so it needs
+        // 1 - the old `< 2` gate (fork HEAD, raised from the original commit
+        // 1ba40cfc5d's `< 1` by fb0a4c0dcf) made charge #1 unspendable: howl
+        // needs 2, arm needs 2, dome denies at < 2 -> dead-end charge. The
+        // user's design ruling: "spend until 0 (two charges with one move or
+        // one charge for the other)". Recommend the same fix upstream in the
+        // fork (d_a_alink_dusk.cpp:141).
+        // ============================================
+        if (albw_wolf_get_charge_count() < 1) {
             Z2GetAudioMgr()->seStart(Z2SE_SYS_ERROR, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
             dAlbwWolfChargeHud_notifyDeny();
             return;

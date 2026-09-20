@@ -65,9 +65,16 @@ HookAction on_proc_wolf_lock_attack_init_pre(ModContext*, void* args, void* retv
     if (link == nullptr || retval == nullptr || !dAlbwWolfCombat_isEnabled()) {
         return HOOK_CONTINUE;
     }
-    // Chain hops re-enter from PROC_WOLF_LOCK_ATTACK's own move (wolf.inc:8795);
-    // the fork gates only the OPEN from the roll-attack proc.
-    if (link->mProcID == daAlink_c::PROC_WOLF_LOCK_ATTACK) {
+    // ============================================
+    // HOP OVER-SPEND FIX: chain hops actually re-enter from
+    // PROC_WOLF_LOCK_ATTACK_TURN (stock wolf.inc:8158/8211), NOT
+    // PROC_WOLF_LOCK_ATTACK - the old skip never matched, so every hop was
+    // gated AND spent 1 on top of the launch, truncating multi-target chains.
+    // The fork hosts this logic inside procWolfRollAttackMove only (fork
+    // wolf.inc:7733-7748), so gate exactly the OPEN and let every other caller
+    // (hops included) pass free, matching the fork's spend-per-LAUNCH model.
+    // ============================================
+    if (link->mProcID != daAlink_c::PROC_WOLF_ROLL_ATTACK_MOVE) {
         return HOOK_CONTINUE;
     }
 
