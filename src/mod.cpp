@@ -215,6 +215,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_fyrus_init(error) != MOD_OK ||
         albw_fyrus_golem_init(error) != MOD_OK ||
         albw_fyrus_phases_init(error) != MOD_OK ||
+        albw_fyrus_kids_init(error) != MOD_OK ||
         albw_armogohma_init(error) != MOD_OK ||
         albw_lop_hud_init(error) != MOD_OK ||
         albw_rental_shop_init(error) != MOD_OK ||

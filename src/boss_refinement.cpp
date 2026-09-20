@@ -854,6 +854,19 @@ bool dAlbwBoss_fyrusShouldChipAblazeDamage() {
     return dAlbwBoss_fyrusAblazePhase() && !s_fyrusAblazeVulnOpen;
 }
 
+// ============================================
+// TUNING DIVERGENCE FROM THE FORK - user-directed, deliberate.
+//
+// The fork chips 1% of damage dealt and ZEROES the vulnerability credits
+// (`chip = dealt * 1 / 100; s_fyrusAttackCredits = 0;`). Against the 200 HP
+// refinement pool that is ~1 HP a shot, and the reset meant a single body
+// projectile threw away up to 14 credits' worth of parry work - poking the
+// body actively pushed the vulnerability window further away.
+//
+// Now: 5% of damage dealt, and a chip costs ONE credit instead of all of them.
+// Chipping is a slow, mildly costly option rather than a self-inflicted
+// penalty. Everything else is the fork's.
+// ============================================
 void dAlbwBoss_fyrusApplyChipDamage(e_fm_class* i_fm, int i_hpBefore) {
     if (i_fm == NULL || !dAlbwBoss_fyrusShouldChipAblazeDamage()) {
         return;
@@ -862,12 +875,14 @@ void dAlbwBoss_fyrusApplyChipDamage(e_fm_class* i_fm, int i_hpBefore) {
     if (dealt <= 0) {
         return;
     }
-    int chip = dealt * 1 / 100;
+    int chip = dealt * 5 / 100;
     if (chip < 1) {
         chip = 1;
     }
     i_fm->health = static_cast<s16>(std::max(0, i_hpBefore - chip));
-    s_fyrusAttackCredits = 0;
+    if (s_fyrusAttackCredits > 0) {
+        s_fyrusAttackCredits--;
+    }
 }
 
 bool dAlbwBoss_fyrusGolemWindowIsLive() {

@@ -1,0 +1,58 @@
+{
+  "_": [
+    "B_GOS (Fyrus phase-3 Goron kids) combat port: whole-func replacement of",
+    "daB_GOS_Execute (SKIP_ORIGINAL seam). The fork's entire kid-combat layer",
+    "lives inside action() and damage_check(), which are FILE-STATICS whose bare",
+    "names are ambiguous in the host symbol manifest (95 / 53 actor TUs define",
+    "one), so the unique daB_GOS_Execute symbol is the hook target and the fork",
+    "chain Execute -> action -> damage_check is ported whole, exactly the way",
+    "e_s1.json / armogohma.json do it.",
+    "The stock damage_check is an EMPTY body, so nothing vanilla is displaced."
+  ],
+  "fork": "C:/Users/ryana/Documents/dusklight/src/d/actor/d_a_b_gos.cpp",
+  "stock": "C:/Users/ryana/Documents/dusklight-main/src/d/actor/d_a_b_gos.cpp",
+  "out": "C:/Users/ryana/AppData/Local/Temp/claude/C--Users-ryana-Documents-dusklight/e5655c2a-9732-4318-96fd-9d065ba104c1/scratchpad/staging/bgos-kids/bgos_port.inc",
+  "port_funcs": [
+    "daB_GOS_Execute",
+    "action",
+    "damage_check"
+  ],
+  "whole_funcs": [
+    "daB_GOS_Execute",
+    "action",
+    "damage_check"
+  ],
+  "renames": {
+    "daB_GOS_Execute": "albw_bgos_Execute"
+  },
+  "substitutions": [
+    [
+      "b_gos_class::b_gos_class() {}",
+      "// [port_tool substitution] b_gos_class::b_gos_class() is NOT redefined in the mod\n// TU. The host owns it (??0b_gos_class@@QEAA@XZ is exported) and emitting it here\n// would also emit a local b_gos_class vtable whose inherited fopAc_ac_c /\n// fopEn_enemy_c virtuals are NOT in dusklight_exports.def. Nothing in the ported\n// chain constructs a b_gos_class; only the host's daB_GOS_Create does."
+    ]
+  ],
+  "diag_zero": [],
+  "engine_symbols": [
+    "b_gos_class",
+    "b_go_class",
+    "b_gos_j_info",
+    "daB_GOS_HIO_c",
+    "fopAc_ac_c",
+    "fopEn_enemy_c",
+    "daPy_py_c",
+    "cXyz",
+    "csXyz",
+    "cCcD_Obj",
+    "dCcD_SrcSph",
+    "dCcD_Sph",
+    "dCcG_At_Spl",
+    "J3DModel",
+    "J3DAnmTransform",
+    "J3DFrameCtrl",
+    "mDoExt_McaMorfSO",
+    "DUSK_CONSTEXPR",
+    "abs",
+    "std",
+    "TARGET_PC"
+  ]
+}
