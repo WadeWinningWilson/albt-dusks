@@ -7,9 +7,11 @@
 // string must match that binary's symbol table EXACTLY. C++ mangling is
 // ABI-specific, so a single literal cannot work everywhere:
 //
-//   Windows        MSVC mangling            "?name@@YA..."
-//   Linux/Android  Itanium                  "_Z<len>name..."
-//   macOS/iOS      Itanium + Mach-O's '_'   "__Z<len>name..."
+//   Windows                 MSVC mangling   "?name@@YA..."
+//   Linux/Android/Apple     Itanium         "_Z<len>name..."
+//
+// (macOS/iOS take the SAME string as Linux - see the ALBT_SYM note below. An
+// earlier version added Mach-O's leading '_' here and broke every Apple hook.)
 //
 // Hardcoding the MSVC name made every one of these fail to resolve off Windows.
 // Because a failed hook install aborts mod_initialize, that turned into a total
@@ -28,10 +30,28 @@
 
 #pragma once
 
+// APPLE TAKES THE PLAIN ITANIUM NAME - NO LEADING UNDERSCORE.
+//
+// The Mach-O symbol TABLE stores these with a leading '_', which is why the
+// first version of this header prefixed one. That was wrong: the host does not
+// look the name up in the symbol table, it looks it up in symgen's manifest,
+// and that manifest's contract is explicit (dusklight sdk,
+// src/dusk/mods/manifest.hpp:38-40):
+//
+//   "Names can be either the platform's mangled name (i.e. the name passed to
+//    dlopen; NO MACH-O LEADING UNDERSCORE) or the function name without
+//    parameters (e.g. "daAlink_c::execute")."
+//
+// manifest::resolve() is an exact strcmp with no normalisation
+// (src/dusk/mods/manifest.cpp:362-394), so the extra '_' made EVERY
+// DEFINE_HOOK_SYMBOL target below miss on macOS and iOS - since day one, on
+// every release. Combined with the old fatal install() that turned the first
+// miss into a total mod unload, that is the
+// "Failed - Reason: SetItemMagicCount" players reported.
+//
+// So Apple and Linux/Android share one spelling; only Windows differs.
 #if defined(_WIN32)
 #define ALBT_SYM(msvc, itanium) msvc
-#elif defined(__APPLE__)
-#define ALBT_SYM(msvc, itanium) "_" itanium
 #else
 #define ALBT_SYM(msvc, itanium) itanium
 #endif
