@@ -84,7 +84,8 @@
 // Same macro as wolf_combat.cpp; the e_s1 extract logs pack-finish sweeps and
 // hang-bite-refuse fallthroughs through it. Set to 0 to compile probes out.
 // ============================================
-#define ALBW_WOLFHIT_PROBE 1
+// RELEASE: probe compiled OUT (set to 1 to re-arm the per-hit wolf-art trace).
+#define ALBW_WOLFHIT_PROBE 0
 #if ALBW_WOLFHIT_PROBE
 #define ALBW_WOLFHIT_LOG(...)                                                 \
     do {                                                                      \

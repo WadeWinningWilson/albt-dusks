@@ -1326,7 +1326,8 @@ void dAlbwWolfStun_afterMove() {
 // events in e_s1_hooks.cpp, which defines the same macro). Set the flag to 0
 // to compile every probe line out.
 // ============================================
-#define ALBW_WOLFHIT_PROBE 1
+// RELEASE: probe compiled OUT (set to 1 to re-arm the per-hit wolf-art trace).
+#define ALBW_WOLFHIT_PROBE 0
 #if ALBW_WOLFHIT_PROBE
 #define ALBW_WOLFHIT_LOG(...)                                                 \
     do {                                                                      \

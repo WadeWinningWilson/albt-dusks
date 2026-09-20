@@ -66,7 +66,11 @@ struct AlbwLoadModelDvdScope {
 // delete-fallback usage, same-arc vs swap ordering. Fires per transition EVENT
 // (not per frame). Parse tag: "RESROW". STRIP after conviction.
 // ============================================
+// RELEASE: probe compiled OUT (set to 1 to re-arm the outfit-transition
+// resource-row trace that convicted the aliased-row crash).
+#define ALBW_RESROW_PROBE 0
 void resrow_log(const char* ev, daAlink_c* link) {
+#if ALBW_RESROW_PROBE
     const char* arc = (link != nullptr && link->mArcName != nullptr) ? link->mArcName : "-";
     dRes_info_c* ri = (link != nullptr && link->mArcName != nullptr)
                           ? dComIfG_getObjectResInfo(link->mArcName) : nullptr;
@@ -81,8 +85,10 @@ void resrow_log(const char* ev, daAlink_c* link) {
                  (void*)(link != nullptr ? link->mpArcHeap : nullptr), (void*)s_arcHeapB,
                  (int)s_phaseReqB.id, (int)s_swapActive,
                  link != nullptr ? (int)link->mClothesChangeWaitTimer : -1);
+#else
+    (void)ev; (void)link;
+#endif
 }
-
 // stock's l_mArcName (d_a_alink.cpp:85) is file-static; the resource manager keys
 // on the string, so the literal is the same lookup.
 const char* const ALBW_MMDL_ARC = "Mmdl";
