@@ -192,8 +192,6 @@ DEFINE_HOOK(&daAlink_c::procCutJumpInit, CutJumpInit);
 DEFINE_HOOK(&daAlink_c::procCutTurnInit, CutTurnInit);
 DEFINE_HOOK(&daAlink_c::procCutTurnChargeInit, CutTurnChargeInit);
 DEFINE_HOOK(&daAlink_c::procCutHeadInit, CutHeadInit);
-// fork d_a_alink_cut.inc:2344-2357 — Ending Blow gate + hidden-skill drain + FA spend.
-DEFINE_HOOK(&daAlink_c::procCutDownInit, CutDownInit);
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpChargeInit, CutLargeJumpChargeInit);
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpInit, CutLargeJumpInit);
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpCharge, CutLargeJumpCharge);
@@ -996,19 +994,16 @@ HookAction gate_cut_turn_pre(ModContext*, void* args, void* retval, void*) {
             }
             return HOOK_SKIP_ORIGINAL;
         }
-        // GS T1 finisher = Hurricane Spin (fork d_a_alink.cpp:13086 /
-        // d_a_alink_cut.inc:2318). When FA is on its final spend charge, run the
-        // hurricane overlay INSTEAD of the normal great-spin (try_begin spends the FA
-        // finisher itself).
-        //
-        // NO ALBW DRAIN ON THIS BRANCH — the fork's hurricane costs zero meter. Both
-        // fork call sites reach procCutGsHurricaneInit *instead of* procCutTurnInit
-        // (d_a_alink_cut.inc:2316-2324, d_a_alink.cpp:13083-13091), so the
-        // dMeter2_onALBWHiddenSkill() at d_a_alink_cut.inc:1934 never runs for it, and
-        // procCutGsHurricaneInit itself (d_a_alink_hurricane.inc:120-256) contains no
-        // meter call at all. The signal_drain that used to sit here was mod-authored;
-        // with the old stale-phase early return in albw_hurricane_try_begin it fired
-        // once PER FRAME out of procCutTurnMove's release loop and emptied the bar.
+        // GS T1 finisher = Hurricane Spin (fork d_a_alink.cpp:13086). When FA is on its
+        // final spend charge, run the hurricane overlay INSTEAD of the normal great-spin
+        // (try_begin spends the FA finisher itself). Costs a hidden-skill meter drain.
+        // No meter drain on this branch: the fork reaches procCutGsHurricaneInit
+        // INSTEAD of procCutTurnInit (d_a_alink_cut.inc:2316-2324,
+        // d_a_alink.cpp:13083-13091), so the hidden-skill drain at
+        // d_a_alink_cut.inc:1934 never runs and the hurricane body itself
+        // (d_a_alink_hurricane.inc:120-256) has no meter call. The drain that used
+        // to be here was mod-authored, and in the pre-fix freeze loop it fired
+        // once per frame and emptied the bar.
         if (albw_hurricane_try_begin(link)) {
             if (retval != nullptr) {
                 *static_cast<int*>(retval) = 1;
@@ -1038,15 +1033,7 @@ HookAction gate_cut_turn_charge_pre(ModContext*, void* args, void* retval, void*
     if (link->mComboCutCount == 0 && link->checkDashAnime()) {
         return HOOK_CONTINUE;
     }
-    // Fork condition is `checkCutLargeTurnState() || dFocusedArts_isOnFinalSpendCharge()`
-    // (d_a_alink_cut.inc:2110-2111): the final spend charge takes the hidden-skill gate
-    // even when the large-turn state has not latched, so the GS hurricane finisher can
-    // still be charged. The second clause was missing, which sent that case down
-    // gate_sword_pre and charged it a sword drain instead.
-    if (dAlbw_isHiddenSkillReworkEnabled() &&
-        (link->checkCutLargeTurnState() || dFocusedArts_isOnFinalSpendCharge()))
-    {
-        // Great Spin drains 1/2 base at release (procCutTurnInit), not during charge.
+    if (dAlbw_isHiddenSkillReworkEnabled() && link->checkCutLargeTurnState()) {
         if (!can_hidden_skill()) {
             if (retval != nullptr) {
                 *static_cast<int*>(retval) = 1;
@@ -1058,93 +1045,20 @@ HookAction gate_cut_turn_charge_pre(ModContext*, void* args, void* retval, void*
     return gate_sword_pre(nullptr, args, retval, nullptr);
 }
 
-// Fork procCutHeadInit head, d_a_alink_cut.inc:2567-2599 + :2643. Three donor steps
-// were absent here: the re-entry early return (:2574-2576), the parry helm-splitter
-// credit gate (:2583-2590), and — the FA-relevant one — dShield_chargeHelmSplitterMeterOnce()
-// (:2592) + dFocusedArts_onPlayerHiddenSkillUse() (:2593). Without that last call Helm
-// Split never advanced the FA spend sequence, so a bank opened by another skill could
-// not be drained by Helm Splits. The mod-authored signal_drain(g_flag_hidden_skill)
-// stood in for the donor's dShield_chargeHelmSplitterMeterOnce() (DN-10-S substitution);
-// the mod already ports that function (shield.cpp:1620), so call it.
 HookAction gate_cut_head_pre(ModContext*, void* args, void* retval, void*) {
     if (!meter_enabled() || !dAlbw_isHiddenSkillReworkEnabled()) {
         return HOOK_CONTINUE;
     }
-    auto* link = mods::arg<daAlink_c*>(args, 0);
-    if (link == nullptr) {
-        return HOOK_CONTINUE;
-    }
-    // fork :2574-2576 — already in the helm-split proc: do nothing, return 1.
-    if (link->mProcID == daAlink_c::PROC_CUT_HEAD ||
-        link->mProcID == daAlink_c::PROC_CUT_HEAD_LAND)
-    {
-        if (retval != nullptr) {
-            *static_cast<int*>(retval) = 1;
-        }
-        return HOOK_SKIP_ORIGINAL;
-    }
     if (!can_hidden_skill()) {
         if (retval != nullptr) {
             *static_cast<int*>(retval) = 0;
         }
         return HOOK_SKIP_ORIGINAL;
     }
-    // fork :2583-2590 — parry helm-punish credit; the scarecrow has no punish window.
-    fopAc_ac_c* target = link->mTargetedActor;
-    const bool isKakashi =
-        target != NULL && fopAcM_GetName(target) == fpcNm_NPC_KAKASHI_e;
-    if (dShield_isParryCombatEnabled() && !isKakashi && !dShield_tryBeginHelmSplitter()) {
-        if (retval != nullptr) {
-            *static_cast<int*>(retval) = 0;
-        }
-        return HOOK_SKIP_ORIGINAL;
-    }
-    dShield_chargeHelmSplitterMeterOnce();  // fork :2592 (donor's own ALBW drain)
-    dFocusedArts_onPlayerHiddenSkillUse();  // fork :2593 — the missing spend site
+    signal_drain(g_flag_hidden_skill);
     // Fork procCutHeadInit: fire the Helm Split special finisher (max bash
     // charges). Self-gates on isSpecialFinisherSpendActive.
     dFocusedArts_onHiddenSkillProcStarted(daPy_py_c::CUT_TYPE_HEAD_JUMP);
-    return HOOK_CONTINUE;
-}
-
-// Fork procCutJumpInit, d_a_alink_cut.inc:1772-1813. The mod pointed this proc at the
-// bare gate_sword_pre, which reproduces :1781-1786 but drops :1811 —
-// dFocusedArts_onPlayerHiddenSkillUse(). That is the single most-taken FA spend site in
-// normal play (every jump slash), so its absence is the main reason a full bank could
-// not be spent down: with it missing, only Mortal Draw / Great Spin / aerial twirl /
-// Jump Strike advance the sequence.
-HookAction gate_cut_jump_pre(ModContext*, void* args, void* retval, void*) {
-    const HookAction action = gate_sword_pre(nullptr, args, retval, nullptr);
-    if (action == HOOK_SKIP_ORIGINAL) {
-        return action;  // fork :1782 `return 1` — the proc never reaches :1811
-    }
-    dFocusedArts_onPlayerHiddenSkillUse();
-    return action;
-}
-
-// Fork procCutDownInit (Ending Blow), d_a_alink_cut.inc:2344-2357. Not hooked at all in
-// the mod: the hidden-skill gate, the hidden-skill drain and the FA spend were ALL
-// absent, so Ending Blow was free and never advanced the spend sequence.
-HookAction gate_cut_down_pre(ModContext*, void* args, void* retval, void*) {
-    if (!meter_enabled() || !dAlbw_isHiddenSkillReworkEnabled()) {
-        return HOOK_CONTINUE;
-    }
-    auto* link = mods::arg<daAlink_c*>(args, 0);
-    // fork :2345-2348 — demo re-entry guard runs before the ALBW gate.
-    if (link != nullptr && link->mDemo.getDemoMode() == daPy_demo_c::DEMO_CUT_DOWN_e &&
-        (link->mProcID == daAlink_c::PROC_CUT_DOWN ||
-         link->mProcID == daAlink_c::PROC_CUT_DOWN_LAND))
-    {
-        return HOOK_CONTINUE;
-    }
-    if (!can_hidden_skill()) {
-        if (retval != nullptr) {
-            *static_cast<int*>(retval) = 1;
-        }
-        return HOOK_SKIP_ORIGINAL;
-    }
-    signal_drain(g_flag_hidden_skill);   // fork :2354 dMeter2_onALBWHiddenSkill()
-    dFocusedArts_onPlayerHiddenSkillUse();  // fork :2355
     return HOOK_CONTINUE;
 }
 
@@ -1954,34 +1868,16 @@ void on_damage_point_post(ModContext*, void*, void*, void*) {
 // fork's own fopAc_ENEMY_e group filter already excludes, so the registered
 // set is identical.
 // ============================================
-// ============================================
-// Fork d_a_alink_cut.inc:338-375 — daAlink_c::setSwordHitVibration carries TWO ALBW
-// additions in one hunk: the magic-armor encounter registration (:355-360) and the FA
-// sword fill (:367-370). Only the first was ported here; the fill was re-authored at
-// the cc_at_check seam (focused_arts.cpp) with different gates, which lost all three of
-// the donor's conditions and turned every sword contact — pots, signs, walls, NPCs, and
-// BLOCKED hits on shielded enemies — into FA fill. Both halves now live in their donor
-// host function, in donor order.
-// ============================================
 void on_sword_hit_vibration_post(ModContext*, void* args, void*, void*) {
+    if (!albw_magic_armor_on()) {
+        return;  // OFF: no registration (all-off proof)
+    }
     auto* link = mods::arg<daAlink_c*>(args, 0);
     auto* gobj = mods::arg<dCcD_GObjInf*>(args, 1);
     if (link == nullptr || gobj == nullptr || !gobj->ChkAtHit()) {
         return;
     }
     fopAc_ac_c* hitAc = gobj->GetAtHitAc();
-
-    // fork :367-370 — FA fill requires a clean connect: AtShieldHit covers both enemy
-    // shield TGs and invulnerable armor clank surfaces, and both skip PlusDmg, so a
-    // guarded hit deals no damage and grants no meter. Human form only.
-    if (hitAc != NULL && fopAcM_GetGroup(hitAc) == fopAc_ENEMY_e && !link->checkWolf() &&
-        !gobj->ChkAtShieldHit()) {
-        dFocusedArts_onConnectedSwordHit();
-    }
-
-    if (!albw_magic_armor_on()) {
-        return;  // OFF: no registration (all-off proof)
-    }
     if (hitAc != NULL && fopAcM_GetGroup(hitAc) == fopAc_ENEMY_e &&
         link->checkMagicArmorWearAbility()) {
         albw_armor_attack_hit(fopAcM_GetID(hitAc));
@@ -2145,16 +2041,13 @@ ModResult albw_meter_init(ModError* error) {
         !install(error, "CutDash", mods::hook_add_pre<CutDash>(svc_hook, gate_sword_void_pre)) ||
         !install(error, "CutFinishInit",
                  mods::hook_add_pre<CutFinishInit>(svc_hook, gate_cut_finish_pre)) ||
-        !install(error, "CutJumpInit",
-                 mods::hook_add_pre<CutJumpInit>(svc_hook, gate_cut_jump_pre)) ||
+        !install(error, "CutJumpInit", mods::hook_add_pre<CutJumpInit>(svc_hook, gate_sword_pre)) ||
         !install(error, "CutTurnInit",
                  mods::hook_add_pre<CutTurnInit>(svc_hook, gate_cut_turn_pre)) ||
         !install(error, "CutTurnChargeInit",
                  mods::hook_add_pre<CutTurnChargeInit>(svc_hook, gate_cut_turn_charge_pre)) ||
         !install(error, "CutHeadInit",
                  mods::hook_add_pre<CutHeadInit>(svc_hook, gate_cut_head_pre)) ||
-        !install(error, "CutDownInit",
-                 mods::hook_add_pre<CutDownInit>(svc_hook, gate_cut_down_pre)) ||
         !install(error, "CutLargeJumpChargeInit",
                  mods::hook_add_pre<CutLargeJumpChargeInit>(svc_hook,
                                                              gate_cut_large_jump_charge_pre)) ||
