@@ -2,7 +2,7 @@
 
 A stock Dusklight `.dusk` mod that ports the **A Link Between Twilight** feature
 set onto an unmodified `dusklight` runtime. It builds against
-[dusklight](https://github.com/TwilitRealm/dusklight) **v2.0.0** — never the ALBT
+[dusklight](https://github.com/TwilitRealm/dusklight) **v2.0.1** — never the ALBT
 fork — so it runs on the same `dusklight` executable players already have.
 
 **Display name (Mods panel):** A Link Between Twilight
@@ -70,7 +70,7 @@ into one `.dusk`.
 ## SDK pin
 
 The Dusklight SDK version is pinned by `DUSKLIGHT_VERSION` in `CMakeLists.txt`
-(currently `e9b120544c…`, Dusklight **v2.0.0**). The mod declares
+(currently `422d7bb1b6…`, Dusklight **v2.0.1**). The mod declares
 `FEATURES game webgpu` — `webgpu` drives the Tear of Light glow via `GfxService`.
 
 ## Notes

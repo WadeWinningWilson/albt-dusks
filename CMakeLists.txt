@@ -12,9 +12,18 @@ if (NOT DUSKLIGHT_DIR AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../dusklight-main/
 endif ()
 
 if (NOT DUSKLIGHT_VERSION)
-    # Dusklight v2.0.0 (tag v2.0.0). CI fetches this SDK for all platforms; the
-    # runtime exe players use is v2.0.0, so the mod must build against its ABI.
-    set(DUSKLIGHT_VERSION "e9b120544cb75e81b5aa36777f1688fa61f2d9e8")
+    # Dusklight v2.0.1 (tag v2.0.1). CI fetches this SDK for all platforms; the
+    # runtime exe players use is v2.0.1, so the mod must build against its ABI.
+    #
+    # 2.0.0 -> 2.0.1 audit before the bump (gh compare, 12 commits): NO changes
+    # under include/ or sdk/ - zero header or mod-ABI drift - and NOT ONE of the
+    # stock files this mod whole-func ports was touched (d_cc_uty.cpp,
+    # d_a_e_s1.cpp, d_a_alink*.inc/.cpp, d_menu_window.cpp, d_menu_ring.cpp,
+    # d_meter2.cpp), so every ported body stays current. The two changes that
+    # come near us are both inert here: d_meter2_draw.cpp adds pointer clearing
+    # inside ~dMeter2Draw_c (a destructor we do not port), and settings.h
+    # appends a host-only ConfigVar our compat shim does not mirror.
+    set(DUSKLIGHT_VERSION "422d7bb1b6c8d973cccf8b3d0b226a57ac3cc8c7")
 endif ()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchDusklight.cmake")
