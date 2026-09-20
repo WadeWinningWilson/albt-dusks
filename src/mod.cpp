@@ -264,6 +264,7 @@ MOD_EXPORT ModResult mod_update(ModError*) {
 }
 
 MOD_EXPORT ModResult mod_shutdown(ModError* error) {
+    albw_deku_leaf_shutdown(error);  // frees the bundled leaf BMD buffer
     albw_enemy_rupees_shutdown(error);
     albw_soul_of_light_shutdown(error);
     albw_region_hp_shutdown(error);

@@ -23,6 +23,8 @@
 
 // Installs every deku-leaf hook. No-op behaviour until the "deku_leaf" setting is on.
 ModResult albw_deku_leaf_init(ModError* error);
+// Frees the bundled leaf BMD buffer (and the model parsed from it) at unload.
+ModResult albw_deku_leaf_shutdown(ModError* error);
 
 // Per-frame driver (call from mod_update). Reproduces the fork's execute()-time glide
 // truth-check + gust retire (d_a_alink.cpp:19751) and the f_ap_game R+A takeoff gesture

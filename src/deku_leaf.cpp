@@ -581,6 +581,28 @@ bool install(ModError* error, const char* name, ModResult r) {
 
 }  // namespace
 
+// ============================================
+// SHUTDOWN LEAK FIX: the bundled Deku Leaf BMD was loaded and never released -
+// the host reported "reclaimed 1 resource buffer(s) that were never freed" at
+// every quit. It cannot be freed at load time: loaderBasicBmd parses the model
+// data IN PLACE out of this buffer (J3D data is pointer-fixed), so the buffer
+// must outlive every model built from it. Release order therefore matters -
+// model first, then the parsed handle, then the backing buffer (the same order
+// albw_armo_free_reveal uses for the Armogohma reveal BMD).
+// ============================================
+ModResult albw_deku_leaf_shutdown(ModError*) {
+    if (s_dekuLeafModel != nullptr) {
+        JKR_DELETE(s_dekuLeafModel);
+        s_dekuLeafModel = nullptr;
+    }
+    s_dekuLeafModelData = nullptr;  // parsed in place out of the buffer below
+    if (svc_resource != nullptr && s_dekuLeafBuf.data != nullptr) {
+        svc_resource->free(mod_ctx, &s_dekuLeafBuf);
+    }
+    s_dekuLeafBuf = ResourceBuffer RESOURCE_BUFFER_INIT;
+    return MOD_OK;
+}
+
 ModResult albw_deku_leaf_init(ModError* error) {
     if (!install(error, "DekuLeafGrabRooster",
                  mods::hook::add_post<GrabRooster>(on_grab_rooster_post)) ||
