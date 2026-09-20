@@ -9,6 +9,8 @@
 #include "d/actor/d_a_arrow.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_attention.h"
+#include "d/d_cc_d.h"  // dCcD_GObjInf (ALBW Magic Armor tg-hit resolve)
+#include "albw_fork_compat.h"  // dItemNo_DEITY_ARMOR_e (ALBW Magic Armor deity arm)
 #include "d/d_cc_uty.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_item_data.h"
@@ -42,6 +44,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <unordered_set>
+#include <vector>
 
 bool albw_g_meter_locked = false;
 
@@ -49,6 +53,16 @@ namespace albw_meter_impl {
 
 bool meter_enabled() {
     return albw_cfg_bool(g_meter_enabled, true);
+}
+
+// ============================================
+// NEW CODE - ALBW Magic Armor exposure batch
+// Mod-local read of the SAME config var albw_dusk_compat.h maps to
+// dusk::MagicArmorMode::ALBW - one toggle, two idioms (ported fork files read
+// the compat enum; mod-authored meter code reads the var directly).
+// ============================================
+bool albw_magic_armor_on() {
+    return albw_cfg_bool(g_albw_magic_armor, false);
 }
 
 constexpr int kBaseMax = 10900;
@@ -129,7 +143,8 @@ struct OilSuppressSnap {
 };
 
 OilSuppressSnap g_oil_snap{};
-bool g_armor_hit_pending = false;
+// (g_armor_hit_pending removed - the ALBW Magic Armor batch replaced the old
+// ungated absorb latch with the toggle-gated s_albw_dmg_* set further down.)
 
 std::chrono::steady_clock::time_point g_lastRecover{};
 std::chrono::steady_clock::time_point g_lastSpinnerDrain{};
@@ -206,6 +221,9 @@ DEFINE_HOOK(&daAlink_c::checkHeavyStateOn, CheckHeavyStateOn);
 DEFINE_HOOK(&daAlink_c::procWait, ProcWait);
 DEFINE_HOOK(&daAlink_c::checkMagicArmorNoDamage, CheckMagicArmorNoDamage);
 DEFINE_HOOK(&daAlink_c::setDamagePoint, SetDamagePoint);
+// ALBW Magic Armor: attack-side encounter registration seam (the fork's own
+// site - fork d_a_alink_cut.inc:338 setSwordHitVibration).
+DEFINE_HOOK(&daAlink_c::setSwordHitVibration, SetSwordHitVibration);
 DEFINE_HOOK(&daAlink_c::getSpinnerRideSpeedF, SpinnerRideSpeedF);
 
 bool is_wolf() {
@@ -345,6 +363,104 @@ bool can_ironball() {
         return true;
     }
     return g_meter >= (g_max * 93) / 100;
+}
+
+// ============================================
+// NEW CODE - ALBW Magic Armor exposure batch (armor economy state)
+// fork d_meter2.cpp:172-188 (tracker statics) and :690-733 (armor hit /
+// can-block / encounter registration), ported over this meter's own state.
+// External linkage inside albw_meter_impl (a NAMED namespace, NOT anonymous -
+// the albw_fork_compat.cpp dMeter2_* bridges link against these; same pattern
+// as albw_meter_normal_recovery_rate below).
+// ============================================
+std::unordered_set<fpc_ProcID> g_armorEncounterIDs;
+std::unordered_set<fpc_ProcID> g_armorTaintedIDs;
+bool g_armorRewardBlocked = false;
+int g_armorEncounterKillCount = 0;
+s16 g_armorLastRoomNo = -1;
+
+// fork d_meter2.cpp:690 (dMeter2_onALBWArmorHit) - zero the meter, latch the
+// depleted state, arm the recovery timer. Identical to what the pre-batch
+// on_damage_point_post latched; now shared by every absorbed-hit path.
+// Receiver deviation (documented in the batch MANIFEST): with the ALBW meter
+// toggle OFF this meter never ticks, so a depleted latch could never clear -
+// no-op instead, and albw_armor_can_block below reports the wallet-only gate.
+void albw_armor_on_hit() {
+    if (!meter_enabled()) {
+        return;
+    }
+    g_meter = 0;
+    g_armor_depleted = true;
+    g_lastRecover = std::chrono::steady_clock::now();
+    refresh_lock_state(true);
+}
+
+// fork d_meter2.cpp:697 (dMeter2_canALBWArmorBlock). Same meter-off deviation
+// as albw_armor_on_hit: no meter -> the wallet threshold alone gates.
+bool albw_armor_can_block() {
+    if (!meter_enabled()) {
+        return true;
+    }
+    return can_armor_block();
+}
+
+// fork d_meter2.cpp:708 (dMeter2_onArmorEncounterHit) verbatim over mod state:
+// registration is unconditional so the tracker knows who is in the encounter;
+// taint is set on any hit that reached Link (see the fork's :810-813 note -
+// blocked hits taint too).
+void albw_armor_encounter_hit(fpc_ProcID actorID, bool dealtHPDamage) {
+    if (actorID == 0) return;
+    g_armorEncounterIDs.insert(actorID);
+    if (dealtHPDamage) {
+        g_armorTaintedIDs.insert(actorID);
+        g_armorRewardBlocked = true;
+    }
+}
+
+// fork d_meter2.cpp:726 (dMeter2_onArmorAttackHit) verbatim over mod state -
+// offense-side registration never taints.
+void albw_armor_attack_hit(fpc_ProcID actorID) {
+    if (actorID == 0) return;
+    g_armorEncounterIDs.insert(actorID);
+}
+
+// fork d_meter2.cpp:2417-2453 verbatim over mod state: per-frame scan; a room
+// change flushes without reward (stale IDs must never pay out); +300 through
+// the normal rupee queue when every encounter actor is gone, at least one kill
+// happened, and no taint was registered.
+void armor_encounter_scan() {
+    const s16 curRoom = static_cast<s16>(dComIfGp_roomControl_getStayNo());
+    if (g_armorLastRoomNo != -1 && curRoom != g_armorLastRoomNo) {
+        g_armorEncounterIDs.clear();
+        g_armorTaintedIDs.clear();
+        g_armorRewardBlocked = false;
+        g_armorEncounterKillCount = 0;
+    }
+    g_armorLastRoomNo = curRoom;
+
+    if (!g_armorEncounterIDs.empty()) {
+        std::vector<fpc_ProcID> killed;
+        for (fpc_ProcID id : g_armorEncounterIDs) {
+            if (fopAcM_SearchByID(id) == NULL) {
+                killed.push_back(id);
+            }
+        }
+        for (fpc_ProcID id : killed) {
+            g_armorEncounterIDs.erase(id);
+            g_armorTaintedIDs.erase(id);
+            g_armorEncounterKillCount++;
+        }
+        if (g_armorEncounterIDs.empty() && g_armorEncounterKillCount > 0) {
+            if (!g_armorRewardBlocked) {
+                // All encounter enemies killed with no taint - reward (fork
+                // d_meter2.cpp:2448; the normal rupee queue, house style per
+                // enemy_rupees.cpp - dComIfGp_* free fns are not mod-linkable).
+                g_dComIfG_gameInfo.play.setItemRupeeCount(300);
+            }
+            g_armorRewardBlocked = false;
+            g_armorEncounterKillCount = 0;
+        }
+    }
 }
 
 bool lockout_z_target_recovery() {
@@ -728,6 +844,17 @@ HookAction on_move_kantera_pre(ModContext*, void*, void*, void*) {
 }
 
 void on_move_kantera_post(ModContext*, void* args, void*, void*) {
+    // ============================================
+    // NEW CODE - ALBW Magic Armor exposure batch (clean-encounter scan)
+    // fork d_meter2.cpp:2417-2453 runs inside moveKantera's ALBW block; this
+    // hook is the mod's moveKantera frame slot (a TIME, not just a place -
+    // the fork's own cadence). Gated on the armor toggle only, ahead of the
+    // meter_enabled gate: the +300 economy belongs to the armor feature, and
+    // both registration sites are already toggle- and armor-gated.
+    // ============================================
+    if (albw_magic_armor_on()) {
+        armor_encounter_scan();
+    }
     if (!meter_enabled()) {
         return;
     }
@@ -1468,45 +1595,195 @@ void on_proc_wait_post(ModContext*, void* args, void*, void*) {
     }
 }
 
+// ============================================
+// MODIFIED CODE - ALBW Magic Armor exposure batch (hunks C + D)
+//
+// BEFORE this batch the three hooks below ran UNGATED - a live all-off
+// violation: vanilla players got armor-block forced off under 500 rupees plus
+// a depleted latch stock has no concept of. Everything below now gates on the
+// albw_magic_armor toggle. OFF = no retval writes, no latches, no costs, no
+// registrations: setDamagePoint and checkMagicArmorNoDamage behave exactly as
+// stock ships them (the vanilla NORMAL drain economy).
+//
+// ON = the fork's ALBW arms, reproduced at the setDamagePoint seam:
+//   * fork d_a_alink_damage.inc:329-355 - checkMagicArmorNoDamage ALBW case
+//     (deity >5000 exception; else canALBWArmorBlock && rupee >= threshold);
+//   * fork d_a_alink_damage.inc:203-229 - setDamagePoint ALBW cost arm (flat
+//     -500 by DIRECT setRupee clamp-at-0; deity -2500; damage suppressed);
+//   * fork d_a_alink_damage.inc:804-838 - checkDamageAction body-hit arm
+//     (defense-side encounter/taint registration; ALWAYS depower on an enemy
+//     body hit; block only when wallet + meter can fund it).
+//
+// WHY not a whole-func port of setDamagePoint (DN-10 order of resort): the
+// donor sites live in checkDamageAction and setDamagePoint bodies the mod
+// cannot edit, and replacing setDamagePoint wholesale (whole_funcs +
+// SKIP_ORIGINAL, armogohma-style) fails two checks:
+//   1. stock's body calls dusk::AchievementSystem::get().signal(
+//      "player_damaged") (stock d_a_alink_damage.inc:215); AchievementSystem
+//      is NOT in dusklight_exports.def (0 hits), so a mod-side body would
+//      silently drop host achievements - a hidden regression;
+//   2. this symbol already carries pre/post hooks from TWO modules (this file
+//      and region_port.cpp's damage-scale scope) tuned to run around the
+//      ORIGINAL body; a SKIP_ORIGINAL replacement would make their ordering
+//      framework-defined instead of composed.
+// So the fork's arm is reproduced as an ADDITION around the original at the
+// existing pre/post seam (documented deviation), with one receiver-boundary
+// compensation: when the latched decision is "absorbed", stock's body still
+// queues its own NORMAL drain (dComIfGp_setItemRupeeCount(-magnified*10),
+// stock damage.inc:200); the post-hook measures that queue delta and cancels
+// it exactly (the queue is a plain accumulator consumed later by the economy
+// tick), leaving only the fork's flat cost. Sub-frame ordering note: the fork
+// charges before its setDamagePoint call, this port charges in the post -
+// same frame, and no consumer reads the wallet in between.
+// ============================================
+bool s_albw_dmg_active = false;   // inside a setDamagePoint this batch resolved
+bool s_albw_dmg_block = false;    // latched checkMagicArmorNoDamage decision
+bool s_albw_dmg_deity = false;    // deity arm: -2500, no depower
+bool s_albw_dmg_depower = false;  // depower in post (fork dMeter2_onALBWArmorHit)
+s32 s_albw_dmg_queue_snap = 0;    // rupee-queue snapshot for the NORMAL-drain cancel
+
+// The fork resolves the attacker from Link's Tg cylinders inside
+// checkDamageAction; same technique as region_port.cpp firstTgHit().
+fopAc_ac_c* armor_tg_hit_actor(daAlink_c* link) {
+    for (int i = 0; i < 3; i++) {
+        if (link->mTgCyls[i].ChkTgHit()) {
+            return link->mTgCyls[i].GetTgHitAc();
+        }
+    }
+    return nullptr;
+}
+
+// fork d_a_alink_damage.inc:207-208 / :823-824. Deity thresholds (>5000 to
+// stay active, -2500 per hit) are NOT part of the 500->1 divergence: untouched.
+bool albw_armor_deity_active() {
+    return dComIfGs_isItemFirstBit((u8)dItemNo_DEITY_ARMOR_e) != 0 &&
+           dComIfGs_getRupee() > 5000;
+}
+
+// fork d_a_alink_damage.inc:210-215 - flat cost by DIRECT setRupee, clamped at
+// 0 (never the item queue: the fork bypasses the gradual drain on purpose).
+void albw_armor_pay(s32 cost) {
+    const s32 newRupees = (s32)dComIfGs_getRupee() - cost;
+    dComIfGs_setRupee((u16)(newRupees < 0 ? 0 : newRupees));
+}
+
 void on_armor_no_dmg_post(ModContext*, void* args, void* retval, void*) {
-    if (retval == nullptr || !*static_cast<BOOL*>(retval)) {
+    if (retval == nullptr) {
         return;
     }
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr || !link->checkMagicArmorWearAbility()) {
+        return;  // fork damage.inc:331-333 returns false here too - stock's answer stands
+    }
+    if (!albw_magic_armor_on()) {
+        return;  // OFF: stock native answer untouched (all-off proof)
+    }
+    if (s_albw_dmg_active) {
+        // Inside a setDamagePoint whose outcome the pre-hook already latched:
+        // keep the body's view consistent with that decision (recomputing
+        // here could flip mid-body once the post applies the depower).
+        *static_cast<BOOL*>(retval) = s_albw_dmg_block ? TRUE : FALSE;
         return;
     }
-    // ALBW: armor only blocks while meter can pay; also need rupees for stock drain path.
-    if (!can_armor_block() ||
-        g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getRupee() < 500) {
-        *static_cast<BOOL*>(retval) = FALSE;
+    // fork d_a_alink_damage.inc:336-340 (ALBW case). Threshold 500 -> 1
+    // (user-arbitrated divergence): repower-at-1 means a 1-499-rupee block
+    // empties the wallet - intended. All five threshold sites move together
+    // (clothes_pipeline.cpp P2a x2, changelink_port.inc, here + the pre below).
+    if (albw_armor_deity_active()) {
+        *static_cast<BOOL*>(retval) = TRUE;
+        return;
     }
+    *static_cast<BOOL*>(retval) =
+        (albw_armor_can_block() && dComIfGs_getRupee() >= 1) ? TRUE : FALSE;
 }
 
 HookAction on_damage_point_pre(ModContext*, void* args, void*, void*) {
-    g_armor_hit_pending = false;
+    s_albw_dmg_active = false;
+    s_albw_dmg_block = false;
+    s_albw_dmg_deity = false;
+    s_albw_dmg_depower = false;
+    if (!albw_magic_armor_on()) {
+        return HOOK_CONTINUE;  // OFF: no latch, no writes - vanilla path
+    }
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr || !link->checkMagicArmorWearAbility()) {
         return HOOK_CONTINUE;
     }
-    // Match stock NORMAL armor absorb; meter still > 0 so the body can block this hit.
-    if (can_armor_block() &&
-        g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getRupee() >= 500 &&
-        !link->checkMagicArmorHeavy()) {
-        g_armor_hit_pending = true;
+    if (mods::arg<int>(args, 1) <= 0) {
+        return HOOK_CONTINUE;  // heal/zero path never reaches the armor arms
     }
+
+    // Defense-side encounter registration - fork damage.inc:815-817: any hit
+    // on Link while the armor is worn is a taint event (blocked or not).
+    fopAc_ac_c* attacker = armor_tg_hit_actor(link);
+    if (attacker != nullptr) {
+        albw_armor_encounter_hit(fopAcM_GetID(attacker), true);
+    }
+
+    s_albw_dmg_deity = albw_armor_deity_active();
+    // Threshold 500 -> 1 (user-arbitrated divergence; see on_armor_no_dmg_post).
+    s_albw_dmg_block = s_albw_dmg_deity ||
+                       (albw_armor_can_block() && dComIfGs_getRupee() >= 1);
+    // Fork depower rule: every absorbed non-deity hit depowers (damage.inc:213
+    // and :831), and an enemy BODY hit depowers even when the block fails
+    // (damage.inc:818-831 "always depower on body hit"). Attacker-less damage
+    // (poly/fall) that cannot be blocked does not depower - the fork's
+    // setDamagePoint arm only runs when checkMagicArmorNoDamage() came back
+    // true.
+    s_albw_dmg_depower = !s_albw_dmg_deity && (s_albw_dmg_block || attacker != nullptr);
+    s_albw_dmg_queue_snap = g_dComIfG_gameInfo.play.getItemRupeeCount();
+    s_albw_dmg_active = true;
     return HOOK_CONTINUE;
 }
 
 void on_damage_point_post(ModContext*, void*, void*, void*) {
-    if (!g_armor_hit_pending) {
+    if (!s_albw_dmg_active) {
+        return;  // toggle OFF, or a call the pre declined - nothing latched
+    }
+    s_albw_dmg_active = false;
+
+    if (s_albw_dmg_block) {
+        // Cancel stock's queued NORMAL drain (-magnified*10, stock
+        // damage.inc:200) so ONLY the fork's flat cost lands. Restoring the
+        // pre-call accumulator value before the economy tick consumes it is
+        // exact - nothing else queues rupees inside setDamagePoint.
+        const s32 delta =
+            g_dComIfG_gameInfo.play.getItemRupeeCount() - s_albw_dmg_queue_snap;
+        if (delta < 0) {
+            g_dComIfG_gameInfo.play.setItemRupeeCount(-delta);
+        }
+        // fork damage.inc:207-216: deity -2500, else -500 (both clamped at 0).
+        albw_armor_pay(s_albw_dmg_deity ? 2500 : 500);
+    }
+    if (s_albw_dmg_depower) {
+        albw_armor_on_hit();
+    }
+}
+
+// ============================================
+// NEW CODE - ALBW Magic Armor exposure batch (attack-side registration)
+// fork d_a_alink_cut.inc:344-360 - when Link's sword/wolf attack connects with
+// an enemy-group actor while the armor is worn, register it so the
+// clean-encounter reward can fire even if that enemy never lands a hit.
+// Post-hook translation note: the fork's block sits after the
+// notSwordHitVibActor() early-return; those actors are special NPCs, which the
+// fork's own fopAc_ENEMY_e group filter already excludes, so the registered
+// set is identical.
+// ============================================
+void on_sword_hit_vibration_post(ModContext*, void* args, void*, void*) {
+    if (!albw_magic_armor_on()) {
+        return;  // OFF: no registration (all-off proof)
+    }
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    auto* gobj = mods::arg<dCcD_GObjInf*>(args, 1);
+    if (link == nullptr || gobj == nullptr || !gobj->ChkAtHit()) {
         return;
     }
-    g_armor_hit_pending = false;
-    g_meter = 0;
-    g_armor_depleted = true;
-    g_lastRecover = std::chrono::steady_clock::now();
-    refresh_lock_state(true);
+    fopAc_ac_c* hitAc = gobj->GetAtHitAc();
+    if (hitAc != NULL && fopAcM_GetGroup(hitAc) == fopAc_ENEMY_e &&
+        link->checkMagicArmorWearAbility()) {
+        albw_armor_attack_hit(fopAcM_GetID(hitAc));
+    }
 }
 
 bool install(ModError* error, const char* name, ModResult r) {
@@ -1619,6 +1896,12 @@ ModResult albw_meter_init(ModError* error) {
     g_locked = false;
     g_exhausted = false;
     g_armor_depleted = false;
+    // ALBW Magic Armor batch: encounter tracker starts empty every boot.
+    g_armorEncounterIDs.clear();
+    g_armorTaintedIDs.clear();
+    g_armorRewardBlocked = false;
+    g_armorEncounterKillCount = 0;
+    g_armorLastRoomNo = -1;
     g_lastRecover = std::chrono::steady_clock::now();
     g_lastSpinnerDrain = g_lastRecover;
     g_lastDomRodDrain = g_lastRecover;
@@ -1719,7 +2002,10 @@ ModResult albw_meter_init(ModError* error) {
         !install(error, "SetDamagePointPre",
                  mods::hook_add_pre<SetDamagePoint>(svc_hook, on_damage_point_pre)) ||
         !install(error, "SetDamagePointPost",
-                 mods::hook_add_post<SetDamagePoint>(svc_hook, on_damage_point_post)))
+                 mods::hook_add_post<SetDamagePoint>(svc_hook, on_damage_point_post)) ||
+        !install(error, "SetSwordHitVibration",
+                 mods::hook_add_post<SetSwordHitVibration>(svc_hook,
+                                                           on_sword_hit_vibration_post)))
     {
         return MOD_ERROR;
     }

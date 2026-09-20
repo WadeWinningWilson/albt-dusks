@@ -16,6 +16,7 @@
 #include "global.h"
 #include <os.h>
 #include "albw_common.h"
+#include "f_pc/f_pc_base.h"  // fpc_ProcID (items 15-18)
 
 // ---- 1/2. Item ids the fork added over stock's unused NOENTRY slots ----------
 // fork include/d/d_item_data.h:156-157. Stock has these exact slots as
@@ -65,6 +66,16 @@ void dMeter2_applyEquippedShield(u8 itemNo);       // fork d_meter2.cpp
 bool dMeter2_isALBWArmorDepleted();                // fork d_meter2.cpp:696
 int  dMeter2_getALBWNormalRecoveryRate();          // fork d_meter2.cpp:384
 int  dMeter2_getALBWLockoutRecoveryRate();         // fork d_meter2.cpp:388
+
+// ---- 15-18. ALBW Magic Armor economy (exposure batch) ------------------------
+// Fork-added armor-economy surface (fork d_meter2.cpp; stock: 0 files each).
+// All four forward to the live mod meter (meter.cpp, albw_meter_impl - external
+// linkage, NOT anon-namespace), the same implementation whose depleted flag
+// dMeter2_isALBWArmorDepleted above already reads.
+void dMeter2_onALBWArmorHit();                     // fork d_meter2.cpp:690
+bool dMeter2_canALBWArmorBlock();                  // fork d_meter2.cpp:697
+void dMeter2_onArmorEncounterHit(fpc_ProcID actorID, bool dealtHPDamage);  // fork d_meter2.cpp:708
+void dMeter2_onArmorAttackHit(fpc_ProcID actorID);                         // fork d_meter2.cpp:726
 
 // ---- 14. stricmp ------------------------------------------------------------
 // The fork's sumo module includes dusk/extras.h, which for non-MSVC targets

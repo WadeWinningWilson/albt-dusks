@@ -106,6 +106,7 @@ ModResult register_all_config(ModError* error) {
         albw_register_bool("wardrobe_recovery_debug", false, &g_wardrobe_recovery_debug) != MOD_OK ||
         albw_register_int("cap_wear", 0, &g_cap_wear) != MOD_OK ||
         albw_register_bool("soulbound_potion", false, &g_soulbound_potion) != MOD_OK ||
+        albw_register_bool("albw_magic_armor", false, &g_albw_magic_armor) != MOD_OK ||
         albw_register_bool("ext_status_page", false, &g_ext_status_page) != MOD_OK ||
         albw_register_bool("postman_rental", true, &g_postman_rental) != MOD_OK ||
         albw_register_bool("true_albw", false, &g_true_albw) != MOD_OK ||

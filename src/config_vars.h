@@ -52,6 +52,9 @@ extern ConfigVarHandle g_sumo_outfit_fists;
 extern ConfigVarHandle g_wardrobe_recovery_debug;
 extern ConfigVarHandle g_cap_wear;
 extern ConfigVarHandle g_soulbound_potion;
+// ALBW Magic Armor economy exposure - maps to the fork's Settings->ALBW
+// armorRupeeDrain == ALBW mode through the albw_dusk_compat.h shim.
+extern ConfigVarHandle g_albw_magic_armor;
 extern ConfigVarHandle g_ext_status_page;
 
 extern ConfigVarHandle g_lop_hud_mode;

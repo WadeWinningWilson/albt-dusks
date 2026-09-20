@@ -147,6 +147,47 @@ void on_change_link_post(ModContext*, void* args, void*, void*) {
     s_builtModelState = albwLiveModelStateToken(link, false);
 }
 
+// ============================================
+// NEW CODE - ALBW Magic Armor exposure batch (host-driver conflict, hunk E)
+// With the albw_magic_armor toggle ON the HOST is still in its own NORMAL mode
+// (ConfigService is mod-scoped - the mod cannot write host settings), so
+// stock's NORMAL execute driver (stock d_a_alink.cpp:18740-18762) still runs
+// and fights the ALBW arm two ways:
+//   1. passive -1 rupee queue drain every 10 frames (field_0x2fc3 cadence);
+//   2. Brk edge-flips keyed on rupee==0 / rupee!=0 against field_0x2fd7.
+// The donor's own fix is the `== NORMAL` gate at the driver's head - but that
+// head sits inside the unpatchable stock execute body, so porting it (DN-10
+// step 1) is impossible from a mod. Receiver translation (step 2), entirely at
+// seams the mod already owns:
+//   * field_0x2fc3 is read ONLY by the passive drain (stock hits: init
+//     d_a_alink.cpp:4676 / wolf.inc:144, the driver's tick, nothing else).
+//     The P2a arm below re-pins it nonzero every frame, so the ==0 tick can
+//     never fire while the ALBW arm owns the armor.
+//   * field_0x2fd7 is written ONLY by setMagicArmorBrk (mod-owned,
+//     SKIP_ORIGINAL) and read ONLY by the driver's two edge conditions (stock
+//     hits: 12745/18753/18757, nothing else). Under ALBW the mod repurposes it
+//     as "what the host driver expects" (rupee != 0), so both edge conditions
+//     read false and the driver stays silent; ACTUAL Brk state moves to
+//     s_albwArmorBrkOn below, maintained by the SetMagicArmorBrk hook. A
+//     mid-frame rupee transition (block cost emptying the wallet, a pickup
+//     from 0) can still fire ONE host flip on that frame; the hook coerces its
+//     status to the ALBW-desired state, so the worst case is one host-side SE
+//     on the transition frame - no per-frame flicker, no SE spam.
+// ALL of this is gated on armorRupeeDrain == ALBW: toggle OFF touches neither
+// field and the SetMagicArmorBrk wrapper below runs its pre-batch body.
+// ============================================
+bool s_albwArmorBrkOn = false;
+
+inline bool albwArmorModeOn() {
+    return dusk::getSettings().game.armorRupeeDrain.getValue() == dusk::MagicArmorMode::ALBW;
+}
+
+// fork d_a_alink.cpp:20762-20765 repower condition (the P2a arm's own edge
+// predicate), threshold 500 -> 1 (user-arbitrated divergence - see the arm).
+inline bool albwArmorDesiredBrkOn() {
+    return !dMeter2_isALBWArmorDepleted() && dComIfGs_getRupee() >= 1;
+}
+
 // fork d_a_alink_wolf.inc:328 - wolf models also live in mpArcHeap.
 // fork d_a_alink.cpp:19744 - the per-frame outfit reconciler, missing in stock execute.
 // Runs BEFORE stock execute's body (so a swap it kicks is picked up by execute's own
@@ -166,30 +207,48 @@ HookAction on_outfit_exec_driver_pre(ModContext*, void* args, void*, void*) {
         // NORMAL), and this pre-hook HOOK_CONTINUEs into it, so nothing here
         // duplicates NORMAL. The fork delta is the ALBW arm only.
         //
-        // INERT-UNTIL-EXPOSED: the gate below reads the MOD's compat
-        // armorRupeeDrain (albw_dusk_compat.h), which is pinned to NORMAL, so
-        // this block is provably unreachable until the compat shim exposes an
-        // ALBW mode. Timing note: the fork runs this arm mid-execute; as a
-        // pre-hook it runs at frame start instead - a sub-frame phase shift on
-        // a Brk on/off flip, with no ordering hazard (setMagicArmorBrk routes
-        // through the always-on SetMagicArmorBrk hook either way).
+        // EXPOSED (ALBW Magic Armor batch): the gate below reads the MOD's
+        // compat armorRupeeDrain (albw_dusk_compat.h), now mapped from the
+        // albw_magic_armor toggle - OFF folds it back to NORMAL and this block
+        // is unreachable, exactly the pre-batch state. Timing note: the fork
+        // runs this arm mid-execute; as a pre-hook it runs at frame start
+        // instead - a sub-frame phase shift on a Brk on/off flip, with no
+        // ordering hazard (setMagicArmorBrk routes through the always-on
+        // SetMagicArmorBrk hook either way).
+        //
+        // TWO deviations from the fork text, both forced by the live stock
+        // host driver (see the s_albwArmorBrkOn write-up above):
+        //   * actual-state reads use s_albwArmorBrkOn, not field_0x2fd7 (2fd7
+        //     is repurposed to placate the host driver's edge detector);
+        //   * thresholds 500 -> 1 (user-arbitrated divergence): repower-at-1
+        //     means a 1-499-rupee block empties the wallet - intended. Costs
+        //     stay -500 (clamped); deity 5000/2500 untouched. All five
+        //     threshold sites move together (here x2, changelink_port.inc
+        //     Magic-branch arm, meter.cpp armor gate x2).
         // ============================================
-        if (dusk::getSettings().game.armorRupeeDrain.getValue() == dusk::MagicArmorMode::ALBW &&
+        if (albwArmorModeOn() &&
             link->checkMagicArmorWearAbility() && link->mClothesChangeWaitTimer == 0)
         {
-            if ((dMeter2_isALBWArmorDepleted() || dComIfGs_getRupee() < 500) &&
-                link->field_0x2fd7 != 0)
+            if ((dMeter2_isALBWArmorDepleted() || dComIfGs_getRupee() < 1) &&
+                s_albwArmorBrkOn)
             {
                 link->setMagicArmorBrk(0);
                 link->seStartOnlyReverb(Z2SE_AL_M_ARMER_TURNOFF);
                 link->mZ2Link.setLinkState(5);
-            } else if (!dMeter2_isALBWArmorDepleted() && dComIfGs_getRupee() >= 500 &&
-                       link->field_0x2fd7 == 0)
+            } else if (!dMeter2_isALBWArmorDepleted() && dComIfGs_getRupee() >= 1 &&
+                       !s_albwArmorBrkOn)
             {
                 link->setMagicArmorBrk(1);
                 link->seStartOnlyReverb(Z2SE_AL_M_ARMER_RECOVER);
                 link->mZ2Link.setLinkState(4);
             }
+
+            // Host-driver neutralization (stock d_a_alink.cpp:18744-18761):
+            // re-pin the passive-drain cadence so its ==0 tick never fires,
+            // and keep 2fd7 at what the host edge detector expects so it never
+            // flips the Brk back against the ALBW state (see write-up above).
+            link->field_0x2fc3 = 10;
+            link->field_0x2fd7 = (dComIfGs_getRupee() != 0) ? 1 : 0;
         }
     }
     return HOOK_CONTINUE;
@@ -810,10 +869,41 @@ void albw_setWaterDropColor(daAlink_c* i_this, const J3DGXColorS10* i_color) {
 #undef ALBW_HAT_TEV
 }
 
+// ============================================
+// MODIFIED CODE - ALBW Magic Armor exposure batch (Brk-state ownership)
+// The always-on ownership (verbatim fork setMagicArmorBrk via
+// albw_setMagicArmorBrk) is unchanged. ALBW-gated additions ONLY:
+//   * coerce 0/1 requests to the ALBW-desired state - the one caller that can
+//     disagree is the stock host driver's mid-frame edge flip (stock
+//     d_a_alink.cpp:18754/18758); the ported changeLink body and the P2a arm
+//     pass desired-consistent values, so coercion is a no-op for them (status
+//     2 = power_up_b passes through untouched);
+//   * mirror the applied state into s_albwArmorBrkOn (the ACTUAL Brk state
+//     the P2a arm edges on);
+//   * re-pin field_0x2fd7 to host-expected (rupee != 0) after
+//     albw_setMagicArmorBrk wrote the applied status into it (line above its
+//     return TRUE) - see the host-driver write-up at s_albwArmorBrkOn.
+// Toggle OFF: the exact pre-batch body runs (plus a dead-read
+// s_albwArmorBrkOn mirror), and albw_setMagicArmorBrk keeps writing
+// 2fd7 = actual status - vanilla behavior, all-off proof holds.
+// ============================================
 HookAction on_set_magic_armor_brk_pre(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) return HOOK_CONTINUE;
-    (void)albw_setMagicArmorBrk(link, mods::arg<int>(args, 1));
+    int status = mods::arg<int>(args, 1);
+    if (albwArmorModeOn() && link->checkMagicArmorWearAbility() &&
+        (status == 0 || status == 1))
+    {
+        status = albwArmorDesiredBrkOn() ? 1 : 0;
+        if (albw_setMagicArmorBrk(link, status)) {
+            s_albwArmorBrkOn = (status != 0);
+        }
+        link->field_0x2fd7 = (dComIfGs_getRupee() != 0) ? 1 : 0;
+        return HOOK_SKIP_ORIGINAL;
+    }
+    if (albw_setMagicArmorBrk(link, status)) {
+        s_albwArmorBrkOn = (status != 0);
+    }
     return HOOK_SKIP_ORIGINAL;
 }
 
@@ -832,9 +922,10 @@ HookAction on_set_water_drop_color_pre(ModContext*, void* args, void*, void*) {
 // ON_DAMAGE / DOUBLE_DEFENSE / INVINCIBLE / COSMETIC natively, so anything
 // except ALBW falls through to the original (HOOK_CONTINUE).
 //
-// INERT-UNTIL-EXPOSED: gated on the MOD's compat armorRupeeDrain
-// (albw_dusk_compat.h, pinned NORMAL) - identical gate to the P2a arm above;
-// unreachable until the compat shim exposes an ALBW mode.
+// EXPOSED (ALBW Magic Armor batch): gated on the MOD's compat armorRupeeDrain
+// (albw_dusk_compat.h, now mapped from the albw_magic_armor toggle) -
+// identical gate to the P2a arm above; toggle OFF folds it back to NORMAL and
+// this hook HOOK_CONTINUEs into stock's native switch (pre-batch behavior).
 // ============================================
 HookAction on_check_magic_armor_heavy_pre(ModContext*, void* args, void* retval, void*) {
     auto* link = mods::arg<const daAlink_c*>(args, 0);

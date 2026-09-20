@@ -41,10 +41,12 @@ enum class CapWearMode : u8 {
 // NEW CODE - ALBT multiplatform (Magic Armor rupee-drain mode compat)
 // Verbatim from fork include/dusk/settings.h:55-62. The ported changeLink Magic
 // branch (src/changelink_port.inc) reads dusk::getSettings().game.armorRupeeDrain
-// against these values. Stock dusklight has no such setting, so getSettings()
-// below defaults it to NORMAL: with NORMAL, the fork's `== ALBW` arm is dead and
-// its `!= NORMAL` arms fold to the stock `rupee != 0` behaviour the DUSK runs
-// today (accurate "this host has no ALBW rupee-drain mode", NOT a stubbed value).
+// against these values. The HOST does ship an armorRupeeDrain setting (stock
+// d_a_alink_damage.inc:295), but ConfigService is mod-scoped, so the mod cannot
+// read it; the host stays on its own value (NORMAL by default) while the shim
+// below maps the MOD's albw_magic_armor toggle: OFF -> NORMAL (the fork's
+// `== ALBW` arm is dead and its `!= NORMAL` arms fold to the stock `rupee != 0`
+// behaviour), ON -> ALBW (the landed fork arms go live).
 // ============================================
 enum class MagicArmorMode : u8 {
     NORMAL = 0,
@@ -89,10 +91,20 @@ inline CompatSettings getSettings() {
     s.game.showWardrobeRecoveryDebug.value = albw_cfg_bool(g_wardrobe_recovery_debug, false);
     s.game.outfitStats.value               = albw_cfg_bool(g_outfit_stats, false);
     s.game.albwSoulboundRedPotion.value    = albw_cfg_bool(g_soulbound_potion, false);
-    // Magic Armor rupee-drain is a fork-only "Settings -> ALBW" mode; stock has no
-    // such setting, so it is fixed at NORMAL here. The ported changeLink then takes
-    // the same Magic-Brk path stock dusklight already runs (see the enum note above).
-    s.game.armorRupeeDrain.value           = MagicArmorMode::NORMAL;
+    // ============================================
+    // MODIFIED CODE - ALBW Magic Armor exposure batch
+    // WAS pinned to NORMAL ("this host has no ALBW rupee-drain mode"). The
+    // albw_magic_armor toggle now exposes the fork's ALBW mode through this
+    // same seam: ON -> MagicArmorMode::ALBW, un-inerting the landed fork arms
+    // exactly where the fork gates them (clothes_pipeline.cpp P2a execute arm
+    // + P2b heavy override, changelink_port.inc Magic-branch arm, meter.cpp
+    // armor hooks). OFF -> NORMAL: every `== ALBW` arm is dead and every
+    // `!= NORMAL` arm folds to stock's `rupee != 0` path - byte-for-byte the
+    // pre-batch behavior.
+    // ============================================
+    s.game.armorRupeeDrain.value =
+        albw_cfg_bool(g_albw_magic_armor, false) ? MagicArmorMode::ALBW
+                                                 : MagicArmorMode::NORMAL;
     return s;
 }
 

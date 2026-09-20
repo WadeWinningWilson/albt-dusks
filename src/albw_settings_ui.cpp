@@ -147,7 +147,11 @@ ModResult build_difficulty_tab(ModContext*, UiWindowHandle, UiElementHandle left
     }
     if (albw_ui_add_toggle(left, "Enemy death rupees",
                            "Wallet credit on kill and fight victory.",
-                           g_kill_rupees) != MOD_OK)
+                           g_kill_rupees) != MOD_OK ||
+        albw_ui_add_toggle(left, "ALBW Magic Armor",
+                           "ALBW economy: repowers with rupees, flat 500-rupee block cost, "
+                           "+300 for clean encounters. Off = vanilla drain.",
+                           g_albw_magic_armor) != MOD_OK)
     {
         return MOD_ERROR;
     }

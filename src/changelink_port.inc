@@ -116,7 +116,12 @@ void AlbwChangeLink_c::changeLink(int param_0) {
 
 #if TARGET_PC
         if (dusk::getSettings().game.armorRupeeDrain.getValue() == dusk::MagicArmorMode::ALBW) {
-            if (!dMeter2_isALBWArmorDepleted() && dComIfGs_getRupee() >= 500) {
+            // MODIFIED - ALBW Magic Armor exposure batch (user-arbitrated divergence):
+            // repower threshold 500 -> 1. All five threshold sites move together
+            // (here; clothes_pipeline.cpp P2a arm x2; meter.cpp armor gate x2).
+            // Costs STAY -500 (clamped at 0) and deity 5000/2500 is untouched, so
+            // a 1-499-rupee block empties the wallet - intended.
+            if (!dMeter2_isALBWArmorDepleted() && dComIfGs_getRupee() >= 1) {
                 if (setMagicArmorBrk(1)) {
                     mMagicArmorBodyBrk->setFrame(mMagicArmorBodyBrk->getFrameMax());
                     mMagicArmorHeadBrk->setFrame(mMagicArmorHeadBrk->getFrameMax());

@@ -85,6 +85,22 @@ bool dMeter2_isALBWArmorDepleted() { return albw_meter_impl::g_armor_depleted; }
 int  dMeter2_getALBWNormalRecoveryRate() { return albw_meter_impl::albw_meter_normal_recovery_rate(); }
 int  dMeter2_getALBWLockoutRecoveryRate() { return albw_meter_impl::albw_meter_lockout_recovery_rate(); }
 
+// ---- 15-18. ALBW Magic Armor economy (exposure batch) ------------------------
+namespace albw_meter_impl {
+void albw_armor_on_hit();                                          // meter.cpp
+bool albw_armor_can_block();                                       // meter.cpp
+void albw_armor_encounter_hit(fpc_ProcID actorID, bool dealtHP);   // meter.cpp
+void albw_armor_attack_hit(fpc_ProcID actorID);                    // meter.cpp
+}
+void dMeter2_onALBWArmorHit() { albw_meter_impl::albw_armor_on_hit(); }
+bool dMeter2_canALBWArmorBlock() { return albw_meter_impl::albw_armor_can_block(); }
+void dMeter2_onArmorEncounterHit(fpc_ProcID actorID, bool dealtHPDamage) {
+    albw_meter_impl::albw_armor_encounter_hit(actorID, dealtHPDamage);
+}
+void dMeter2_onArmorAttackHit(fpc_ProcID actorID) {
+    albw_meter_impl::albw_armor_attack_hit(actorID);
+}
+
 // ---- 14. stricmp (non-MSVC only; MSVC's CRT already has it) ------------------
 #ifndef _MSC_VER
 #include <strings.h>
