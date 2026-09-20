@@ -72,7 +72,6 @@ int  dMeter2_getALBWLockoutRecoveryRate();         // fork d_meter2.cpp:388
 // All four forward to the live mod meter (meter.cpp, albw_meter_impl - external
 // linkage, NOT anon-namespace), the same implementation whose depleted flag
 // dMeter2_isALBWArmorDepleted above already reads.
-void dMeter2_onALBWArmorHit();                     // fork d_meter2.cpp:690
 bool dMeter2_canALBWArmorBlock();                  // fork d_meter2.cpp:697
 void dMeter2_onArmorEncounterHit(fpc_ProcID actorID, bool dealtHPDamage);  // fork d_meter2.cpp:708
 void dMeter2_onArmorAttackHit(fpc_ProcID actorID);                         // fork d_meter2.cpp:726

@@ -110,7 +110,8 @@ int g_meter = kBaseMax;
 int g_max = kBaseMax;
 bool g_locked = false;
 bool g_exhausted = false;
-bool g_armor_depleted = false;
+// (g_armor_depleted retired - wallet-only Magic Armor: "depleted" is now
+// derived from the wallet, see albw_armor_is_depleted below.)
 
 bool g_flag_sword = false;
 bool g_flag_sidestep = false;
@@ -261,9 +262,6 @@ void refresh_lock_state(bool play_dec) {
         g_locked = false;
         lockout_on_end();
     }
-    if (g_armor_depleted && g_meter >= kBaseMax) {
-        g_armor_depleted = false;
-    }
     if (g_meter > g_max) {
         g_meter = g_max;
     }
@@ -355,7 +353,6 @@ bool can_sword_agility() { return !g_locked; }
 bool can_hidden_skill() { return !g_locked; }
 bool can_spinner() { return g_locked || g_meter > 0; }
 bool can_domrod() { return g_locked || g_meter > 0; }
-bool can_armor_block() { return !g_armor_depleted && g_meter > 0; }
 bool can_lockout_bow() { return albw_lockout_can_fire_bow(); }
 bool can_lockout_bomb_arrow() { return albw_lockout_can_fire_bomb_arrow(); }
 bool can_ironball() {
@@ -379,30 +376,33 @@ bool g_armorRewardBlocked = false;
 int g_armorEncounterKillCount = 0;
 s16 g_armorLastRoomNo = -1;
 
-// fork d_meter2.cpp:690 (dMeter2_onALBWArmorHit) - zero the meter, latch the
-// depleted state, arm the recovery timer. Identical to what the pre-batch
-// on_damage_point_post latched; now shared by every absorbed-hit path.
-// Receiver deviation (documented in the batch MANIFEST): with the ALBW meter
-// toggle OFF this meter never ticks, so a depleted latch could never clear -
-// no-op instead, and albw_armor_can_block below reports the wallet-only gate.
-void albw_armor_on_hit() {
-    if (!meter_enabled()) {
-        return;
-    }
-    g_meter = 0;
-    g_armor_depleted = true;
-    g_lastRecover = std::chrono::steady_clock::now();
-    refresh_lock_state(true);
-}
+// ============================================
+// WALLET-ONLY MAGIC ARMOR (user-arbitrated design, supersedes the fork)
+// The fork spends TWO resources: one absorbed hit zeroes the ALBW meter and
+// latches a "depleted" flag that only clears when the meter refills to full,
+// while rupees separately gate whether the armor is powered at all. The user's
+// design: rupees are the ONLY resource - the armor drains exactly when the
+// wallet hits 0, with no meter term and no recharge cooldown.
+//
+// So "depleted" is redefined as "wallet empty". Every downstream consumer of
+// dMeter2_isALBWArmorDepleted() (clothes_pipeline P2a depower/repower edges +
+// albwArmorDesiredBrkOn, changelink_port Brk seed, the checkMagicArmorHeavy
+// ALBW override, wardrobe's drained stack rate) stays literally unchanged and
+// becomes correct for free: the armor grays, goes heavy, and stacks as drained
+// exactly at 0 rupees.
+//
+// Retired with the meter term: g_armor_depleted (the latch, its clear-at-full
+// block, its init reset), can_armor_block(), the fork's dMeter2_onALBWArmorHit
+// equivalent, and the damage seam's depower latch - which also drops the fork
+// rule "an enemy body hit depowers even when unblocked" (an unblocked hit costs
+// no rupees, so under wallet-only nothing drains). Cost stays -500 per BLOCKED
+// hit (clamped at 0), deity -2500 while >5000: blocks per wallet = rupees/500.
+// Side effect (an improvement): the armor no longer depends on the ALBW meter
+// at all, so the previous meter-off deviation is gone.
+// ============================================
+bool albw_armor_is_depleted() { return dComIfGs_getRupee() == 0; }
 
-// fork d_meter2.cpp:697 (dMeter2_canALBWArmorBlock). Same meter-off deviation
-// as albw_armor_on_hit: no meter -> the wallet threshold alone gates.
-bool albw_armor_can_block() {
-    if (!meter_enabled()) {
-        return true;
-    }
-    return can_armor_block();
-}
+bool albw_armor_can_block() { return dComIfGs_getRupee() >= 1; }
 
 // fork d_meter2.cpp:708 (dMeter2_onArmorEncounterHit) verbatim over mod state:
 // registration is unconditional so the tracker knows who is in the encounter;
@@ -1639,7 +1639,6 @@ void on_proc_wait_post(ModContext*, void* args, void*, void*) {
 bool s_albw_dmg_active = false;   // inside a setDamagePoint this batch resolved
 bool s_albw_dmg_block = false;    // latched checkMagicArmorNoDamage decision
 bool s_albw_dmg_deity = false;    // deity arm: -2500, no depower
-bool s_albw_dmg_depower = false;  // depower in post (fork dMeter2_onALBWArmorHit)
 s32 s_albw_dmg_queue_snap = 0;    // rupee-queue snapshot for the NORMAL-drain cancel
 
 // The fork resolves the attacker from Link's Tg cylinders inside
@@ -1701,7 +1700,6 @@ HookAction on_damage_point_pre(ModContext*, void* args, void*, void*) {
     s_albw_dmg_active = false;
     s_albw_dmg_block = false;
     s_albw_dmg_deity = false;
-    s_albw_dmg_depower = false;
     if (!albw_magic_armor_on()) {
         return HOOK_CONTINUE;  // OFF: no latch, no writes - vanilla path
     }
@@ -1730,7 +1728,6 @@ HookAction on_damage_point_pre(ModContext*, void* args, void*, void*) {
     // (poly/fall) that cannot be blocked does not depower - the fork's
     // setDamagePoint arm only runs when checkMagicArmorNoDamage() came back
     // true.
-    s_albw_dmg_depower = !s_albw_dmg_deity && (s_albw_dmg_block || attacker != nullptr);
     s_albw_dmg_queue_snap = g_dComIfG_gameInfo.play.getItemRupeeCount();
     s_albw_dmg_active = true;
     return HOOK_CONTINUE;
@@ -1754,9 +1751,6 @@ void on_damage_point_post(ModContext*, void*, void*, void*) {
         }
         // fork damage.inc:207-216: deity -2500, else -500 (both clamped at 0).
         albw_armor_pay(s_albw_dmg_deity ? 2500 : 500);
-    }
-    if (s_albw_dmg_depower) {
-        albw_armor_on_hit();
     }
 }
 
@@ -1895,7 +1889,6 @@ ModResult albw_meter_init(ModError* error) {
     g_max = kBaseMax;
     g_locked = false;
     g_exhausted = false;
-    g_armor_depleted = false;
     // ALBW Magic Armor batch: encounter tracker starts empty every boot.
     g_armorEncounterIDs.clear();
     g_armorTaintedIDs.clear();

@@ -79,20 +79,20 @@ bool dMeter2_equipOwnedShield(u8 itemNo) { return albw_shield_equip_owned(itemNo
 void dMeter2_applyEquippedShield(u8 itemNo) { albw_shield_apply_equipped(itemNo); }
 
 namespace albw_meter_impl {
-extern bool g_armor_depleted;  // meter.cpp:88
+bool albw_armor_is_depleted();  // meter.cpp (wallet-only; g_armor_depleted retired)
 }
-bool dMeter2_isALBWArmorDepleted() { return albw_meter_impl::g_armor_depleted; }
+// Wallet-only Magic Armor: "depleted" is derived from the wallet (meter.cpp),
+// no latch. Consumers (Brk edges, heavy override, wardrobe) are unchanged.
+bool dMeter2_isALBWArmorDepleted() { return albw_meter_impl::albw_armor_is_depleted(); }
 int  dMeter2_getALBWNormalRecoveryRate() { return albw_meter_impl::albw_meter_normal_recovery_rate(); }
 int  dMeter2_getALBWLockoutRecoveryRate() { return albw_meter_impl::albw_meter_lockout_recovery_rate(); }
 
 // ---- 15-18. ALBW Magic Armor economy (exposure batch) ------------------------
 namespace albw_meter_impl {
-void albw_armor_on_hit();                                          // meter.cpp
 bool albw_armor_can_block();                                       // meter.cpp
 void albw_armor_encounter_hit(fpc_ProcID actorID, bool dealtHP);   // meter.cpp
 void albw_armor_attack_hit(fpc_ProcID actorID);                    // meter.cpp
 }
-void dMeter2_onALBWArmorHit() { albw_meter_impl::albw_armor_on_hit(); }
 bool dMeter2_canALBWArmorBlock() { return albw_meter_impl::albw_armor_can_block(); }
 void dMeter2_onArmorEncounterHit(fpc_ProcID actorID, bool dealtHPDamage) {
     albw_meter_impl::albw_armor_encounter_hit(actorID, dealtHPDamage);
