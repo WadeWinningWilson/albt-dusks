@@ -44,6 +44,8 @@
 #include "epona_spur_hud.h"
 #include "lop_hud.h"
 #include "rental_shop.h"
+#include "mail_hooks.h"
+#include "rental_postman_hooks.h"
 
 #include "mods/service.hpp"
 #include "mods/svc/config.h"
@@ -264,7 +266,20 @@ MOD_EXPORT ModResult mod_update(ModError*) {
 }
 
 MOD_EXPORT ModResult mod_shutdown(ModError* error) {
-    albw_deku_leaf_shutdown(error);  // frees the bundled leaf BMD buffer
+    // ============================================
+    // SHUTDOWN WIRING AUDIT: these were declared + defined but never called, so
+    // their teardown never ran. albw_tear_glow_shutdown is the one that produced
+    // the host's "reclaimed 1 resource buffer(s) that were never freed" every
+    // quit - it owns the tear_glow.wgsl ResourceBuffer (and the WebGPU shader /
+    // pipeline objects). The *_hooks_shutdown trio released nothing visible but
+    // are wired for the same reason: a defined teardown that is never invoked is
+    // a latent leak.
+    // ============================================
+    albw_tear_glow_shutdown(error);   // frees tear_glow.wgsl + WebGPU objects
+    albw_deku_leaf_shutdown(error);   // frees the bundled leaf BMD buffer
+    albw_flurry_hooks_shutdown(error);
+    albw_mail_hooks_shutdown(error);
+    albw_rental_postman_hooks_shutdown(error);
     albw_enemy_rupees_shutdown(error);
     albw_soul_of_light_shutdown(error);
     albw_region_hp_shutdown(error);
