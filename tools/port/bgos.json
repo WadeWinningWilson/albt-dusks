@@ -9,9 +9,9 @@
     "e_s1.json / armogohma.json do it.",
     "The stock damage_check is an EMPTY body, so nothing vanilla is displaced."
   ],
-  "fork": "C:/Users/ryana/Documents/dusklight/src/d/actor/d_a_b_gos.cpp",
-  "stock": "C:/Users/ryana/Documents/dusklight-main/src/d/actor/d_a_b_gos.cpp",
-  "out": "C:/Users/ryana/AppData/Local/Temp/claude/C--Users-ryana-Documents-dusklight/e5655c2a-9732-4318-96fd-9d065ba104c1/scratchpad/staging/bgos-kids/bgos_port.inc",
+  "fork": "../dusklight/src/d/actor/d_a_b_gos.cpp",
+  "stock": "../dusklight-main/src/d/actor/d_a_b_gos.cpp",
+  "out": "build/port/bgos_port.inc",
   "port_funcs": [
     "daB_GOS_Execute",
     "action",
