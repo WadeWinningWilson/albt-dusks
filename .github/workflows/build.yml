@@ -88,6 +88,18 @@ jobs:
           fi
           cmake -B build "${args[@]}"
 
+      - name: Check hook portability
+        if: matrix.platform == 'linux-x86_64'
+        shell: bash
+        run: |
+          # Catches the two naming mistakes that broke macOS and Linux and were
+          # invisible to a Windows build: a raw per-platform mangled string
+          # instead of ALBT_SYM, and a bare name for something the SDK headers
+          # declare (which should be a typed DEFINE_HOOK). Also fails if the
+          # count of file-local-static hooks grows, since each one is a feature
+          # that cannot work on Linux. One platform is enough - it reads source.
+          python3 tools/check_hooks.py --sdk dusklight
+
       - name: Build
         run: cmake --build build --parallel
 
