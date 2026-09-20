@@ -78,6 +78,21 @@ bool dAlbwPotion_isSoulboundRedItem(u8 itemNo) {
 }
 
 bool dAlbwPotion_isSoulboundRedInSlot(u8 slot) {
+    // ============================================
+    // FUNDAMENTAL FIX (deliberate divergence from the fork): gate the whole
+    // soulbound behavior on the feature toggle. SLOT_11 is the FIRST VANILLA
+    // BOTTLE SLOT; without this gate, ANY ordinary red potion / red chu jelly
+    // there armed every soulbound seam (count getters/setters SKIP the stock
+    // originals) even with all toggles off - breaking vanilla item assignment
+    // and menu close. The fork ships the same ungated predicate, but there the
+    // branches are compiled INTO the engine functions as inherent fork behavior;
+    // a stock-side mod must be opt-in. Every soulbound seam (count hooks, ring
+    // counts, drink dispatch, shop row, refills) self-gates through this
+    // predicate, so this one check restores vanilla behavior when off.
+    // ============================================
+    if (!albw_cfg_bool(g_soulbound_potion, false)) {
+        return false;
+    }
     if (!dAlbwPotion_isSoulboundBottleSlot(slot)) {
         return false;
     }

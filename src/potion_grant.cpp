@@ -40,7 +40,15 @@ void albw_potion_grant_tick() {
     if (cur != s_lastEnabled) {
         s_lastEnabled = cur;
         if (!on) {
-            dAlbwPotion_editorSetSoulboundEnabled(false);  // remove from SLOT_11
+            // ============================================
+            // NON-DESTRUCTIVE OFF (fix): never touch the slot on toggle-off. The
+            // old editorSetSoulboundEnabled(false) path wiped ANY red potion in
+            // SLOT_11 (the first vanilla bottle slot) to an empty bottle - data
+            // loss for a player's ordinary potion. With the feature gate in
+            // dAlbwPotion_isSoulboundRedInSlot, turning the toggle off already
+            // reverts a granted flask to a plain vanilla red bottle; nothing to
+            // delete.
+            // ============================================
             return;
         }
     }
