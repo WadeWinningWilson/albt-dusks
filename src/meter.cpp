@@ -1780,11 +1780,28 @@ void on_sword_hit_vibration_post(ModContext*, void* args, void*, void*) {
     }
 }
 
-bool install(ModError* error, const char* name, ModResult r) {
+// ============================================
+// A hook that fails to resolve must NOT abort mod_initialize.
+//
+// This helper used to call mods::set_error(..., MOD_ERROR, ...) and return
+// false, which made mod_initialize return MOD_ERROR - so ONE unresolved symbol
+// unloaded the ENTIRE mod. That is how a single missing hook target reached
+// players as "Failed - Reason: <hook name>" with nothing loaded at all, on a
+// build where every other feature was fine. It is the same doctrine fyrus.cpp
+// already states for the boss hooks.
+//
+// Now the miss is LOUD and SCOPED: the feature that needed the hook is
+// inactive for the run and says so by name in the log, and everything else
+// still loads. Never make this silent - a quiet miss turns "never bound" into
+// "plausibly wrong forever".
+// ============================================
+bool install(ModError*, const char* name, ModResult r) {
     if (r != MOD_OK) {
-        svc_log->error(mod_ctx, name);
-        mods::set_error(error, MOD_ERROR, name);
-        return false;
+        if (svc_log != nullptr) {
+            svc_log->error(mod_ctx, name);
+            svc_log->error(mod_ctx,
+                           "hook above did NOT install - that feature is inactive this run");
+        }
     }
     return true;
 }

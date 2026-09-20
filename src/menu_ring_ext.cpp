@@ -1015,11 +1015,16 @@ HookAction on_ring_draw_item2_pre(ModContext*, void* args, void*, void*) {
     return HOOK_SKIP_ORIGINAL;
 }
 
-bool install(ModError* error, const char* name, ModResult rr) {
+// See the note on this helper in the other TUs: a hook that fails to resolve
+// must NOT abort mod_initialize. One unresolved symbol used to unload the whole
+// mod; now the miss is loud and scoped to its own feature.
+bool install(ModError*, const char* name, ModResult rr) {
     if (rr != MOD_OK) {
-        if (svc_log != nullptr) svc_log->error(mod_ctx, name);
-        mods::set_error(error, MOD_ERROR, name);
-        return false;
+        if (svc_log != nullptr) {
+            svc_log->error(mod_ctx, name);
+            svc_log->error(mod_ctx,
+                           "hook above did NOT install - that feature is inactive this run");
+        }
     }
     return true;
 }
