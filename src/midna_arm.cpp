@@ -324,7 +324,13 @@ actor_process_profile_definition DUSK_CONST g_profile_ALBW_MIDNA_ARM = {
 // (f_pc_profile.cpp:19) does not know the fork-appended id; every other id
 // falls through to vanilla untouched.
 // ---------------------------------------------------------------------------
-DEFINE_HOOK_SYMBOL("fpcPf_Get", void*(s16), FpcPfGet);
+// DEFINE_HOOK, not DEFINE_HOOK_SYMBOL: fpcPf_Get is header-declared
+// (f_pc/f_pc_profile.h:29), so the compiler mangles it per target and the
+// signature is type-checked. A bare-name string target depends on the host's
+// symbol manifest carrying that name, which is not guaranteed off Windows -
+// see the note in albw_symbols.h. Twilit Realm's own randomizer uses the typed
+// form for all but one of its hooks for the same reason.
+DEFINE_HOOK(&fpcPf_Get, FpcPfGet);
 DEFINE_HOOK(&daAlink_c::setNeckAngle, SetNeckAngle);
 
 HookAction on_fpc_pf_get_pre(ModContext*, void* args, void* retval, void*) {

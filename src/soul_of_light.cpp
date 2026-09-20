@@ -125,7 +125,10 @@ DEFINE_HOOK(&dSv_memBit_c::isTbox, IsTbox);
 // we post-hook the method dispatcher fpcMtd_Execute and fire only for the PLAY_SCENE process:
 // that runs tickSpawn at the exact fork frame point, so completing the async tear load
 // (entryResourceManager slot 2) never races mid-actor-execute.
-DEFINE_HOOK_SYMBOL("fpcMtd_Execute", int(const process_method_class*, void*), MtdExecute);
+// Typed hook: fpcMtd_Execute is header-declared (f_pc/f_pc_method.h:16), so the
+// compiler mangles it per target rather than depending on a bare name being in
+// the host's symbol manifest. See albw_symbols.h.
+DEFINE_HOOK(&fpcMtd_Execute, MtdExecute);
 
 bool orbEnabled() {
     return albw_cfg_bool(g_recovery_orb, true);

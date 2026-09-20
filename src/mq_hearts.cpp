@@ -104,7 +104,11 @@ int mqBonusMaxLifeQuarters() {
            static_cast<int>(readReg(kBonusQuarterHeartsReg));
 }
 
-DEFINE_HOOK_SYMBOL("dComIfGs_getMaxLifeGauge", u16(), MqMaxLifeGauge);
+// Typed hook: dComIfGs_getMaxLifeGauge is header-declared
+// (d/d_com_inf_game.h:1107) and has no inline definition, so the compiler
+// mangles it per target instead of relying on a bare name being present in the
+// host's symbol manifest. See albw_symbols.h.
+DEFINE_HOOK(&dComIfGs_getMaxLifeGauge, MqMaxLifeGauge);
 
 void on_get_max_life_gauge_post(ModContext*, void*, void* retval, void*) {
     if (retval == nullptr) {
