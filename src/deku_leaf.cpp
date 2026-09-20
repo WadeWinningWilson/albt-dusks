@@ -29,6 +29,11 @@
 #include "d/d_com_inf_game.h"
 #include "d/d_resorce.h"
 #include "d/d_particle_name.h"
+#include "d/d_kankyo.h"      // g_env_light / dKy_tevstr_c (WW ambient recipe)
+#include "d/actor/d_a_mirror.h"  // daMirror_c::entry
+#include "JSystem/J3DGraphAnimator/J3DModel.h"
+#include "JSystem/J3DGraphBase/J3DMaterial.h"
+#include <cstring>           // strcmp (SC_Vbow_v ink branch, ported verbatim)
 #include "m_Do/m_Do_ext.h"
 #include "m_Do/m_Do_mtx.h"
 #include "m_Do/m_Do_controller_pad.h"
@@ -556,6 +561,95 @@ HookAction on_item_change_pre(ModContext*, void* args, void* retval, void*) {
     return HOOK_CONTINUE;
 }
 
+// ============================================
+// WW ITEM LIGHTING RECIPE (fixes the black canopy)
+// Ported from fork d_ww_itemmdl_pc.cpp:162-168 (constants), :1542
+// (dWwItemmdl_setWwBowActorAmbient) and :1552 (…applyBowMaterialAmbientOnly),
+// applied at the fork's own leaf draw branch d_a_alink.cpp:21634-21651.
+//
+// WHY: the leaf is a WORLD-AUTHORED WW cel material - litMask 0x01 (one light)
+// with an authored TEVREG0 (128,128,128) and KColor0 (white) that its 2-stage
+// combiner multiplies through. Stock daAlink_c::modelDraw unconditionally runs
+// g_env_light.setLightTevColorType_MAJI, which overwrites ambient AND TEVREG0
+// AND KColor0 and rebinds the light rig; Link's tevStr feeds it dark
+// player-shadow values, so the material collapses to BLACK. (Armogohma's BMD is
+// TP-authored - litMask 0xFF, no authored konst dependency - which is why the
+// same draw path renders it correctly.) The fork's fix is to skip MAJI entirely
+// for WW item models and pin a flat matte ambient instead.
+//
+// HAZARD (fork d_a_alink.cpp:21653-21668 hit real corruption here): this writes
+// into J3DModelData materials, which are SHARED and PERSISTENT. Safe in this
+// mod because s_dekuLeafModelData backs exactly one model that we own.
+// ============================================
+constexpr u8 kWwFixedAmbR = 105;  // fork kWwBowFixedAmbR
+constexpr u8 kWwFixedAmbG = 78;   // fork kWwBowFixedAmbG
+constexpr u8 kWwFixedAmbB = 48;   // fork kWwBowFixedAmbB
+constexpr u8 kWwBodyAmbCap = 80;  // fork kWwBowBodyAmbCap
+constexpr u8 kWwInkAmbR = 58, kWwInkAmbG = 48, kWwInkAmbB = 42;  // fork ink branch
+
+// fork dWwItemmdl_setWwBowActorAmbient (d_ww_itemmdl_pc.cpp:1542) - RGB only,
+// alpha deliberately untouched.
+void leaf_set_ww_actor_ambient(dKy_tevstr_c* tevstr_p) {
+    if (tevstr_p == NULL) {
+        return;
+    }
+    tevstr_p->AmbCol.r = kWwFixedAmbR;
+    tevstr_p->AmbCol.g = kWwFixedAmbG;
+    tevstr_p->AmbCol.b = kWwFixedAmbB;
+}
+
+// fork dWwItemmdl_applyBowMaterialAmbientOnly (d_ww_itemmdl_pc.cpp:1552).
+// Ambient ONLY - no setTevColor, no setTevKColor, no setLight: leaving the BMD's
+// authored TEV registers intact is the whole point. The SC_Vbow_v ink branch is
+// bow-specific (the leaf has one material, "leaf", so it always takes the body
+// path) but is ported verbatim for fidelity. The fork's material filter
+// isTevDumpMaterial is `name != NULL` - accept-any - reproduced inline.
+void leaf_apply_material_ambient_only(J3DModel* model, dKy_tevstr_c* tevstr_p) {
+    if (model == NULL || tevstr_p == NULL) {
+        return;
+    }
+    J3DModelData* model_data = model->getModelData();
+    if (model_data == NULL) {
+        return;
+    }
+    GXColor amb_col;
+    amb_col.r = tevstr_p->AmbCol.r;
+    amb_col.g = tevstr_p->AmbCol.g;
+    amb_col.b = tevstr_p->AmbCol.b;
+    amb_col.a = tevstr_p->AmbCol.a;
+
+    JUTNameTab* names = model_data->getMaterialTable().getMaterialName();
+    for (u16 i = 0; i < model_data->getMaterialNum(); i++) {
+        const char* name = names != NULL ? names->getName(i) : NULL;
+        if (name == NULL) {  // fork isTevDumpMaterial
+            continue;
+        }
+        GXColor mat_amb = amb_col;
+        if (strcmp(name, "SC_Vbow_v") == 0) {
+            mat_amb.r = kWwInkAmbR;
+            mat_amb.g = kWwInkAmbG;
+            mat_amb.b = kWwInkAmbB;
+        } else {
+            if (mat_amb.r > kWwBodyAmbCap) mat_amb.r = kWwBodyAmbCap;
+            if (mat_amb.g > kWwBodyAmbCap) mat_amb.g = kWwBodyAmbCap;
+            if (mat_amb.b > kWwBodyAmbCap) mat_amb.b = kWwBodyAmbCap;
+        }
+        J3DMaterial* material = model_data->getMaterialNodePointer(i);
+        if (material != NULL) {
+            material->setAmbColor(0, (J3DGXColor*)&mat_amb);
+        }
+    }
+}
+
+// fork d_a_alink.cpp:21637-21650 - the leaf's draw branch, MAJI-free.
+void leaf_model_draw(daAlink_c* link, J3DModel* model) {
+    g_env_light.settingTevStruct(0, &link->current.pos, &link->tevStr);
+    leaf_set_ww_actor_ambient(&link->tevStr);
+    leaf_apply_material_ambient_only(model, &link->tevStr);
+    mDoExt_modelEntryDL(model);
+    daMirror_c::entry(model);
+}
+
 // draw POST: draw the canopy while gliding (fork d_a_alink.cpp:22016).
 void on_alink_draw_post(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
@@ -565,7 +659,13 @@ void on_alink_draw_post(ModContext*, void* args, void*, void*) {
     if (leaf_check_glide() && link->checkCokkoGlide()) {
         leaf_update_model(link);
         if (s_dekuLeafModel != nullptr) {
-            link->modelDraw(s_dekuLeafModel, 0);
+            // WAS link->modelDraw(...), i.e. stock's unconditional MAJI path -
+            // the black-canopy defect. See the recipe write-up above.
+            leaf_model_draw(link, s_dekuLeafModel);
+            // fork d_a_alink.cpp:22023 - restore Link's own tevStr; it is a
+            // persistent member other systems read on later frames.
+            g_env_light.settingTevStruct(link->checkWolf() ? 9 : 10, &link->current.pos,
+                                         &link->tevStr);
         }
     }
 }
