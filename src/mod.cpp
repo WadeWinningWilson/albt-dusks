@@ -277,6 +277,7 @@ MOD_EXPORT ModResult mod_shutdown(ModError* error) {
     // ============================================
     albw_tear_glow_shutdown(error);   // frees tear_glow.wgsl + WebGPU objects
     albw_deku_leaf_shutdown(error);   // frees the bundled leaf BMD buffer
+    albw_armogohma_shutdown(error);   // frees the bundled reveal BMD buffer
     albw_flurry_hooks_shutdown(error);
     albw_mail_hooks_shutdown(error);
     albw_rental_postman_hooks_shutdown(error);

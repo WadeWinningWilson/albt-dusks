@@ -308,6 +308,33 @@ bool install(ModError* error, const char* name, ModResult r) {
 
 }  // namespace
 
+// ============================================
+// Shutdown: return the bundled reveal BMD buffer to the host.
+//
+// DONOR REFERENCE (d_a_b_gm.cpp:3086-3110): the fork loads the reveal model
+// PER-FIGHT with dusk::custom_assets::try_load_uncached() from inside
+// useHeapInit, so the model data lives on the boss's solid heap and is freed
+// with the actor - the fork never holds a process-lifetime allocation and so
+// has nothing to free at exit.
+//
+// The mod cannot use that loader (the BMD ships inside the .dusk bundle), so the
+// bridge loads it through ResourceService into a host-owned buffer held in a
+// file static. albw_armo_free_reveal() already runs on the boss's Delete hook -
+// the donor-equivalent moment - but quitting the app while the fight is resident
+// never reaches Delete, and the host then reports
+//   "[dev.albt.albw] reclaimed 1 resource buffer(s) that were never freed".
+// Freeing here is the same receiver-boundary translation already applied to the
+// Deku Leaf bundle (deku_leaf.cpp:693) and to tear_glow.wgsl (tear_glow.cpp:244).
+//
+// Safe to run unconditionally: s_revealData is only ever wrapped by
+// s_gmRevealMorf, which lives on the boss's solid heap and is never drawn again
+// after mod_shutdown (the game loop has already exited - m_Do_main.cpp:358-361).
+// ============================================
+ModResult albw_armogohma_shutdown(ModError*) {
+    albw_armo_free_reveal();
+    return MOD_OK;
+}
+
 ModResult albw_armogohma_init(ModError* error) {
     if (!install(error, "BGmCreateReveal",
                  mods::hook_add_post<BGmCreate>(svc_hook, on_bgm_create_post)) ||
