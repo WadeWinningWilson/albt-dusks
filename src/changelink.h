@@ -32,4 +32,25 @@
 
 ModResult albw_changelink_init(ModError* error);
 
+// ============================================
+// NEW CODE - outfit-transition crash family P1 (dispatch-gate latch)
+//
+// changelink.cpp's dispatch gate (changelink_dispatch_active) used to be
+// evaluated per changeLink CALL. A mid-transition flip of one of its inputs -
+// the sumo worn bit is cleared during decompose (outfit.cpp:274) - could hand
+// the settling rebuild to STOCK changeLink, whose Magic branch (stock
+// d_a_alink_wolf.inc:342-363) unconditionally derefs mMagicArmorBodyBrk that
+// the always-on SetMagicArmorBrk hook may have NULLed, and which has no Kmdl
+// fallback. Fix: the gate is sampled ONCE into a latch when a clothes change
+// is ACCEPTED, and in-flight changeLink calls consult the latch; idle calls
+// still evaluate live.
+//
+//   latch  - clothes_pipeline.cpp samples at the accepted setClothesChange
+//            (on_set_clothes_change_pre) and at metamorphose pickup (which
+//            sets the timer directly, stock d_a_alink.cpp:17626/17724).
+//   clear  - the P0 destructor teardown resets it (Link is dying).
+// ============================================
+void albw_changelink_latch_dispatch_gate();
+void albw_changelink_clear_dispatch_latch();
+
 #endif  // ALBW_CHANGELINK_H

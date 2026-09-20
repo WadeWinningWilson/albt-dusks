@@ -97,7 +97,16 @@ static const char* s_albwPrevArcName        = NULL;
 static int         s_albwFootReseedFrames   = 0;
 static bool        s_albwWwBootsSkinned     = false;
 static bool        s_albwNativeCapResolved  = true;
-static bool        s_albwMagicModelReady    = false;
+// ============================================
+// NEW CODE - outfit-transition crash family P3 (single magic-ready flag)
+// s_albwMagicModelReady is NO LONGER a local inert copy: unlike the statics
+// above (whose real equivalents are maintained by separate hooks), this one had
+// TWO live definitions - the ported body wrote THIS copy (changelink_port.inc:93)
+// while the draw consumer albw_setWaterDropColor read clothes_pipeline.cpp's -
+// so body and draw could diverge. It is now the ONE extern defined in
+// clothes_pipeline.cpp and declared in clothes_pipeline.h (included above), and
+// the ported body's write lands on the real flag.
+// ============================================
 
 // fork d_a_alink.cpp:199 (verbatim).
 static inline u32 albwModelStateToken(bool wolf, bool sumoBody, bool casual, bool zora,
@@ -386,6 +395,15 @@ BOOL AlbwChangeLink_c::setMagicArmorBrk(int i_status) {
 
 #include "changelink_port.inc"  // AlbwChangeLink_c::changeLink (verbatim fork body)
 
+// ============================================
+// NEW CODE - outfit-transition crash family P1 (dispatch-gate latch)
+// Sampled once per accepted clothes change (see changelink.h write-up); read by
+// on_change_link_pre while a transition is in flight. File-static at file scope
+// (not in the anonymous namespace) only so the extern accessors below can also
+// touch it; linkage stays internal.
+// ============================================
+static bool s_changelinkGateLatch = false;
+
 namespace {
 
 // ============================================
@@ -407,7 +425,26 @@ bool changelink_dispatch_active() {
 DEFINE_HOOK(&daAlink_c::changeLink, ChangeLink);
 HookAction on_change_link_pre(ModContext*, void* args, void*, void*) {
     daAlink_c* link = mods::arg<daAlink_c*>(args, 0);
-    if (link == nullptr || !changelink_dispatch_active()) {
+    if (link == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    // ============================================
+    // NEW CODE - outfit-transition crash family P1 (gate latch, split-brain fix)
+    // While a clothes transition is settling (wait timer running, alt-heap swap
+    // active, or this call was made from inside the ported loadModelDVD's
+    // completion branches), the dispatch decision is the value SAMPLED when the
+    // change was accepted - a mid-transition flip of a gate input (sumo worn
+    // bit cleared during decompose, outfit.cpp:274) must not hand the settling
+    // rebuild to stock changeLink (stock's Magic branch derefs Brks our
+    // SetMagicArmorBrk hook may have NULLed, stock d_a_alink_wolf.inc:342-363,
+    // and has no Kmdl fallback). Idle calls evaluate live, exactly as before.
+    // All-toggles-off: the latch is false when the gate was false at accept
+    // time, so every dispatch - latched or live - stays stock.
+    // ============================================
+    const bool inFlight =
+        link->mClothesChangeWaitTimer != 0 || albw_clothes_transition_in_flight();
+    const bool active = inFlight ? s_changelinkGateLatch : changelink_dispatch_active();
+    if (!active) {
         return HOOK_CONTINUE;
     }
     static_cast<AlbwChangeLink_c*>(link)->AlbwChangeLink_c::changeLink(mods::arg<int>(args, 1));
@@ -415,6 +452,20 @@ HookAction on_change_link_pre(ModContext*, void* args, void*, void*) {
 }
 
 }  // namespace
+
+// ============================================
+// NEW CODE - outfit-transition crash family P1 (latch accessors)
+// External linkage: clothes_pipeline.cpp samples the latch at the accepted
+// setClothesChange / metamorphose pickup and clears it in the P0 destructor
+// teardown. Declared in changelink.h.
+// ============================================
+void albw_changelink_latch_dispatch_gate() {
+    s_changelinkGateLatch = changelink_dispatch_active();
+}
+
+void albw_changelink_clear_dispatch_latch() {
+    s_changelinkGateLatch = false;
+}
 
 ModResult albw_changelink_init(ModError* error) {
     if (mods::hook::add_pre<ChangeLink>(on_change_link_pre) != MOD_OK) {

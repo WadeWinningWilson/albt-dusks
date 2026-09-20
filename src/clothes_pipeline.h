@@ -38,3 +38,29 @@ void albw_midna_reset_demo_bck(daMidna_c* midna);
 // only log about, now that the alt-heap pipeline exists in the mod.
 void albw_clothes_abort_stuck(daAlink_c* link);
 void albw_clothes_request_remount();
+
+// ============================================
+// NEW CODE - outfit-transition crash family P1 (gate latch support)
+//
+// True while the clothes pipeline owns an in-flight transition: the alt-heap
+// swap is active (fork s_albwSwapActive, d_a_alink.cpp:249-252) OR control is
+// currently inside the ported loadModelDVD (so the changeLink/changeWolf calls
+// its completion branches make - including the same-arc path, which clears the
+// swap flag just before calling changeLink(1) - still count as part of the
+// transition). changelink.cpp combines this with mClothesChangeWaitTimer to
+// decide latched-vs-live gate evaluation.
+// ============================================
+bool albw_clothes_transition_in_flight();
+
+// ============================================
+// NEW CODE - outfit-transition crash family P3 (single magic-ready flag)
+//
+// THE one s_albwMagicModelReady (fork d_a_alink.cpp file-static; donor name
+// kept). Defined in clothes_pipeline.cpp with EXTERNAL linkage; consumed by
+// albw_setWaterDropColor (draw side) and WRITTEN by both sync sites:
+//   - on_change_link_magic_pre   (clothes_pipeline.cpp - pre-hook, fires first)
+//   - the ported changeLink body (changelink_port.inc:93 - Magic branch)
+// changelink.cpp previously carried its OWN static copy (its writes were dead),
+// so body and draw consumers could diverge; now they cannot.
+// ============================================
+extern bool s_albwMagicModelReady;

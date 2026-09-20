@@ -19,10 +19,16 @@
 #include "d/actor/d_a_midna.h"
 #undef private
 
+#include "Z2AudioLib/Z2SeMgr.h"  // Z2SE_AL_M_ARMER_* (P2a ALBW-arm SEs)
+
 #include "clothes_pipeline.h"
 #include "albw_common.h"
 #include "albw_game.h"
+#include "albw_dusk_compat.h"   // dusk::getSettings().game.armorRupeeDrain (P2 gates)
+#include "albw_fork_compat.h"   // dMeter2_isALBWArmorDepleted (fork ALBW-arm dep)
+#include "albw_symbols.h"       // ALBT_SYM_ALINK_DTOR (P0 - dtor is not member-pointer nameable)
 #include "alink_compat.h"
+#include "changelink.h"         // dispatch-gate latch (P1)
 #include "outfit.h"
 #include "sumo_test.h"
 #include "albw_dusk_log.h"
@@ -38,6 +44,20 @@ request_of_phase_process_class s_phaseReqB    = {nullptr, 0};
 const char*                    s_swapOldArc   = nullptr;
 bool                           s_swapActive   = false;
 bool                           s_forceRemount = false;
+
+// ============================================
+// NEW CODE - outfit-transition crash family P1 (transition scope flag)
+// True only while control is inside on_load_model_dvd_pre. The completion
+// branches there call changeLink/changeWolf AFTER zeroing the wait timer (and
+// the same-arc path also clears s_swapActive first), so timer/swap alone
+// cannot tell changelink.cpp those calls belong to the settling transition.
+// ============================================
+bool s_inLoadModelDvd = false;
+
+struct AlbwLoadModelDvdScope {
+    AlbwLoadModelDvdScope() { s_inLoadModelDvd = true; }
+    ~AlbwLoadModelDvdScope() { s_inLoadModelDvd = false; }
+};
 
 // stock's l_mArcName (d_a_alink.cpp:85) is file-static; the resource manager keys
 // on the string, so the literal is the same lookup.
@@ -57,6 +77,24 @@ DEFINE_HOOK(&daAlink_c::execute, OutfitExecDriver);
 DEFINE_HOOK(&daAlink_c::draw, AlinkDrawGuard);
 DEFINE_HOOK(&daAlink_c::setMagicArmorBrk, SetMagicArmorBrk);
 DEFINE_HOOK(&daAlink_c::setWaterDropColor, SetWaterDropColor);
+// fork d_a_alink.cpp:14054-14074 - ALBW-mode heaviness override (P2b). Stock's
+// checkMagicArmorHeavy is declared in d_a_alink.h:1683 (public const), exported
+// (?checkMagicArmorHeavy@daAlink_c@@QEBAHXZ, stock exports:8053) and non-empty
+// (a settings switch, stock d_a_alink.cpp:12748), so member-pointer hooking works.
+DEFINE_HOOK(&daAlink_c::checkMagicArmorHeavy, CheckMagicArmorHeavy);
+// ============================================
+// NEW CODE - outfit-transition crash family P0 (destructor teardown)
+// fork d_a_alink.cpp:22266-22277 - the fork's ~daAlink_c() frees the
+// build-then-swap alt heap and resets the swap statics so the NEXT Link
+// instance starts clean. The dusk lacked this teardown: after one completed
+// swap + one Link recreation the file-statics above dangle, and a later swap
+// COMPLEATEs against stale heap state -> initModel(NULL)
+// (changelink_port.inc:71, symbolicated) and the ucrtbase-memcpy / heap
+// fast-fail siblings. A destructor cannot be named by member pointer
+// (&daAlink_c::~daAlink_c is ill-formed), so this is the DEFINE_HOOK_SYMBOL
+// mangled-name route; the per-platform pair lives in albw_symbols.h.
+// ============================================
+DEFINE_HOOK_SYMBOL(ALBT_SYM_ALINK_DTOR, void(daAlink_c*), AlinkDtor);
 
 // fork d_a_alink.cpp:199 - encodes the draw-relevant identity of Link's clothes
 // models. changeLink/changeWolf stamp the token the models were BUILT for; draw
@@ -94,6 +132,41 @@ HookAction on_outfit_exec_driver_pre(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link != nullptr) {
         dAlbwSumoTest_exec(link);
+
+        // ============================================
+        // NEW CODE - outfit-transition crash family P2a (ALBW rupee-drain arm)
+        // fork d_a_alink.cpp:20755-20770 (the `armorMode == ALBW` arm of the
+        // fork's execute driver), ported verbatim. STOCK's execute ALREADY runs
+        // the NORMAL-mode drain + Brk-flip driver natively (stock
+        // d_a_alink.cpp:18740-18762, gated on the HOST's armorRupeeDrain ==
+        // NORMAL), and this pre-hook HOOK_CONTINUEs into it, so nothing here
+        // duplicates NORMAL. The fork delta is the ALBW arm only.
+        //
+        // INERT-UNTIL-EXPOSED: the gate below reads the MOD's compat
+        // armorRupeeDrain (albw_dusk_compat.h), which is pinned to NORMAL, so
+        // this block is provably unreachable until the compat shim exposes an
+        // ALBW mode. Timing note: the fork runs this arm mid-execute; as a
+        // pre-hook it runs at frame start instead - a sub-frame phase shift on
+        // a Brk on/off flip, with no ordering hazard (setMagicArmorBrk routes
+        // through the always-on SetMagicArmorBrk hook either way).
+        // ============================================
+        if (dusk::getSettings().game.armorRupeeDrain.getValue() == dusk::MagicArmorMode::ALBW &&
+            link->checkMagicArmorWearAbility() && link->mClothesChangeWaitTimer == 0)
+        {
+            if ((dMeter2_isALBWArmorDepleted() || dComIfGs_getRupee() < 500) &&
+                link->field_0x2fd7 != 0)
+            {
+                link->setMagicArmorBrk(0);
+                link->seStartOnlyReverb(Z2SE_AL_M_ARMER_TURNOFF);
+                link->mZ2Link.setLinkState(5);
+            } else if (!dMeter2_isALBWArmorDepleted() && dComIfGs_getRupee() >= 500 &&
+                       link->field_0x2fd7 == 0)
+            {
+                link->setMagicArmorBrk(1);
+                link->seStartOnlyReverb(Z2SE_AL_M_ARMER_RECOVER);
+                link->mZ2Link.setLinkState(4);
+            }
+        }
     }
     return HOOK_CONTINUE;
 }
@@ -164,19 +237,101 @@ HookAction on_set_clothes_change_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
     if (link->mClothesChangeWaitTimer != 0) {
+        // P1: deliberately NO latch re-sample on this path - a dropped
+        // re-entrant request must not change the gate value the in-flight
+        // transition was accepted under.
         return HOOK_SKIP_ORIGINAL;  // drop the re-entrant request entirely
     }
     s_swapActive = false;
+    // ============================================
+    // NEW CODE - outfit-transition crash family P1 (gate latch sample point)
+    // This is the single accept point for a player-clothes change: sample the
+    // changeLink dispatch gate ONCE here, so the settling rebuild is dispatched
+    // by the state the change was accepted under even if a gate input flips
+    // mid-transition (sumo worn bit cleared during decompose, outfit.cpp:274).
+    // With every toggle off the gate is false now, so the latch stays false and
+    // the whole transition is provably stock.
+    // ============================================
+    albw_changelink_latch_dispatch_gate();
     return HOOK_CONTINUE;  // let vanilla set the timer / FLG2 bit
 }
 
 // fork d_a_alink.cpp:5541 - allocate the alt heap alongside Link own arc heap.
+// With the P0 destructor teardown below, the `s_arcHeapB != nullptr` early-out
+// naturally becomes PER-LINK-LIFE, matching the fork's create-side guard
+// (fork d_a_alink.cpp:5786-5791: `if (s_albwArcHeapB == NULL)`) - the dtor
+// nulls the pointer, so each recreated Link gets a fresh alt heap instead of
+// inheriting a dead one.
 void on_alink_create_post(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr || s_arcHeapB != nullptr) {
         return;
     }
     link->setOriginalHeap(&s_arcHeapB, 0x100000);
+}
+
+// ============================================
+// NEW CODE - outfit-transition crash family P0 (destructor teardown, crash fix)
+// fork d_a_alink.cpp:22266-22277 semantics, run as a POST-hook so it is
+// additive AFTER stock's own ~daAlink_c work (stock has already deleted
+// mPhaseReq/mArcName and destroyed mpArcHeap by the time this runs).
+//
+// Without this, the statics at the top of this file survive Link's death:
+// after one completed swap + one Link recreation they describe a heap/arc
+// world that no longer exists, and the next swap COMPLEATEs against it ->
+// initModel(NULL) in the settling changeLink (changelink_port.inc:71,
+// symbolicated) and the ucrtbase-memcpy / heap fast-fail siblings.
+//
+// SELF-GATING: when s_arcHeapB == nullptr the pipeline never armed for this
+// Link life (hook not installed, or the create-side alloc failed) and every
+// statement below is a no-op on already-reset state. HONESTY NOTE on the
+// all-toggles-off case: albw_clothes_pipeline_init runs unconditionally at mod
+// load (mod.cpp:222) and on_alink_create_post arms the alt heap regardless of
+// config - exactly as the fork does on TARGET_PC (fork d_a_alink.cpp:5786) -
+// so with the mod loaded and every toggle off this teardown still destroys and
+// the next create re-arms the alt heap once per Link life. That is the fork's
+// own unconditional dtor block, not feature behaviour; no player-visible state
+// is touched by it.
+//
+// If the swap is still active (near-impossible: daAlink_Delete pumps
+// loadModelDVD until the timer settles before destructing, stock
+// d_a_alink.cpp daAlink_Delete), run the abort semantics minus the rebuild
+// (mirror of albw_clothes_abort_stuck below - Link is dying, changeLink(1)
+// must not run) and minus the deleteObjectResMain fallback: stock's dtor has
+// ALREADY executed dComIfG_resDelete(&mPhaseReq, mArcName) on this same arc
+// name, so an unconditional second name-delete would double-decrement the
+// res-control refcount. dComIfG_resDelete itself no-ops unless s_phaseReqB
+// tracked a completed load (d_com_inf_game.cpp:1368: id != 2 -> return 0).
+// ============================================
+void on_alink_dtor_post(ModContext*, void*, void*, void*) {
+    // REVIEW EDIT: this is a POST hook on a DESTRUCTOR - the actor object is
+    // already destroyed, so NOTHING may be read through the args pointer (its
+    // mArcName is dead memory). Only mod-owned statics are touched below; the
+    // swap-active edge just logs loudly (cPhs_Reset below retires the request
+    // state; a leaked refcount on a dying Link is acceptable and visible).
+    if (s_arcHeapB == nullptr) {
+        return;  // pipeline never armed - provable no-op
+    }
+    if (s_swapActive) {
+        DuskLog.warn("[Alink] ~daAlink_c with swap still active (oldArc={}) - "
+                     "dropping the in-flight alt-heap load",
+                     s_swapOldArc != nullptr ? s_swapOldArc : "(null)");
+    }
+    // fork d_a_alink.cpp:22269-22276, verbatim semantics on the mod-side statics.
+    mDoExt_destroyExpHeap(s_arcHeapB);
+    s_arcHeapB = nullptr;
+    s_swapActive = false;
+    s_swapOldArc = nullptr;
+    s_forceRemount = false;
+    cPhs_Reset(&s_phaseReqB);
+    // Mod-side additions beyond the fork block: the fork's draw guards are
+    // actor-internal and die with the actor; ours are file-statics here, so
+    // reset the draw-guard token and resync the arc epoch (alink_compat.cpp:65-69)
+    // so the NEXT Link's first changeLink stamp starts from a clean slate, and
+    // clear the P1 dispatch latch (the transition it described died with Link).
+    s_builtModelState = 0xFFFFFFFF;
+    dAlbwAlink_resyncClothesEpoch();
+    albw_changelink_clear_dispatch_latch();
 }
 
 }  // leave the anonymous namespace so albw_midna_reset_demo_bck has EXTERNAL linkage
@@ -245,6 +400,11 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
     if (i_this == nullptr || retval == nullptr) {
         return HOOK_CONTINUE;
     }
+    // P1: the changeLink/changeWolf calls made from the completion branches
+    // below run after the timer is zeroed (and same-arc also clears
+    // s_swapActive first) - mark them as part of the settling transition so
+    // changelink.cpp's dispatch uses the latched gate, not a live re-read.
+    AlbwLoadModelDvdScope inLoadModelDvdScope;
     auto ret = [retval](int v) {
         *static_cast<int*>(retval) = v;
         return HOOK_SKIP_ORIGINAL;
@@ -272,6 +432,14 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
         if (!i_this->checkNoResetFlg2(daPy_py_c::FLG2_UNK_280000)) {
             const bool isMeta = (i_this->mProcID == daAlink_c::PROC_METAMORPHOSE ||
                                  i_this->mProcID == daAlink_c::PROC_METAMORPHOSE_ONLY);
+            // P1: metamorphose sets the wait timer DIRECTLY (stock
+            // d_a_alink.cpp:17626 / 17724), bypassing setClothesChange, so the
+            // latch was never sampled for this transition - sample it at the
+            // first pipeline tick that recognizes the metamorphose, before its
+            // in-flight changeLink/changeWolf calls consult a stale latch.
+            if (isMeta) {
+                albw_changelink_latch_dispatch_gate();
+            }
             // BUILD-THEN-SWAP prep: keep the OLD models fully valid - do NOT free
             // here. Remember the old arc and point mArcName at the new one.
             if (!isMeta && s_arcHeapB != nullptr) {
@@ -436,7 +604,22 @@ HookAction on_load_model_dvd_pre(ModContext*, void* args, void* retval, void*) {
 // - the resource manager keys on the string, so the lookup is identical.
 // ============================================
 
+}  // leave the anonymous namespace: s_albwMagicModelReady needs EXTERNAL linkage.
+
+// ============================================
+// NEW CODE - outfit-transition crash family P3 (single magic-ready flag)
+// Previously changelink.cpp carried a second, file-static s_albwMagicModelReady
+// that the ported changeLink body wrote (changelink_port.inc:93) while the draw
+// consumer albw_setWaterDropColor below read THIS one - body and draw could
+// diverge. This is now the ONE definition (donor-native name kept, fork
+// d_a_alink.cpp file-static), declared extern in clothes_pipeline.h; both sync
+// sites (on_change_link_magic_pre below, and the ported body's Magic branch)
+// write the same flag.
+// ============================================
 bool s_albwMagicModelReady = false;
+
+namespace {  // reopen (anon namespaces in a TU merge; statics stay in scope)
+
 int s_lastBrkMissStatus = -1;
 
 // fork d_a_alink.cpp:13756 - stock's is void and unguarded; the fork's returns
@@ -608,6 +791,32 @@ HookAction on_set_water_drop_color_pre(ModContext*, void* args, void*, void*) {
     return HOOK_SKIP_ORIGINAL;
 }
 
+// ============================================
+// NEW CODE - outfit-transition crash family P2b (ALBW heaviness override)
+// fork d_a_alink.cpp:14054-14074 - the fork's checkMagicArmorHeavy adds ONE arm
+// to stock's settings switch: `case ALBW: return dMeter2_isALBWArmorDepleted()`.
+// STOCK's own switch (stock d_a_alink.cpp:12748-12766) already handles NORMAL /
+// ON_DAMAGE / DOUBLE_DEFENSE / INVINCIBLE / COSMETIC natively, so anything
+// except ALBW falls through to the original (HOOK_CONTINUE).
+//
+// INERT-UNTIL-EXPOSED: gated on the MOD's compat armorRupeeDrain
+// (albw_dusk_compat.h, pinned NORMAL) - identical gate to the P2a arm above;
+// unreachable until the compat shim exposes an ALBW mode.
+// ============================================
+HookAction on_check_magic_armor_heavy_pre(ModContext*, void* args, void* retval, void*) {
+    auto* link = mods::arg<const daAlink_c*>(args, 0);
+    if (link == nullptr || retval == nullptr) {
+        return HOOK_CONTINUE;
+    }
+    if (dusk::getSettings().game.armorRupeeDrain.getValue() != dusk::MagicArmorMode::ALBW) {
+        return HOOK_CONTINUE;  // stock's native switch owns every non-ALBW mode
+    }
+    // fork 14055-14057 + 14060-14061, verbatim semantics.
+    *static_cast<BOOL*>(retval) =
+        (link->checkMagicArmorWearAbility() && dMeter2_isALBWArmorDepleted()) ? TRUE : FALSE;
+    return HOOK_SKIP_ORIGINAL;
+}
+
 // fork d_a_alink_wolf.inc:334-347 - the head of changeLink, which the mod cannot
 // replace (see the note at the top of this block). Two of its lines are portable
 // at the boundary and both are load-bearing:
@@ -706,6 +915,13 @@ void albw_clothes_abort_stuck(daAlink_c* link) {
 
 void albw_clothes_request_remount() { s_forceRemount = true; }
 
+// ============================================
+// NEW CODE - outfit-transition crash family P1 (transition query)
+// See clothes_pipeline.h. Reads the anon-namespace swap state; changelink.cpp
+// combines this with the wait timer to pick latched vs live gate evaluation.
+// ============================================
+bool albw_clothes_transition_in_flight() { return s_swapActive || s_inLoadModelDvd; }
+
 ModResult albw_clothes_pipeline_init(ModError* error) {
     if (!install(error, "AlinkCreateClothesHeap",
                  mods::hook_add_post<AlinkCreate>(svc_hook, on_alink_create_post)) ||
@@ -726,9 +942,28 @@ ModResult albw_clothes_pipeline_init(ModError* error) {
         !install(error, "SetMagicArmorBrkGuarded",
                  mods::hook_add_pre<SetMagicArmorBrk>(svc_hook, on_set_magic_armor_brk_pre)) ||
         !install(error, "SetWaterDropColorCapSafe",
-                 mods::hook_add_pre<SetWaterDropColor>(svc_hook, on_set_water_drop_color_pre)))
+                 mods::hook_add_pre<SetWaterDropColor>(svc_hook, on_set_water_drop_color_pre)) ||
+        // P2b - fork d_a_alink.cpp:14054-14074, inert until compat exposes ALBW.
+        !install(error, "CheckMagicArmorHeavyALBW",
+                 mods::hook_add_pre<CheckMagicArmorHeavy>(svc_hook, on_check_magic_armor_heavy_pre)))
     {
         return MOD_ERROR;
+    }
+    // ============================================
+    // P0 - fork d_a_alink.cpp:22266-22277. REVIEW EDIT: installed tolerant-but-
+    // LOUD. The Windows name is verified against exports.def:1232 and the
+    // Itanium D1 name against the shipped Linux v2.0.0 ELF (llvm-nm: T
+    // _ZN9daAlink_cD1Ev, aliased D2 at the same address) - but the macOS / iOS /
+    // android manifests were not inspected, and one failed hook otherwise
+    // unloads the entire mod. A miss here degrades ONE guard (teardown), logged
+    // as an error; it must never brick the mod.
+    // ============================================
+    if (mods::hook_add_post<AlinkDtor>(svc_hook, on_alink_dtor_post) != MOD_OK) {
+        if (svc_log != nullptr) {
+            svc_log->error(mod_ctx,
+                           "AlinkDtorClothesTeardown failed to bind (~daAlink_c symbol miss?) - "
+                           "outfit swaps after Link recreation may crash on this platform; report this");
+        }
     }
     return MOD_OK;
 }

@@ -68,5 +68,27 @@
 #define ALBT_SYM_RES_LOAD                                                                              ALBT_SYM("?dComIfG_resLoad@@YAHPEAUrequest_of_phase_process_class@@PEBD@Z",                                  "_Z15dComIfG_resLoadP30request_of_phase_process_classPKc")
 
 // ============================================
+// NEW CODE - outfit-transition crash family P0 (destructor teardown hook target)
+//
+// daAlink_c::~daAlink_c() - a destructor CANNOT be named by member pointer
+// (C++ forbids &T::~T), so DEFINE_HOOK(&daAlink_c::~daAlink_c, ...) is
+// ill-formed and the DEFINE_HOOK_SYMBOL mangled-name route is required even
+// though d_a_alink.h:1827 declares the destructor.
+//
+// MSVC name VERIFIED against STOCK v2.0.0 dusklight_exports.def:1232
+// ("??1daAlink_c@@UEAA@XZ" - present, exact).
+//
+// Itanium name is the standard ABI D1 (complete-object) destructor. UNLIKE the
+// entries above it was NOT read back from clang (no non-Windows toolchain in
+// this session) - a destructor also emits D2 (base-object) and, being virtual,
+// D0 (deleting); if the non-Windows symbol manifests carry D1/D2 at distinct
+// addresses, D1 is still the one the virtual explicit call in daAlink_Delete
+// (i_this->~daAlink_c()) lands on. VERIFY on the Linux/macOS CI lanes before
+// merging; the undecorated display name "daAlink_c::~daAlink_c" is NOT a safe
+// fallback (multi-address ambiguity, see cc_at_check note above).
+// ============================================
+#define ALBT_SYM_ALINK_DTOR ALBT_SYM("??1daAlink_c@@UEAA@XZ", "_ZN9daAlink_cD1Ev")
+
+// ============================================
 // NEW CODE ENDS HERE
 // ============================================
