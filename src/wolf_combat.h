@@ -79,4 +79,8 @@ void dAlbwWolfStun_beforeMove();
 void dAlbwWolfStun_afterMove();
 
 ModResult albw_wolf_combat_init(ModError* error);
+
+// e_s1_hooks.cpp — Shadow Beast wolf-art kill / pack-finish port (fork
+// d_a_e_s1.cpp damage_check chain via the daE_S1_Execute seam).
+ModResult albw_e_s1_wolf_pack_init(ModError* error);
 ModResult albw_wolf_combat_shutdown(ModError* error);

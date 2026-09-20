@@ -58,6 +58,14 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+// ============================================
+// NEW CODE — ALBW Port (cc_at_check whole-func port dependencies)
+// ============================================
+#include "SSystem/SComponent/c_math.h"  // cM_atan2s / cM_rndFX (ported body)
+#include "d/d_s_play.h"                 // dScnPly_c::setPauseTimer (ported body)
+#include "hp_mult_port.h"               // dAlbwHP_applyMult / dAlbwHP_getRawMult
+#include "shield.h"                     // dShield_tryConsumeBashNextHitBoost
+#include "boss_refinement.h"            // dAlbwBoss_armogohmaShouldSuppressVanillaArrowDamage
 
 static u8 g_wolf_charge_count = 0;
 static u8 g_wolf_bite_steps = 0;
@@ -1312,6 +1320,40 @@ void dAlbwWolfStun_afterMove() {
 // NEW CODE ENDS HERE
 // ============================================
 
+// ============================================
+// NEW CODE — [WOLFHIT] confirmation probe (STRIP before release).
+// One line per wolf-art hit at the ported cc_at_check (and the e_s1 pack
+// events in e_s1_hooks.cpp, which defines the same macro). Set the flag to 0
+// to compile every probe line out.
+// ============================================
+#define ALBW_WOLFHIT_PROBE 1
+#if ALBW_WOLFHIT_PROBE
+#define ALBW_WOLFHIT_LOG(...)                                                 \
+    do {                                                                      \
+        if (svc_log != nullptr) {                                             \
+            char wolfhitBuf_[256];                                            \
+            std::snprintf(wolfhitBuf_, sizeof(wolfhitBuf_), __VA_ARGS__);     \
+            svc_log->info(mod_ctx, wolfhitBuf_);                              \
+        }                                                                     \
+    } while (0)
+#else
+#define ALBW_WOLFHIT_LOG(...)                                                 \
+    do {                                                                      \
+    } while (0)
+#endif
+
+// ============================================
+// NEW CODE — ALBW Port (cc_at_check WHOLE-FUNC port)
+// Fork src/d/d_cc_uty.cpp cc_at_check, extracted mechanically by
+// tools/port/port_tool.py (tools/port/wolf_uty.json) — the fork's wolf-combat
+// blocks live MID-FUNCTION (between the vanilla damage modifiers and the
+// `health -=` deduction), which no pre/post seam can reach. Fork features the
+// DUSK already reproduces through OTHER modules' hooks at this seam are
+// excised in the extract ([PORT-EXCLUDED] markers) so they are not applied
+// twice; see the json + staging MANIFEST for the per-block accounting.
+// ============================================
+#include "wolf_uty_port.inc"
+
 namespace wolf_hooks {
 
 DEFINE_HOOK(cc_at_check, CcAtCheck);
@@ -1319,77 +1361,80 @@ DEFINE_HOOK(&daAlink_c::execute, LinkExecute);
 DEFINE_HOOK(&dCcS::Move, CcMove);
 DEFINE_HOOK(&dMeter2Draw_c::draw, MeterDraw);
 
-HookAction on_cc_at_check_pre(ModContext*, void* args, void*, void*) {
-    if (!dAlbwWolfCombat_isEnabled()) {
-        return HOOK_CONTINUE;
+// ============================================
+// NEW CODE — ALBW Port (cc_at_check WHOLE-FUNC replacement, armogohma pattern)
+//
+// RETIRES the old pre/post pair: the pre hook's damage edits were wiped by
+// at_power_check's internal reset (it re-derives mAttackPower from the collider
+// before any fork block runs), and the post hook's art-power pin landed AFTER
+// `health -=` had already consumed the vanilla value — which is exactly why the
+// howl / Midna-arm arts did nothing against twilight enemies.
+//
+// Gate: wolf combat ON + wolf form (both wolf arts and every fork wolf block
+// require wolf form; the arm actor only exists in wolf form). Anything else
+// HOOK_CONTINUEs into the stock original — byte-identical vanilla with the
+// feature off, and the host-only stock blocks (invincibleEnemies cheat,
+// enemy_killed/rollstab achievements) stay live for all human-form combat.
+//
+// Old-pair behaviors, accounted (see staging MANIFEST hunk 1):
+//   * art damage pin (howl / arm = 100)  -> in-body, fork d_cc_uty.cpp:504-516
+//   * MIDNA_LOCK 0.70 / 0.25 split       -> in-body, fork :590-613 — now with
+//     the fork's exact ×rawMult² pairing on top of the dAlbwHP_applyMult
+//     divide (the old pre hook dropped both, flattening the split)
+//   * bite-charge credit + its gates     -> in-body, fork :722-745
+//   * post-deduction stun dispatch       -> in-body, fork :747-758
+//   * MD forced-wolf heal (fork :751-753) -> in-body (the old pair NEVER
+//     carried it — re-homed by this port)
+//   * old pair's extra B_ZANT exclusion on the art pin -> dropped: the fork
+//     pins art power for every ENEMY_e target and excludes Zant only from the
+//     split and the stun; the port follows the fork.
+// ============================================
+HookAction on_cc_at_check_pre(ModContext*, void* args, void* retval, void*) {
+    if (!dAlbwWolfCombat_isEnabled() || !albw_game::is_wolf_form()) {
+        return HOOK_CONTINUE;  // stock original runs untouched
     }
     auto* enemy = mods::arg<fopAc_ac_c*>(args, 0);
     auto* info = mods::arg<dCcU_AtInfo*>(args, 1);
-    if (enemy == nullptr || info == nullptr || info->mpCollider == nullptr ||
-        info->mAttackPower <= 0 || fopAcM_GetGroup(enemy) != fopAc_ENEMY_e ||
-        fopAcM_GetName(enemy) == fpcNm_B_ZANT_e || !albw_game::is_wolf_form())
-    {
+    if (enemy == nullptr || info == nullptr) {
         return HOOK_CONTINUE;
     }
 
-    if (info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK)) {
-        if (dAlbwWolfStun_isTwilightEnemy(fopAcM_GetName(enemy))) {
-            info->mAttackPower = (info->mAttackPower * 7) / 10;
-            if (info->mAttackPower < 1) {
-                info->mAttackPower = 1;
-            }
-        } else {
-            info->mAttackPower = (info->mAttackPower * 25) / 100;
-            if (info->mAttackPower < 1) {
-                info->mAttackPower = 1;
-            }
-        }
-    }
-    return HOOK_CONTINUE;
-}
+#if ALBW_WOLFHIT_PROBE
+    const s16 whName = fopAcM_GetName(enemy);
+    const int whGroup = fopAcM_GetGroup(enemy);
+    const s16 whHealthBefore = enemy->health;
+    const unsigned whRawAtp =
+        (info->mpCollider != NULL) ? (unsigned)info->mpCollider->GetAtAtp() : 0u;
+    const bool whMidnaLock =
+        info->mpCollider != NULL && info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK);
+    const bool whCutTurn =
+        info->mpCollider != NULL && info->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN);
+    const bool whWolfAt =
+        info->mpCollider != NULL && info->mpCollider->ChkAtType(AT_TYPE_WOLF_ATTACK);
+#endif
 
-void on_cc_at_check_post(ModContext*, void* args, void*, void*) {
-    if (!dAlbwWolfCombat_isEnabled()) {
-        return;
-    }
-    auto* enemy = mods::arg<fopAc_ac_c*>(args, 0);
-    auto* info = mods::arg<dCcU_AtInfo*>(args, 1);
-    if (enemy == nullptr || info == nullptr || info->mpCollider == nullptr ||
-        fopAcM_GetGroup(enemy) != fopAc_ENEMY_e || fopAcM_GetName(enemy) == fpcNm_B_ZANT_e ||
-        !albw_game::is_wolf_form())
-    {
-        return;
+    fopAc_ac_c* ported = albw_wolf_cc_at_check(enemy, info);
+    if (retval != nullptr) {
+        // Post hooks on this seam (parry-master &c.) read the return value.
+        *static_cast<fopAc_ac_c**>(retval) = ported;
     }
 
-    // fork d_cc_uty.cpp:732-741 - special D-pad ARTS never build charges: the
-    // combat-howl AOE rides Link's own collider (AT_TYPE_WOLF_CUT_TURN, owner
-    // ALINK) so it would otherwise pass this guard; exclude it via the
-    // combat-howl flag (Link can't bite mid-howl, so the flag exactly
-    // identifies howl-AOE hits). The Midna-arm art is a separate non-ALINK
-    // actor and is excluded automatically (mHitType stays generic).
-    if (info->mHitType == HIT_TYPE_LINK_NORMAL_ATTACK &&
-        !info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) &&
-        !albw_wolf_combat_howl_active() && info->mAttackPower > 0)
-    {
-        dAlbwWolfCombat_onBiteConnect();
+#if ALBW_WOLFHIT_PROBE
+    // Fires per wolf-art-relevant hit only (ENEMY_e target, wolf-art AT type).
+    if (whGroup == fopAc_ENEMY_e && (whMidnaLock || whCutTurn || whWolfAt)) {
+        ALBW_WOLFHIT_LOG(
+            "[WOLFHIT] hit name=%04x at[%s%s%s] rawAtp=%u powFinal=%d hpBefore=%d "
+            "hpAfter=%d twilight=%d howl=%d arm=%d",
+            (int)whName, whMidnaLock ? "M" : "-", whCutTurn ? "C" : "-",
+            whWolfAt ? "W" : "-", whRawAtp, (int)info->mAttackPower,
+            (int)whHealthBefore, (int)enemy->health,
+            (int)dAlbwWolfStun_isTwilightEnemy(whName),
+            (int)albw_wolf_combat_howl_active(),
+            (int)(info->mpActor != NULL && fopAcM_GetName(info->mpActor) == 0x031A));
     }
+#endif
 
-    // fork d_cc_uty.cpp:505-515 - fixed hit powers for the two arts
-    // (user-tuned 2026-07-15: 100 each).
-    if (info->mpActor != NULL && fopAcM_GetName(info->mpActor) == 0x31A /* ALBW_MIDNA_ARM */) {
-        info->mAttackPower = 100;
-    } else if (info->mHitType == HIT_TYPE_LINK_NORMAL_ATTACK &&
-               info->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN) &&
-               albw_wolf_combat_howl_active())
-    {
-        info->mAttackPower = 100;
-    }
-
-    if (info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) && info->mAttackPower > 0 &&
-        enemy->health > 0 && !dAlbwWolfStun_isTwilightEnemy(fopAcM_GetName(enemy)))
-    {
-        dAlbwWolfStun_apply(enemy);
-    }
+    return HOOK_SKIP_ORIGINAL;
 }
 
 void on_link_execute_post(ModContext*, void*, void*, void*) {
@@ -1425,8 +1470,8 @@ ModResult albw_wolf_combat_init(ModError* error) {
     using namespace wolf_hooks;
     if (!install(error, "WolfCcAtPre",
                  mods::hook_add_pre<CcAtCheck>(svc_hook, on_cc_at_check_pre)) ||
-        !install(error, "WolfCcAtPost",
-                 mods::hook_add_post<CcAtCheck>(svc_hook, on_cc_at_check_post)) ||
+        // WolfCcAtPost retired: the whole-func replacement above carries every
+        // behavior the old post hook applied (see the accounting comment).
         !install(error, "WolfLinkExecute",
                  mods::hook_add_post<LinkExecute>(svc_hook, on_link_execute_post)) ||
         !install(error, "WolfCcMovePre",

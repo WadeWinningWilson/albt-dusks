@@ -1,0 +1,98 @@
+{
+  "_": [
+    "cc_at_check WHOLE-FUNC port (fork src/d/d_cc_uty.cpp -> HOOK_SKIP_ORIGINAL",
+    "replacement in wolf_combat.cpp). Substitutions excise the fork features the",
+    "DUSK already reproduces at this seam through OTHER modules' pre/post hooks",
+    "(those hooks still fire around a skipped original), and translate the two",
+    "fork-only accessors (mWolfCombatHowlActive field, fpcNm_ALBW_MIDNA_ARM_e)",
+    "to the DUSK's own equivalents. See staging MANIFEST.md hunk 1 for the",
+    "per-block accounting."
+  ],
+  "fork": "../dusklight/src/d/d_cc_uty.cpp",
+  "stock": "../dusklight-main/src/d/d_cc_uty.cpp",
+  "out": "build/port/wolf_uty_port.inc",
+  "port_funcs": [
+    "cc_at_check"
+  ],
+  "whole_funcs": [
+    "cc_at_check"
+  ],
+  "renames": {
+    "cc_at_check": "albw_wolf_cc_at_check",
+    "at_power_check": "albw_wolf_at_power_check",
+    "at_power_get": "albw_wolf_at_power_get",
+    "cc_pl_cut_bit_get": "albw_wolf_cc_pl_cut_bit_get"
+  },
+  "substitutions": [
+    [
+      "#if TARGET_PC\n    // Lockout slingshot: pause + ranged-open tag for every enemy that reaches albw_wolf_cc_at_check.\n    if (dMeter2_isALBWLocked() && i_AtInfo->mpCollider != NULL &&\n        fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e &&\n        i_AtInfo->mpCollider->ChkAtType(AT_TYPE_SLINGSHOT)) {\n        dAlbwLockout_onSlingshotHit(i_enemy);\n    }\n#endif",
+      "    // [PORT-EXCLUDED] lockout slingshot tag: owned by lockout.cpp's cc_at_check\n    // PRE hook (albw_lockout_init registers before albw_wolf_combat_init, so it\n    // has already run before this replacement body executes)."
+    ],
+    [
+      "            if (!daPy_py_c::checkNowWolf()) {\n                if (dusk::isLinkHurricaneProc((daAlink_c*)player_p)) {\n                    i_AtInfo->mAttackPower = dFocusedArts_getGsHurricaneHitPower();\n                } else {\n                    i_AtInfo->mAttackPower =\n                        dFocusedArts_resolveMeleeDamage(i_AtInfo->mAttackPower, player_p->getCutType());\n                }\n            }",
+      "            // [PORT-EXCLUDED] FA hurricane/melee resolve: owned by focused_arts.cpp\n            // cc_at_check POST hook (fires after a skipped original too)."
+    ],
+    [
+      "            if (dFocusedArts_isEndingBlowGreatSpinAoeActive()) {\n                daAlink_c* link_p = (daAlink_c*)player_p;\n                if (i_AtInfo->mpCollider == static_cast<cCcD_Obj*>(&link_p->mAtSph)) {\n                    i_AtInfo->mAttackPower =\n                        dFocusedArts_getEndingBlowGreatSpinAoePower(i_AtInfo->mAttackPower);\n                }\n            }",
+      "            // [PORT-EXCLUDED] Ending Blow -> Great Spin AOE: owned by focused_arts.cpp\n            // cc_at_check POST hook."
+    ],
+    [
+      "            i_AtInfo->mAttackPower =\n                dAlbwOutfitStats_applyOutgoingDamageMult(i_AtInfo->mAttackPower);",
+      "            // [PORT-EXCLUDED] outfit outgoing damage mult: owned by focused_arts.cpp\n            // cc_at_check POST hook.\n            ;"
+    ],
+    [
+      "        if (dusk::getSettings().game.invincibleEnemies &&\n            fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e) {\n            i_AtInfo->mAttackPower = 0;\n        }",
+      "        // [PORT-DEVIATION] stock/fork invincibleEnemies zero-out: dusk::getSettings()\n        // is not exported to mods (no host-settings service). While this replacement\n        // body is active (wolf combat ON + wolf form) the host cheat toggle cannot\n        // zero damage here; every other path still runs the stock original."
+    ],
+    [
+      "        if (dMeter2_isALBWLocked() && i_AtInfo->mAttackPower > 0 &&\n            fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e && i_AtInfo->mpCollider != NULL) {\n            u32 atType = 0;\n            if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_ARROW)) {\n                atType = AT_TYPE_ARROW;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_BOMB)) {\n                atType = AT_TYPE_BOMB;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_IRON_BALL)) {\n                atType = AT_TYPE_IRON_BALL;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_SLINGSHOT)) {\n                atType = AT_TYPE_SLINGSHOT;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_SPINNER)) {\n                atType = AT_TYPE_SPINNER;\n            }\n            if (atType != 0) {\n                dFocusedArts_applyItemDamageBoost(i_AtInfo->mAttackPower);\n                dAlbwLockout_applyAttackPowerBoost(i_AtInfo->mAttackPower, atType);\n            }\n        } else if (i_AtInfo->mAttackPower > 0 && fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e &&\n                   i_AtInfo->mpCollider != NULL) {\n            u32 atType = 0;\n            if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_ARROW)) {\n                atType = AT_TYPE_ARROW;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_BOMB)) {\n                atType = AT_TYPE_BOMB;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_IRON_BALL)) {\n                atType = AT_TYPE_IRON_BALL;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_SLINGSHOT)) {\n                atType = AT_TYPE_SLINGSHOT;\n            } else if (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_SPINNER)) {\n                atType = AT_TYPE_SPINNER;\n            }\n            if (atType != 0) {\n                dFocusedArts_applyItemDamageBoost(i_AtInfo->mAttackPower);\n            }\n        }",
+      "        // [PORT-EXCLUDED] lockout / focused-arts item damage boosts: owned by\n        // lockout.cpp and focused_arts.cpp cc_at_check POST hooks."
+    ],
+    [
+      "        // Lockout double-claw finisher: fixed ATP 30 after all remaps.\n        {\n            const u16 clawSlashPower = dAlbwLockout_getDoubleClawSlashAttackPower();\n            if (clawSlashPower != 0 && fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e) {\n                i_AtInfo->mAttackPower = clawSlashPower;\n            }\n        }",
+      "        // [PORT-EXCLUDED] lockout double-claw finisher pin: owned by lockout.cpp's\n        // cc_at_check POST hook.\n        {\n        }"
+    ],
+    [
+      "            if (i_AtInfo->mpActor != NULL &&\n                (fopAcM_GetGroup(i_AtInfo->mpActor) == fopAc_PLAYER_e ||\n                 (i_AtInfo->mpCollider != NULL &&\n                  i_AtInfo->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK))))\n            {\n                dParryMaster_onDealtDamage();\n            }",
+      "            // [PORT-EXCLUDED] parry-master onDealtDamage: owned by parry_hooks.cpp's\n            // cc_at_check POST hook (reads the retval our pre hook fills in)."
+    ],
+    [
+      "            if (fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e) {\n                dAlbwEnemyRupees_tryKillAfterDamage(i_enemy, i_AtInfo->mAttackPower);\n                if (dMeter2_isALBWLocked() && i_AtInfo->mpActor != NULL &&\n                    fopAcM_GetGroup(i_AtInfo->mpActor) == fopAc_ENEMY_e &&\n                    dAlbwLockout_isConfused(i_AtInfo->mpActor))\n                {\n                    cXyz hitPos = i_enemy->current.pos;\n                    hitPos.y += 100.0f;\n                    dComIfGp_setHitMark(3, i_enemy, &hitPos, NULL, NULL, 0);\n                    dAlbwLockout_onConfuseFriendlyFireHit(i_enemy, i_AtInfo->mpActor);\n                }\n                if (i_AtInfo->mpCollider != NULL &&\n                    !i_AtInfo->mpCollider->ChkAtType(AT_TYPE_NORMAL_SWORD) &&\n                    !i_AtInfo->mpCollider->ChkAtType(AT_TYPE_MASTER_SWORD) &&\n                    !i_AtInfo->mpCollider->ChkAtType(AT_TYPE_WOLF_ATTACK) &&\n                    !i_AtInfo->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN) &&\n                    !i_AtInfo->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) &&\n                    (i_AtInfo->mpCollider->ChkAtType(AT_TYPE_ARROW) ||\n                     i_AtInfo->mpCollider->ChkAtType(AT_TYPE_BOMB) ||\n                     i_AtInfo->mpCollider->ChkAtType(AT_TYPE_SLINGSHOT) ||\n                     i_AtInfo->mpCollider->ChkAtType(AT_TYPE_IRON_BALL) ||\n                     i_AtInfo->mpCollider->ChkAtType(AT_TYPE_40)))\n                {\n                    dFocusedArts_onConnectedItemHit();\n                }\n            }",
+      "            // [PORT-EXCLUDED] enemy-rupee kill grant + magic-jar drop + confuse\n            // friendly-fire + FA item fill: owned by enemy_rupees.cpp, lockout.cpp and\n            // focused_arts.cpp cc_at_check POST hooks."
+    ],
+    [
+      "#if TARGET_PC\n            if (fopAcM_GetGroup(i_enemy) == fopAc_ENEMY_e) {\n                dusk::AchievementSystem::get().signal(\"enemy_killed\");\n                const auto* link = static_cast<const daAlink_c*>(daPy_getPlayerActorClass());\n                if (link != nullptr && link->mProcID == daAlink_c::PROC_CUT_FINISH && link->mIsRollstab) {\n                    dusk::AchievementSystem::get().signal(\"rollstab_kill\");\n                }\n                // ============================================\n                // NEW CODE \u2014 ALBW Port\n                // Magic jar bonus drop on common enemy kill. Fires for all\n                // actors in fopAc_ENEMY_e group \u2014 excludes bosses, traps,\n                // and final bosses which live in different actor groups.\n                // 10% drop rate (matches original orange rupee ALBW bonus drop).\n                // ============================================\n                if (cM_rndF(1.0f) < 0.10f) {\n                    static const cXyz s_jarDropScale(1.3f, 1.3f, 1.3f);\n                    fopAcM_createItem(&i_enemy->current.pos, dItemNo_L_MAGIC_e, -1,\n                                      fopAcM_GetRoomNo(i_enemy), NULL, &s_jarDropScale, 0);\n                }\n                // Rupee grant handled by tryKillAfterDamage() above (includes lethal thresholds).\n                // ============================================\n                // NEW CODE ENDS HERE\n                // ============================================\n            }\n#endif",
+      "#if TARGET_PC\n            // [PORT-DEVIATION] host achievements (enemy_killed / rollstab_kill):\n            // dusk::AchievementSystem is not exported to mods, so kills that resolve\n            // through this replacement body (wolf form + wolf combat ON) do not signal\n            // achievements. All other kills run the stock original and still do.\n            // [PORT-EXCLUDED] fork magic-jar bonus drop: owned by enemy_rupees.cpp's\n            // cc_at_check POST hook (tryDropMagicJar).\n#endif"
+    ],
+    [
+      "                const daAlink_c* link = daAlink_getAlinkActorClass();\n                if (link != NULL && link->mWolfCombatHowlActive) {",
+      "                // [PORT-TRANSLATED] fork daAlink_c::mWolfCombatHowlActive (fork-only\n                // field) -> the DUSK's own howl-active accessor.\n                if (albw_wolf_combat_howl_active()) {"
+    ],
+    [
+      "                    !link->mWolfCombatHowlActive &&",
+      "                    !albw_wolf_combat_howl_active() &&  // [PORT-TRANSLATED] fork mWolfCombatHowlActive"
+    ],
+    [
+      "fpcNm_ALBW_MIDNA_ARM_e",
+      "0x031A /* fpcNm_ALBW_MIDNA_ARM_e (fork f_pc_name.h; stock table has no slot) */"
+    ],
+    [
+      "            const int rawMult = dAlbwHP_getRawMult(fopAcM_GetName(i_enemy));",
+      "            // [WOLFHIT] probe (STRIP before release): power entering the fork split.\n            ALBW_WOLFHIT_LOG(\"[WOLFHIT] split-in name=%04x pow=%d rawMult=%d twilight=%d\",\n                             (int)fopAcM_GetName(i_enemy), (int)i_AtInfo->mAttackPower,\n                             dAlbwHP_getRawMult(fopAcM_GetName(i_enemy)),\n                             (int)dAlbwWolfStun_isTwilightEnemy(fopAcM_GetName(i_enemy)));\n            const int rawMult = dAlbwHP_getRawMult(fopAcM_GetName(i_enemy));"
+    ]
+  ],
+  "diag_zero": [],
+  "engine_symbols": [
+    "fopAc_ac_c",
+    "dCcU_AtInfo",
+    "daPy_py_c",
+    "daAlink_c",
+    "cCcD_Obj",
+    "dCcD_GObjInf",
+    "dCcD_MTRL_LIGHT",
+    "cXyz",
+    "csXyz",
+    "dScnPly_c",
+    "Z2Creature"
+  ]
+}

@@ -194,6 +194,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_outfit_swim_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
         albw_wolf_combat_init(error) != MOD_OK ||
+        albw_e_s1_wolf_pack_init(error) != MOD_OK ||
         albw_wolf_charge_art_init(error) != MOD_OK ||
         albw_wolf_howl_combat_init(error) != MOD_OK ||
         albw_midna_arm_init(error) != MOD_OK ||

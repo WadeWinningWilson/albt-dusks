@@ -1,0 +1,78 @@
+{
+  "_": [
+    "e_s1 (Shadow Beast) wolf-art kill/pack-finish port: whole-func replacement of",
+    "daE_S1_Execute (SKIP_ORIGINAL seam; damage_check/action are file-static and",
+    "'damage_check' is name-ambiguous in the symbol manifest, so the unique",
+    "daE_S1_Execute symbol is the hook target and the fork chain",
+    "Execute -> action -> damage_check is ported whole). action() and every",
+    "pulled mode function are byte-identical fork==stock; damage_check and",
+    "Execute carry the fork's wolf-art kill path, pack-finish sweep and W2c",
+    "health floor. Gen-2 (mUseEs1Arc) branches fold dead via substitutions:",
+    "the field does not exist on the stock e_s1_class."
+  ],
+  "fork": "../dusklight/src/d/actor/d_a_e_s1.cpp",
+  "stock": "../dusklight-main/src/d/actor/d_a_e_s1.cpp",
+  "out": "build/port/e_s1_port.inc",
+  "port_funcs": [
+    "daE_S1_Execute",
+    "action",
+    "damage_check",
+    "e_s1_is_wolf_pack_finish_attack",
+    "e_s1_enter_fail_wait",
+    "s_pack_count_sub",
+    "s_pack_finish_sub",
+    "e_s1_try_pack_finish"
+  ],
+  "whole_funcs": [
+    "daE_S1_Execute",
+    "action",
+    "damage_check"
+  ],
+  "renames": {
+    "daE_S1_Execute": "albw_es1_Execute"
+  },
+  "substitutions": [
+    [
+      "#if TARGET_PC\n                    // Plan W1: instrument hang-bite refuse (cutType / stale keep / HP).\n                    // W2: do NOT bare-return \u2014 fall through to normal damage so ALBW\n                    // cutType divergence / stale latch keep cannot mute the hit.\n                    {\n                        daAlink_c* link = (daAlink_c*)player;\n                        fopAc_ac_c* keep = link->field_0x281c.getActor();\n                        OS_REPORT(\n                            \"S1 BITE HANG FAIL cut=%d keep=%08x health=%d gen2=%d\\n\",\n                            (int)player->getCutType(), keep != NULL ? (u32)fopAcM_GetID(keep) : 0u,\n                            (int)a_this->health, a_this->mUseEs1Arc ? 1 : 0);\n                    }\n#else\n                    return;\n#endif",
+      "                    // [PORT-STRIPPED] fork W1 hang-bite-refuse diag (reads the gen-2\n                    // mUseEs1Arc field and daAlink_c::field_0x281c, both unavailable\n                    // here). The fork's W2 BEHAVIOR IS KEPT: fall through to normal\n                    // damage, no bare return.\n                    ALBW_WOLFHIT_LOG(\"[WOLFHIT] e_s1 hang-bite refuse -> fallthrough cut=%d hp=%d\",\n                                     (int)player->getCutType(), (int)a_this->health);"
+    ],
+    [
+      "#if TARGET_PC\n    dAlbwEnemyRupees_onEnemyKill(a_this);\n#endif",
+      "    // [PORT-MOVED] fork dAlbwEnemyRupees_onEnemyKill(a_this): covered by the DUSK's\n    // enemy_rupees.cpp fopAc_Execute POST hook, which grants the kill rupees when it\n    // observes health<=0 on an ENEMY_e actor (same dedup, same amounts)."
+    ],
+    [
+      "#if TARGET_PC\n                dAlbwEnemyRupees_onEnemyKill(a_this);\n#endif",
+      "                // [PORT-MOVED] fork dAlbwEnemyRupees_onEnemyKill (hang-bite kill):\n                // covered by the DUSK's enemy_rupees.cpp fopAc_Execute POST hook."
+    ],
+    [
+      "i_this->mUseEs1Arc",
+      "false /* [PORT gen-2 stripped: no mUseEs1Arc on stock e_s1_class] */"
+    ],
+    [
+      "a_this->mUseEs1Arc",
+      "false /* [PORT gen-2 stripped: no mUseEs1Arc on stock e_s1_class] */"
+    ],
+    [
+      "    fpcM_Search(s_pack_finish_sub, i_this);",
+      "    fpcM_Search(s_pack_finish_sub, i_this);\n    // [WOLFHIT] probe (STRIP before release): pack-finish sweep fired.\n    ALBW_WOLFHIT_LOG(\"[WOLFHIT] e_s1 pack-finish group=%d (all pack members <=1hp)\",\n                     (int)i_this->mGroupID);"
+    ]
+  ],
+  "diag_zero": [],
+  "engine_symbols": [
+    "e_s1_class",
+    "fopAc_ac_c",
+    "fopEn_enemy_c",
+    "daPy_py_c",
+    "daAlink_c",
+    "dCcU_AtInfo",
+    "cXyz",
+    "csXyz",
+    "cCcD_Obj",
+    "dBgS_GndChk",
+    "dBgS_LinChk",
+    "J3DFrameCtrl",
+    "dPnt",
+    "Vec",
+    "daE_S1_HIO_c"
+  ]
+}
