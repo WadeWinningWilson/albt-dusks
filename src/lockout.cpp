@@ -267,7 +267,34 @@ void on_cc_at_check_post(ModContext*, void* args, void*, void*) {
         info->mAttackPower = clawPower;
         return;
     }
-    dAlbwLockout_applyAttackPowerBoost(info->mAttackPower, info->mpCollider->GetAtType());
+    // ============================================
+    // NEW CODE - ALBW Port (canonical At-bit derivation)
+    // dAlbwLockout_applyAttackPowerBoost compares i_atType by EQUALITY
+    // (lockout_port.inc:726-731 == fork d_albw_lockout.cpp:682-689). That is only
+    // sound because the fork's caller hands it ONE canonical bit, derived with a
+    // ChkAtType if/else ladder - fork d_cc_uty.cpp:537-548. GetAtType() returns the
+    // whole mask (ChkAtType == MskType, a bitwise AND: c_cc_d.h:346), so a collider
+    // carrying more than one At bit silently matches no branch. Ladder reproduced
+    // from the fork verbatim: same order, same five types.
+    // ============================================
+    u32 atType = 0;
+    if (info->mpCollider->ChkAtType(AT_TYPE_ARROW)) {
+        atType = AT_TYPE_ARROW;
+    } else if (info->mpCollider->ChkAtType(AT_TYPE_BOMB)) {
+        atType = AT_TYPE_BOMB;
+    } else if (info->mpCollider->ChkAtType(AT_TYPE_IRON_BALL)) {
+        atType = AT_TYPE_IRON_BALL;
+    } else if (info->mpCollider->ChkAtType(AT_TYPE_SLINGSHOT)) {
+        atType = AT_TYPE_SLINGSHOT;
+    } else if (info->mpCollider->ChkAtType(AT_TYPE_SPINNER)) {
+        atType = AT_TYPE_SPINNER;
+    }
+    if (atType != 0) {
+        dAlbwLockout_applyAttackPowerBoost(info->mAttackPower, atType);
+    }
+    // ============================================
+    // NEW CODE ENDS HERE
+    // ============================================
 }
 
 void on_link_execute_post(ModContext*, void*, void*, void*) {

@@ -1327,6 +1327,69 @@ static u8 g_pachinko_num_backup = 0;
 static s16 g_pachinko_count_backup = 0;
 static bool g_pachinko_patched = false;
 
+// ============================================
+// NEW CODE - ALBW Port (ammo decoupling: bombs, bomblings, arrows)
+//
+// The fork does not "suppress ammo when the meter is spent" - it DELETES the
+// ammo decrement from the source on PC. Three sites, all #if !TARGET_PC:
+//   fork d_a_alink.cpp:15789-15802    setItemActor, bomb create
+//                                     (stock d_a_alink.cpp:14295)
+//   fork d_a_alink_grab.inc:1384-1401 procPickPut, bombling
+//                                     (stock d_a_alink_grab.inc:1362)
+//   fork d_a_alink_bow.inc:428-455    bow fire: the bomb-arrow bag decrement
+//                                     AND dComIfGp_setItemArrowNumCount(-1)
+//                                     (stock d_a_alink_bow.inc:337-341)
+// The fork's slingshot seed deletion (fork d_a_alink_bow.inc:370-383) is already
+// reproduced above; this is the same receiver translation for the other three.
+//
+// A plugin cannot delete a line inside a stock body, so the pending count deltas
+// are snapshotted before the call and restored after it - identical outcome, and
+// exactly the technique the pachinko block above already ships.
+//
+// dComIfGp_addSelectItemNum routes bomb types to setItemBombNumCount(slot, -1)
+// (stock d_com_inf_game.cpp:2298-2306), which ACCUMULATES into
+// mItemBombNumCount[slot] (stock d_com_inf_game.cpp:97-105); the arrow path
+// accumulates into mItemArrowNumCount (stock d_com_inf_game.h:642). Both are
+// therefore restored by clear() + re-add of the saved delta.
+//
+// NOT cancelled, deliberately: daAlink_c::deleteArrow() keeps its decrement in
+// the fork too (fork d_a_alink_bow.inc:193-204 == stock :128-150) - a held bomb
+// arrow force-detonated by damage still costs the bag.
+// ============================================
+static s16 g_bomb_count_backup[dSv_player_item_c::BOMB_BAG_MAX] = {0, 0, 0};
+static s16 g_arrow_count_backup = 0;
+static bool g_ammo_snapshot_held = false;
+
+void snapshot_ammo_counts() {
+    for (int i = 0; i < dSv_player_item_c::BOMB_BAG_MAX; i++) {
+        g_bomb_count_backup[i] =
+            g_dComIfG_gameInfo.play.getItemBombNumCount(static_cast<u8>(i));
+    }
+    g_arrow_count_backup = g_dComIfG_gameInfo.play.getItemArrowNumCount();
+    g_ammo_snapshot_held = true;
+}
+
+void restore_ammo_counts() {
+    if (!g_ammo_snapshot_held) {
+        return;
+    }
+    g_ammo_snapshot_held = false;
+    for (int i = 0; i < dSv_player_item_c::BOMB_BAG_MAX; i++) {
+        const u8 slot = static_cast<u8>(i);
+        g_dComIfG_gameInfo.play.clearItemBombNumCount(slot);
+        if (g_bomb_count_backup[i] != 0) {
+            g_dComIfG_gameInfo.play.setItemBombNumCount(slot, g_bomb_count_backup[i]);
+        }
+    }
+    g_dComIfG_gameInfo.play.clearItemArrowNumCount();
+    if (g_arrow_count_backup != 0) {
+        g_dComIfG_gameInfo.play.setItemArrowNumCount(g_arrow_count_backup);
+    }
+}
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
+
 HookAction on_make_arrow_pre(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return HOOK_CONTINUE;
@@ -1411,6 +1474,9 @@ HookAction on_throw_boom_pre(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return HOOK_CONTINUE;
     }
+    // Fork deletes the bombling bag decrement on PC (fork d_a_alink_grab.inc:1384-1401
+    // vs stock d_a_alink_grab.inc:1362).
+    snapshot_ammo_counts();
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) {
         return HOOK_CONTINUE;
@@ -1443,6 +1509,11 @@ HookAction on_bow_pre(ModContext*, void* args, void*, void*) {
         auto* arrow = static_cast<daArrow_c*>(item);
         g_bow_was_bomb = arrow->checkBombArrow() ? 1 : 0;
     }
+    // Fork bow fire deletes BOTH ammo writes on PC (fork d_a_alink_bow.inc:428-455
+    // vs stock :337-341): the bomb-arrow bag decrement and setItemArrowNumCount(-1).
+    if (meter_enabled()) {
+        snapshot_ammo_counts();
+    }
     // Slingshot fires off the meter system, not seed ammo (fork bypass). Fake a
     // seed so the stock getPachinkoNum() gate lets makeSlingStone() run.
     if (meter_enabled() && link->mEquipItem == dItemNo_PACHINKO_e) {
@@ -1461,6 +1532,8 @@ void on_bow_post(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return;
     }
+    // Undo the stock arrow / bomb-arrow ammo writes (fork deletes them: :428-455).
+    restore_ammo_counts();
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) {
         return;
@@ -1518,6 +1591,7 @@ void on_hook_post(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return;
     }
+    restore_ammo_counts();
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) {
         return;
@@ -1566,6 +1640,7 @@ void on_pick_put_post(ModContext*, void* args, void*, void*) {
     if (!meter_enabled()) {
         return;
     }
+    restore_ammo_counts();
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr) {
         return;
@@ -1578,6 +1653,11 @@ void on_pick_put_post(ModContext*, void* args, void*, void*) {
 HookAction on_set_item_actor_pre(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     g_prev_bomb_num = (link != nullptr) ? link->mActiveBombNum : 0;
+    // Fork deletes the bomb bag decrement on PC (fork d_a_alink.cpp:15789-15802
+    // vs stock d_a_alink.cpp:14295) - bombs are meter-only.
+    if (meter_enabled()) {
+        snapshot_ammo_counts();
+    }
     return HOOK_CONTINUE;
 }
 
