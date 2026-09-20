@@ -65,15 +65,6 @@
 #include "d/d_save.h"
 
 #include <cstdio>
-#include <cstring>  // RINGX probe
-
-// TEMP DIAG - RINGX probe counters, defined at file scope in
-// extra_item_slot_hooks.cpp (extern here MUST stay outside the anon namespace
-// or it acquires internal linkage and fails to link). STRIP with the probe.
-extern volatile u32 g_albwRingProbeSuppressUD;
-extern volatile u32 g_albwRingProbeSuppressL;
-extern volatile u32 g_albwRingProbeZCommits;
-extern volatile u32 g_albwRingProbeSetSelDown;
 
 #if TARGET_PC
 
@@ -881,37 +872,6 @@ HookAction on_mw_ring_delete_pre(ModContext*, void* args, void*, void*) {
 // fork _move:686 - page flip on tap or hold; short-circuits the rest of _move.
 HookAction on_ring_move_pre(ModContext*, void* args, void*, void*) {
     auto* r = mods::arg<dMenu_Ring_c*>(args, 0);
-    // ============================================
-    // TEMP DIAG - RINGX (item-ring back-out softlock). ONE probe, 9 hypotheses:
-    // (1) pause flag during ring, (2) heap lock, (3) message status, (4) UP/DOWN
-    // reservation kills (supUD), (5) LEFT reservation kills (supL), (6) ring
-    // status machine stuck in EXPLAIN, (7) explain-window status never 0,
-    // (8) fly-anim staging 674[0..3] never clearing, (9) per-frame Z-commit /
-    // setSelectItem(DOWN) spam. Logs on any change + a 30-frame heartbeat while
-    // a ring exists. Parse tag: "RINGX". STRIP before release.
-    // ============================================
-    if (svc_log != nullptr && r != nullptr) {
-        static u32 s_hb = 0;
-        static char s_last[192] = {0};
-        char cur[192];
-        const int expSt = (r->mpItemExplain != NULL) ? (int)r->mpItemExplain->getStatus() : -1;
-        std::snprintf(cur, sizeof(cur),
-                      "[RINGX] st=%d old=%d exp=%d 674=%d,%d,%d,%d pause=%d hl=%d msg=%d "
-                      "supUD=%u supL=%u z=%u ssd=%u qe=%d",
-                      (int)r->mStatus, (int)r->mOldStatus, expSt, (int)r->field_0x674[0],
-                      (int)r->field_0x674[1], (int)r->field_0x674[2], (int)r->field_0x674[3],
-                      (int)(g_dComIfG_gameInfo.play.isPauseFlag() != 0),
-                      (int)g_dComIfG_gameInfo.play.isHeapLockFlag(),
-                      (int)g_dComIfG_gameInfo.play.getMesgStatus(),
-                      (unsigned)g_albwRingProbeSuppressUD, (unsigned)g_albwRingProbeSuppressL,
-                      (unsigned)g_albwRingProbeZCommits, (unsigned)g_albwRingProbeSetSelDown,
-                      (int)qe_on(r));
-        if (std::strcmp(cur, s_last) != 0 || (s_hb++ % 30) == 0) {
-            std::strncpy(s_last, cur, sizeof(s_last) - 1);
-            s_last[sizeof(s_last) - 1] = '\0';
-            svc_log->info(mod_ctx, cur);
-        }
-    }
     if (!qe_on(r)) return HOOK_CONTINUE;
     if (albw_ring_tryQuickEquipPageFlip(r)) {
         r->mRingRadiusH = g_ringHIO.mRingRadiusH;

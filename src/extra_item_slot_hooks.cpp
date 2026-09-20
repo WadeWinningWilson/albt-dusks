@@ -33,13 +33,6 @@
 
 #include "mods/hook.hpp"
 
-// TEMP DIAG - RINGX probe counters (read by the [RINGX] ring-frame probe in
-// menu_ring_ext.cpp). Parse tag: "RINGX". STRIP with the probe.
-volatile u32 g_albwRingProbeSuppressUD = 0;  // UP/DOWN triggers zeroed by reservation
-volatile u32 g_albwRingProbeSuppressL = 0;   // LEFT triggers zeroed by reservation
-volatile u32 g_albwRingProbeZCommits = 0;    // ring Z-commits (setActiveCursor post)
-volatile u32 g_albwRingProbeSetSelDown = 0;  // dComIfGp_setSelectItem(DOWN) resolves
-
 namespace {
 
 bool item_wheel_trig() {
@@ -259,8 +252,6 @@ HookAction on_set_select_item_pre(ModContext*, void* args, void*, void*) {
     auto& status = g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA();
     auto& item = g_dComIfG_gameInfo.info.getPlayer().getItem();
 
-    g_albwRingProbeSetSelDown++;  // RINGX
-
     if (status.getSelectItemIndex(idx) != 0xFF) {
         const u8 resolved = item.getItem(status.getSelectItemIndex(idx), false);
         g_dComIfG_gameInfo.play.setSelectItem(idx, resolved);
@@ -293,7 +284,6 @@ void on_up_trigger_post(ModContext*, void*, void* retval, void*) {
 
     // Quick Swap: D-pad Up is sword cycle — never open the stock item wheel in field.
     if (quick_swap_suppresses_dpad()) {
-        if (*static_cast<BOOL*>(retval) != FALSE) g_albwRingProbeSuppressUD++;  // RINGX
         *static_cast<BOOL*>(retval) = FALSE;
     }
 }
@@ -302,7 +292,6 @@ void on_down_trigger_post(ModContext*, void*, void* retval, void*) {
     if (retval == nullptr || !quick_swap_suppresses_dpad()) {
         return;
     }
-    if (*static_cast<BOOL*>(retval) != FALSE) g_albwRingProbeSuppressUD++;  // RINGX
     *static_cast<BOOL*>(retval) = FALSE;
 }
 
@@ -320,7 +309,6 @@ void on_left_trigger_post(ModContext*, void*, void* retval, void*) {
     if (retval == nullptr || !extra_slot_reserves_left_dpad() || menu_system_engaged()) {
         return;
     }
-    if (*static_cast<BOOL*>(retval) != FALSE) g_albwRingProbeSuppressL++;  // RINGX
     *static_cast<BOOL*>(retval) = FALSE;
 }
 
@@ -387,7 +375,6 @@ void on_ring_set_active_cursor_post(ModContext*, void* args, void*, void*) {
 
     status.setSelectItemIndex(SELECT_ITEM_DOWN, invSlot);
     ring->field_0x6ac = ring->mCurrentSlot;
-    g_albwRingProbeZCommits++;  // RINGX
     dComIfGp_setSelectItem(SELECT_ITEM_DOWN);
 
     dMeter2Info_set2DVibrationM();

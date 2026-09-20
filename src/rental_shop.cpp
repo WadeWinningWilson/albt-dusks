@@ -374,25 +374,6 @@ static dAlbwOutfitKind outfitKindForItemNo(u8 itemNo) {
 
 // fork d_albw_rental.cpp:559
 static bool appendStorageRowsForItem(u8 itemNo, const char* desc) {
-    // TEMP DIAG — MAGIC-GATE. For Magic Armor (ARMOR), log every gate result so we see
-    // exactly why its storage row is/isn't produced. Parse tag: "MAGIC-GATE". STRIP later.
-    if (itemNo == (u8)dItemNo_ARMOR_e && svc_log != nullptr) {
-        static int s_mg = 0;
-        if (s_mg < 8) {
-            s_mg++;
-            char buf[176];
-            std::snprintf(buf, sizeof(buf),
-                          "[MAGIC-GATE] dpad=%d storable=%d stored=%d firstBit=%d owned=%d "
-                          "trueAlbw=%d",
-                          dusk::isDpadQuickSwapEnabled() ? 1 : 0,
-                          dAlbwWardrobe_isStorableItemNo(itemNo) ? 1 : 0,
-                          dAlbwWardrobe_isStoredItemNo(itemNo) ? 1 : 0,
-                          dComIfGs_isItemFirstBit(itemNo) ? 1 : 0,
-                          dAlbwOutfit_isOwned(D_ALBW_OUTFIT_MAGIC) ? 1 : 0,
-                          albw_is_true_albw_enabled() ? 1 : 0);
-            svc_log->info(mod_ctx, buf);
-        }
-    }
     if (!dusk::isDpadQuickSwapEnabled() || !dAlbwWardrobe_isStorableItemNo(itemNo)) {
         return false;
     }
