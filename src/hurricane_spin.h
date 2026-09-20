@@ -28,6 +28,11 @@ bool albw_hurricane_tick(daAlink_c* link);
 // True while the hurricane overlay currently owns Link's proc.
 bool albw_hurricane_is_active();
 
+// Per-frame lifetime watch. The fork's hurricane IS a proc (PROC_CUT_GS_HURRICANE),
+// so leaving that proc ends it; the overlay rides PROC_CUT_TURN, so the same
+// departure must end the overlay. Call once per frame (mod_update).
+void albw_hurricane_frame_watch();
+
 // Installs the per-frame procCutTurn overlay hook.
 ModResult albw_hurricane_init(ModError* error);
 

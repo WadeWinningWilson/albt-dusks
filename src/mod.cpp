@@ -256,6 +256,11 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     albw_quick_equip_tick();
     albw_wolf_arts_tick();
     albw_focused_arts_tick();
+    // The GS-hurricane overlay borrows PROC_CUT_TURN in place of the fork's own
+    // PROC_CUT_GS_HURRICANE. The fork's hurricane ends the moment Link leaves that
+    // proc (engine-owned); the overlay has to be told. Inert unless a hurricane is
+    // running, so FA/toggle off == stock. See hurricane_spin.cpp.
+    albw_hurricane_frame_watch();
     albw_flurry_tick();
     albw_colossal_wallet_tick();
     albw_rental_shop_tick();

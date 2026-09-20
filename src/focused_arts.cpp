@@ -167,14 +167,28 @@ void on_cc_at_check_post(ModContext*, void* args, void*, void*) {
         dFocusedArts_applyItemDamageBoost(info->mAttackPower);
     }
 
-    // --- fill: sword hits fill by sword step; item hits fill by the item step. ---
-    if (info->mpCollider->ChkAtType(AT_TYPE_NORMAL_SWORD | AT_TYPE_MASTER_SWORD)) {
-        dFocusedArts_onConnectedSwordHit();
-    } else if (!info->mpCollider->ChkAtType(AT_TYPE_WOLF_ATTACK) &&
-               !info->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN) &&
-               !info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) &&
-               info->mpCollider->ChkAtType(AT_TYPE_ARROW | AT_TYPE_BOMB | AT_TYPE_SLINGSHOT |
-                                           AT_TYPE_IRON_BALL | AT_TYPE_40))
+    // ============================================
+    // --- fill ---
+    // SWORD fill is NOT a cc_at_check site in the fork. Its donor host is
+    // daAlink_c::setSwordHitVibration (d_a_alink_cut.inc:367-370), where it is one of
+    // two additions in a single hunk whose other half the mod already ports (the
+    // magic-armor encounter registration). It has been returned there — see
+    // meter.cpp on_sword_hit_vibration_post — because the donor's three conditions
+    // (enemy group, !checkWolf, !ChkAtShieldHit) have no equivalent at this seam: here
+    // every sword contact filled, pots and blocked hits included, which is what let a
+    // freshly-emptied bank refill from a single multi-hit swing.
+    //
+    // ITEM fill IS a cc_at_check site in the fork (d_cc_uty.cpp:648-671) — kept, plus
+    // the donor's enclosing enemy-group gate (:648), which was dropped here.
+    // ============================================
+    if (fopAcM_GetGroup(enemy) == fopAc_ENEMY_e &&
+        !info->mpCollider->ChkAtType(AT_TYPE_NORMAL_SWORD) &&
+        !info->mpCollider->ChkAtType(AT_TYPE_MASTER_SWORD) &&
+        !info->mpCollider->ChkAtType(AT_TYPE_WOLF_ATTACK) &&
+        !info->mpCollider->ChkAtType(AT_TYPE_WOLF_CUT_TURN) &&
+        !info->mpCollider->ChkAtType(AT_TYPE_MIDNA_LOCK) &&
+        info->mpCollider->ChkAtType(AT_TYPE_ARROW | AT_TYPE_BOMB | AT_TYPE_SLINGSHOT |
+                                    AT_TYPE_IRON_BALL | AT_TYPE_40))
     {
         dFocusedArts_onConnectedItemHit();
     }

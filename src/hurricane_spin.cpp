@@ -21,6 +21,7 @@
 #include "mods/svc/hook.hpp"
 
 #include "d/actor/d_a_alink.h"
+#include "d/actor/d_a_player.h"  // daPy_getPlayerActorClass (albw_hurricane_frame_watch)
 #include "d/d_com_inf_game.h"
 #include "d/d_particle_name.h"
 #include "m_Do/m_Do_mtx.h"
@@ -362,9 +363,28 @@ bool albw_hurricane_try_begin(daAlink_c* link) {
     if (link == nullptr) {
         return false;
     }
-    if (s_phase != HP_NONE) {
-        return true;  // already running - caller should keep skipping the stock proc
-    }
+    // ============================================
+    // DONOR CONTRACT — fork d_a_alink_hurricane.inc:120-130 + :254.
+    // procCutGsHurricaneInit has exactly TWO outcomes: it returns 0 WITHOUT touching
+    // Link's proc (not armed), or it runs commonProcInit(PROC_CUT_GS_HURRICANE) and
+    // returns 1. There is no third "already running, report success but do not enter
+    // the proc" state, and the donor cannot have one: in the donor the proc id IS the
+    // hurricane state. This function must carry that same contract, because both
+    // callers (fork d_a_alink_cut.inc:2318 / d_a_alink.cpp:13086) treat "true" as
+    // "Link is now in the hurricane proc, do NOT run procCutTurnInit".
+    //
+    // The removed `if (s_phase != HP_NONE) return true;` broke exactly that: it
+    // reported success without entering any proc, so the caller skipped
+    // procCutTurnInit while Link stayed in PROC_CUT_TURN_MOVE — whose var_r4 release
+    // branch (fork d_a_alink_cut.inc:2308-2325) calls procCutTurnInit again EVERY
+    // frame. Frozen mid-attack, one hidden-skill meter drain per frame.
+    //
+    // No re-entrancy guard is needed in its place: the donor's own arm gate is the
+    // guard. tryArmGsHurricaneFinisher requires isOnFinalSpendCharge()
+    // (fork d_focused_arts.cpp:906-909, 919-928 — inSpendSequence && bank == 1) and
+    // SPENDS that charge on the way through, so a second arm cannot succeed while a
+    // hurricane is running.
+    // ============================================
     if (!dFocusedArts_isEnabled()) {
         return false;
     }
@@ -377,6 +397,47 @@ bool albw_hurricane_try_begin(daAlink_c* link) {
     dFocusedArts_consumeGsHurricaneFinisherArmed();
     hurricane_begin(link, link->getCutTurnDirection());
     return true;
+}
+
+// ============================================
+// DONOR LIFETIME — receiver translation (DN-10 step 2), proof in the comment below.
+//
+// Step 1 (port the donor's own system) does not close this: the donor's hurricane
+// state is a real proc, PROC_CUT_GS_HURRICANE, so when ANYTHING takes Link out of
+// that proc — damage, checkGroundSpecialMode (fork d_a_alink_hurricane.inc:282), a
+// demo, a stage change, death — the engine's own proc dispatch ends the hurricane
+// with no bookkeeping at all. The stock exe has no proc-table slot to port that into
+// (the sanctioned overlay technique), so the overlay's phase is module state that
+// NOTHING owns: before this, s_phase had no clear path outside a full natural
+// 300+60-frame run, and any interruption left it stuck at HP_SPIN for the session.
+//
+// The translation reads the very field the donor's mechanism is made of — mProcID —
+// at the consumption boundary, and ends the overlay when Link is no longer in the
+// proc it rides. It invents no new rule: "the hurricane lives exactly as long as its
+// proc" is the donor's rule, restated against the proc the overlay borrowed.
+//
+// It also retires the sustained VFX: hurricane_emit_vfx marks its six emitters
+// becomeImmortalEmitter(), so they do not self-expire — only the donor's own end
+// path (procCutGsHurricane -> tired) stopped them. An interrupted spin leaked them.
+// ============================================
+void albw_hurricane_frame_watch() {
+    if (s_phase == HP_NONE) {
+        return;  // inert whenever the overlay never started (FA off == stock)
+    }
+    // daAlink_c is the player actor in both forms, so a transform shows up here as a
+    // proc change, not as a different actor.
+    daAlink_c* link = static_cast<daAlink_c*>(daPy_getPlayerActorClass());
+    if (link != nullptr && link->mProcID == daAlink_c::PROC_CUT_TURN) {
+        return;  // the overlay still owns Link's proc
+    }
+    if (link != nullptr) {
+        stopHurricaneSpinSe(link);
+        hurricane_stop_vfx(link);
+        link->mAtSph.OffAtSetBit();
+        link->field_0x2fd0 = 0;
+    }
+    s_phase = HP_NONE;
+    s_frames = 0;
 }
 
 bool albw_hurricane_tick(daAlink_c* link) {
