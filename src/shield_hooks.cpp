@@ -15,6 +15,11 @@
 
 #include "albw_common.h"
 #include "albw_dusk_log.h"
+#include "albt_shield_api_impl.h"
+
+// Temporary bash-entry diagnostic. Set to 0 before release; the release gate in
+// docs/RELEASE-PROCEDURE.md checks probe macros are off.
+#define ALBW_BASH_PROBE 1
 #include "lockout.h"
 #include "meter_bridge.h"
 #include "d/d_meter2.h"
@@ -266,6 +271,66 @@ HookAction on_sword_swing_trigger_pre(ModContext*, void* args, void* retval, voi
 HookAction on_check_item_action_pre(ModContext*, void* args, void* retval, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
     if (link == nullptr || link->checkWolf() || !albw_shield_features_active()) {
+        return HOOK_CONTINUE;
+    }
+
+    // ============================================
+    // BASH-ENTRY PROBE (ALBW_BASH_PROBE) - remove once the failing predicate is
+    // known. The bash entry below is a verbatim match for the fork's
+    // (d_a_alink.cpp:13016, inside checkItemAction), the hook is typed and
+    // installs, and charges fill correctly - so exactly one of these predicates
+    // is false at the moment of the attempt. Log-on-change of the whole mask,
+    // only while a shield is equipped and R is held, so it cannot spam.
+    // ============================================
+#if ALBW_BASH_PROBE
+    // Also fire on a raw B press even if R was released a frame early, so a
+    // near-miss chord still produces a line instead of silence.
+    if (link->checkShieldGet() &&
+        (mDoCPd_c::getHoldLockR(PAD_1) != 0 || mDoCPd_c::getTrigB(PAD_1) != 0)) {
+        const u32 mask =
+            (albw_manual_shield_button(link) ? 1u << 0 : 0) |
+            (link->itemTriggerCheck(daAlink_c::BTN_B) ? 1u << 1 : 0) |
+            (link->checkGuardActionChange() ? 1u << 2 : 0) |
+            (!link->checkUpperReadyThrowAnime() ? 1u << 3 : 0) |
+            (!link->checkModeFlg(0x70C52) ? 1u << 4 : 0) |
+            (link->checkShieldGet() ? 1u << 5 : 0) |
+            (!link->checkNotBattleStage() ? 1u << 6 : 0) |
+            (link->mLinkAcch.ChkGroundHit() ? 1u << 7 : 0) |
+            (link->checkMagneBootsOn() ? 1u << 8 : 0) |
+            (albw_shield_features_active() ? 1u << 9 : 0) |
+            (albw_shield_parry_enabled() ? 1u << 10 : 0) |
+            (dShield_canSpendBash() ? 1u << 11 : 0) |
+            // rawB and the guard proc MUST be part of the dedup key. Without
+            // them, the one frame that matters - RT held, B pressed, itemTrigger
+            // still lacking B - changes nothing else in the mask and is never
+            // logged, so the probe reports silence exactly where the answer is.
+            (mDoCPd_c::getTrigB(PAD_1) != 0 ? 1u << 12 : 0) |
+            (static_cast<u32>(link->mProcID & 0xFF) << 16);
+        static u32 s_lastMask = 0xFFFFFFFFu;
+        if (mask != s_lastMask) {
+            s_lastMask = mask;
+            // rawB / itemTrigMask separate the two remaining explanations:
+            //   rawB=1 but B=0  -> the pad sees B, mItemTrigger was cleared or
+            //                      never populated before this hook runs
+            //   rawB=0 always   -> the B press never reaches getTrigB at all
+            //                      while R is held (pad-shim / chord swallowing)
+            DuskLog.info("[bash] mask={} btn={} B={} rawB={} itemTrig=0x{} guardChg={} throw={} "
+                         "mode={} shield={} stage={} ground={} magne={} feat={} parry={} "
+                         "canSpend={} chg={}/{} proc={}",
+                         mask, (mask >> 0) & 1, (mask >> 1) & 1,
+                         mDoCPd_c::getTrigB(PAD_1) != 0 ? 1 : 0, (int)link->mItemTrigger,
+                         (mask >> 2) & 1, (mask >> 3) & 1, (mask >> 4) & 1, (mask >> 5) & 1,
+                         (mask >> 6) & 1, (mask >> 7) & 1, (mask >> 8) & 1, (mask >> 9) & 1,
+                         (mask >> 10) & 1, (mask >> 11) & 1, (int)dShield_getBashCharges(),
+                         (int)dShield_getMaxBashCharges(), (int)link->mProcID);
+        }
+    }
+#endif
+
+    // A cooperating mod (dev.albt.albw.shield, request_input_yield) has claimed
+    // the guard/B chord for a few frames. Stand down rather than both acting on
+    // one press. No-op unless another mod actually called it.
+    if (dAlbtShieldApi_inputYielded()) {
         return HOOK_CONTINUE;
     }
 

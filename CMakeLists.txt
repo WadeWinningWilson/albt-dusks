@@ -33,6 +33,7 @@ add_mod(albt_full_plugin
         FEATURES game webgpu
         SOURCES
             src/mod.cpp
+            src/albt_shield_api.cpp
             src/albw_common.cpp
             src/albw_l1_input.cpp
             src/albw_settings_ui.cpp

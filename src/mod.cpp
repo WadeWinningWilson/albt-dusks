@@ -37,6 +37,7 @@
 #include "potion_hooks.h"  // albw_potion_hooks_init (soulbound potion HUD/select/save counts)
 #include "mq_hearts.h"
 #include "shield_mod.h"
+#include "albt_shield_api_impl.h"
 #include "boss_refinement_hooks.h"
 #include "diababa.h"
 #include "fyrus.h"
@@ -256,6 +257,7 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     albw_quick_equip_tick();
     albw_wolf_arts_tick();
     albw_focused_arts_tick();
+    dAlbtShieldApi_tick();
     // Ends the hurricane overlay when Link no longer holds the proc it rides.
     // The donor's hurricane is a real proc, so the engine ends it; the overlay's
     // phase is owned by nobody, and without this any interruption stranded it.
