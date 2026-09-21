@@ -3,6 +3,7 @@
 // See include/d/d_albw_wardrobe.h and Quick-Resistance Work.md.
 // ============================================
 #include "wardrobe.h"
+#include "albw_save_flags.h"
 #include "albw_fork_compat.h"
 
 #if TARGET_PC
@@ -23,19 +24,19 @@ namespace {
 
 // Postman storage save bits — repurposes 697-699 (evict limiter dropped).  Skips
 // 700 (sumo worn), 701-702 (F_0701B/F_0702B).  See Quick-Resistance Work.md.
-constexpr int kStoreWoodSword    = 697;
-constexpr int kStoreOrdonSword   = 698;
-constexpr int kStoreMasterSword  = 699;
-constexpr int kStoreLightSword   = 703;
-constexpr int kStoreOrdonShield  = 704;
-constexpr int kStoreWoodenShield = 705;
-constexpr int kStoreHylianShield = 706;
-constexpr int kStoreSumoOutfit   = 707;
-constexpr int kStoreOrdonOutfit  = 708;
-constexpr int kStoreHerosOutfit  = 709;
-constexpr int kStoreZoraOutfit   = 710;
-constexpr int kStoreMagicOutfit  = 711;
-constexpr int kStoreDeityOutfit  = 712;
+constexpr int kStoreWoodSword    = ALBW_FLAG_STORE_WOOD_SWORD;
+constexpr int kStoreOrdonSword   = ALBW_FLAG_STORE_ORDON_SWORD;
+constexpr int kStoreMasterSword  = ALBW_FLAG_STORE_MASTER_SWORD;
+constexpr int kStoreLightSword   = ALBW_FLAG_STORE_LIGHT_SWORD;
+constexpr int kStoreOrdonShield  = ALBW_FLAG_STORE_ORDON_SHIELD;
+constexpr int kStoreWoodenShield = ALBW_FLAG_STORE_WOODEN_SHIELD;
+constexpr int kStoreHylianShield = ALBW_FLAG_STORE_HYLIAN_SHIELD;
+constexpr int kStoreSumoOutfit   = ALBW_FLAG_STORE_SUMO_OUTFIT;
+constexpr int kStoreOrdonOutfit  = ALBW_FLAG_STORE_ORDON_OUTFIT;
+constexpr int kStoreHerosOutfit  = ALBW_FLAG_STORE_HEROS_OUTFIT;
+constexpr int kStoreZoraOutfit   = ALBW_FLAG_STORE_ZORA_OUTFIT;
+constexpr int kStoreMagicOutfit  = ALBW_FLAG_STORE_MAGIC_OUTFIT;
+constexpr int kStoreDeityOutfit  = ALBW_FLAG_STORE_DEITY_OUTFIT;
 
 constexpr f32 kSwordPenaltyPerExtra   = 0.10f;
 constexpr f32 kShieldPenaltyPerExtra  = 0.15f;
@@ -92,18 +93,14 @@ bool isStorageBitSet(int bit) {
     if (bit < 0) {
         return false;
     }
-    return dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[bit]) != 0;
+    return albw_save_flag_get(bit);
 }
 
 void setStorageBit(int bit, bool on) {
     if (bit < 0) {
         return;
     }
-    if (on) {
-        dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[bit]);
-    } else {
-        dComIfGs_offEventBit(dSv_event_flag_c::saveBitLabels[bit]);
-    }
+    albw_save_flag_set(bit, on);
 }
 
 bool swordIsOwned(u8 itemNo) {

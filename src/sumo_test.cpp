@@ -6,6 +6,7 @@
 // goes through dAlbwOutfit_syncLinkModel() (one reload at a time).
 // ============================================
 #include "sumo_test.h"
+#include "albw_save_flags.h"
 
 #if TARGET_PC
 
@@ -85,8 +86,10 @@ int sCapDonorKind = 0;                       // arc sCapPhase holds: 0 none, 1 M
 
 constexpr int kSumoBodyResIdx = 0x31;
 constexpr const char* kCapArcName = "Kmdl";
-constexpr int kSumoOwnedBit       = 689;
-constexpr int kSumoWrestlerMetBit = 690;
+// Moved out of saveBitLabels - 689/690 are real designer flags, not free space.
+// See albw_save_flags.h for the full account.
+constexpr int kSumoOwnedBit       = ALBW_FLAG_SUMO_OWNED;
+constexpr int kSumoWrestlerMetBit = ALBW_FLAG_SUMO_WRESTLER_MET;
 
 // ============================================
 // NEW CODE — ALBW Port (GLOBAL Cap Wear — model-agnostic independent cap loader, Phase 2)
@@ -1261,7 +1264,7 @@ const char* dAlbwSumoTest_capModelName() {
 }
 
 bool dAlbwSumoTest_isOwned() {
-    return dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[kSumoOwnedBit]) != 0;
+    return albw_save_flag_get(kSumoOwnedBit);
 }
 
 bool dAlbwSumoTest_isShopEligible() {
@@ -1269,7 +1272,7 @@ bool dAlbwSumoTest_isShopEligible() {
 }
 
 bool dAlbwSumoTest_tryPurchaseShop() {
-    dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[kSumoOwnedBit]);
+    albw_save_flag_set(kSumoOwnedBit, true);
     dAlbwOutfit_setSumoWorn(true);
     return true;
 }
@@ -1311,7 +1314,7 @@ void dAlbwSumoTest_onVanillaClothesMenuLeave() {
 }
 
 void dAlbwSumoTest_onWrestlerMet() {
-    dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[kSumoWrestlerMetBit]);
+    albw_save_flag_set(kSumoWrestlerMetBit, true);
 }
 
 #endif  // TARGET_PC

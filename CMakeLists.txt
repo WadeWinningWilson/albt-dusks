@@ -35,6 +35,7 @@ add_mod(albt_full_plugin
             src/mod.cpp
             src/albt_shield_api.cpp
             src/albw_common.cpp
+            src/albw_save_flags.cpp
             src/albw_l1_input.cpp
             src/albw_settings_ui.cpp
             src/albw_stage.cpp

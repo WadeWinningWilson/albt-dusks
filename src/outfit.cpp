@@ -7,6 +7,7 @@
 // rental re-eligibility bits (dMeter2_playerOwnsRentalItem).
 // ============================================
 #include "outfit.h"
+#include "albw_save_flags.h"
 #include "albw_fork_compat.h"
 #include "alink_compat.h"
 
@@ -29,18 +30,19 @@
 
 namespace {
 
-// Wardrobe/stash save bits (dSv_event_flag_c::saveBitLabels) — shared map in
-// docs/Interconnected Chats/Quick-Sumo Work.md.  689 sumo is set by the sumo
-// module's shop purchase; 691-695 are owned by this module.
-constexpr int kStashSumo  = 689;
-constexpr int kStashOrdon = 691;
-constexpr int kStashHeros = 692;
-constexpr int kStashZora  = 693;
-constexpr int kStashMagic = 694;
-constexpr int kStashDeity = 695;
+// Wardrobe/stash flags. These were raw saveBitLabels indices (689, 691-695,
+// 700) until those turned out to be real designer flags rather than free
+// space — see albw_save_flags.h. They are now allocator enumerators; the sumo
+// one is still set by the sumo module's shop purchase.
+constexpr int kStashSumo  = ALBW_FLAG_SUMO_OWNED;
+constexpr int kStashOrdon = ALBW_FLAG_STASH_ORDON;
+constexpr int kStashHeros = ALBW_FLAG_STASH_HEROS;
+constexpr int kStashZora  = ALBW_FLAG_STASH_ZORA;
+constexpr int kStashMagic = ALBW_FLAG_STASH_MAGIC;
+constexpr int kStashDeity = ALBW_FLAG_STASH_DEITY;
 
 // Sumo CURRENTLY worn (per-save).  697-699 belong to Quick Swap, so 700.
-constexpr int kSumoWornBit = 700;
+constexpr int kSumoWornBit = ALBW_FLAG_SUMO_WORN;
 
 // Native clothes dItemNo for an outfit kind.  -1 for SUMO (no native item).
 int itemNoForKind(dAlbwOutfitKind kind) {
@@ -312,7 +314,7 @@ bool dAlbwOutfit_isOwned(dAlbwOutfitKind kind) {
     if (bit < 0) {
         return false;
     }
-    return dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[bit]) != 0;
+    return albw_save_flag_get(bit);
 }
 
 void dAlbwOutfit_recordOwnedByItemNo(int itemNo) {
@@ -320,7 +322,7 @@ void dAlbwOutfit_recordOwnedByItemNo(int itemNo) {
     if (bit < 0) {
         return;  // not a wardrobe-tracked outfit
     }
-    dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[bit]);
+    albw_save_flag_set(bit, true);
 }
 
 // №238: public wrapper over the private kind->item map (see itemNoForKind).
@@ -329,14 +331,14 @@ int dAlbwOutfit_itemNoForKind(dAlbwOutfitKind kind) {
 }
 
 bool dAlbwOutfit_isSumoWorn() {
-    return dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[kSumoWornBit]) != 0;
+    return albw_save_flag_get(kSumoWornBit);
 }
 
 void dAlbwOutfit_setSumoWorn(bool on) {
     if (on) {
-        dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[kSumoWornBit]);
+        albw_save_flag_set(kSumoWornBit, true);
     } else {
-        dComIfGs_offEventBit(dSv_event_flag_c::saveBitLabels[kSumoWornBit]);
+        albw_save_flag_set(kSumoWornBit, false);
     }
 }
 
@@ -488,8 +490,8 @@ void dAlbwOutfit_syncWornOwnership() {
     // You own what you wear: seed the stash bit for the equipped native outfit so
     // vanilla-acquired clothes register as owned without per-grant-site hooks.
     const int bit = stashBitForItemNo(dComIfGs_getSelectEquipClothes());
-    if (bit >= 0 && dComIfGs_isEventBit(dSv_event_flag_c::saveBitLabels[bit]) == 0) {
-        dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[bit]);
+    if (bit >= 0 && !albw_save_flag_get(bit)) {
+        albw_save_flag_set(bit, true);
     }
 }
 
