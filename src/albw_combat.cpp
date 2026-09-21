@@ -4,6 +4,11 @@
 #include "f_op/f_op_actor_mng.h"
 #include "f_pc/f_pc_name.h"
 
+#include "SSystem/SComponent/c_cc_d.h"
+
+#include "hurricane_spin.h"
+#include "wolf_combat.h"
+
 dAlbwHelmBashTier dAlbwCombat_getHelmBashTier(fopAc_ac_c* actor) {
     if (actor == nullptr || fopAcM_GetGroup(actor) != fopAc_ENEMY_e) {
         return dAlbwHelmBash_THRESHOLD;
@@ -54,4 +59,58 @@ u16 dAlbwHP_applyDurabilityMult(s16 profName, u16 damage) {
         return static_cast<u16>((damage * 3) / 2);
     }
     return damage;
+}
+
+// ============================================
+// Guard-opener classification. Port of fork src/d/d_albw_combat.cpp:72-98.
+// Disambiguation is the whole job here:
+//  - Hurricane shares CUT_TYPE_LARGE_TURN_* with Great Spin, so the check keys
+//    on the hurricane STATE - Great Spin stays a clank by design.
+//  - The Combat Howl AOE rides AT_TYPE_WOLF_CUT_TURN on the ALINK collider, the
+//    same AT type as the ordinary wolf spin; the howl-active flag disambiguates
+//    (Link cannot wolf-spin mid-howl).
+//  - The Midna arm is its own actor, so its name is sufficient.
+// ============================================
+bool dAlbwCombat_isGuardOpenerHit(cCcD_Obj* i_hitObj) {
+    if (i_hitObj == nullptr) {
+        return false;
+    }
+
+    fopAc_ac_c* attacker = i_hitObj->GetAc();
+    if (attacker == nullptr) {
+        return false;
+    }
+
+    const s16 name = fopAcM_GetName(attacker);
+
+    // [PORT-TRANSLATED] fork fpcNm_ALBW_MIDNA_ARM_e (fork f_pc_name.h). The stock
+    // proc-name table has no slot for it, so the mod spawns the arm under the raw
+    // id 0x031A - src/midna_arm.cpp:51 kFpcNm_ALBW_MIDNA_ARM. Same translation
+    // already used at src/wolf_uty_port.inc:375.
+    if (name == 0x031A) {
+        return true;
+    }
+
+    if (name != fpcNm_ALINK_e) {
+        return false;
+    }
+
+    // [PORT-TRANSLATED] fork daAlink_c::mWolfCombatHowlActive (fork-only field,
+    // fork include/d/actor/d_a_alink.h:4681) -> the DUSK's own howl-active
+    // accessor (src/wolf_howl_combat.cpp:307-310). The fork's NULL check on
+    // daAlink_getAlinkActorClass() is folded into the fpcNm_ALINK_e gate above:
+    // a collider owned by ALINK cannot exist without the ALINK actor.
+    if (albw_wolf_combat_howl_active() && i_hitObj->ChkAtType(AT_TYPE_WOLF_CUT_TURN)) {
+        return true;
+    }
+
+    // [PORT-TRANSLATED] fork `link->mProcID == daAlink_c::PROC_CUT_GS_HURRICANE ||
+    // link->mProcID == daAlink_c::PROC_CUT_GS_HURRICANE_TIRED`. The stock proc
+    // table has no slot for either, so the mod overlays the hurricane onto
+    // PROC_CUT_TURN (src/hurricane_spin.cpp:195-202) and mProcID never carries the
+    // fork value. albw_hurricane_is_active() is `s_phase != HP_NONE` over
+    // HurricanePhase { HP_NONE, HP_SPIN, HP_TIRED } (src/hurricane_spin.cpp:197,
+    // :360) - HP_SPIN and HP_TIRED are exactly the fork's two procs, so this is a
+    // 1:1 reproduction of the disjunction, not a narrowing.
+    return albw_hurricane_is_active();
 }
