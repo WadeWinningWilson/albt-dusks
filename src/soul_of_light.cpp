@@ -21,6 +21,8 @@
 #include "d/d_com_inf_game.h"
 #include "d/d_save.h"
 #include "potion.h"  // dAlbwPotion_refillSoulboundToMax (refill soulbound potion on death)
+#include "soul_probe.h"
+#include "albw_dusk_log.h"  // DuskLog, for the lifecycle trace
 #include "f_op/f_op_actor.h"
 #include "f_op/f_op_actor_mng.h"
 #include "f_pc/f_pc_name.h"
@@ -110,6 +112,28 @@ bool sTearRenderFlagWasSet[3] = {};
 // save bit unless this says a push actually happened - see the block comment
 // on popTearRenderFlags for the save damage that caused.
 bool sTearRenderFlagsPushed = false;
+
+#if ALBW_SOUL_PROBE
+// One line, one shape, at every lifecycle point - so a bug report can be
+// diffed against a working run instead of read prose-style. vessel= is the
+// save state this feature writes (dSv_light_drop_c::mLightDropGetFlag) and
+// tears= its companion counts: a cleared flag with a full count of 16 is the
+// one detectable signature of the damage this feature used to do.
+void soulTrace(const char* ev) {
+    dSv_light_drop_c& d = g_dComIfG_gameInfo.info.getPlayer().getLightDrop();
+    DuskLog.info("[soul] {} pending={} spawned={} recovery={} actorId={} room={} "
+                 "snap={} pushed={} vessel={}{}{} tears={}/{}/{}",
+                 ev, sOrbPending ? 1 : 0, sOrbSpawned ? 1 : 0, sOrbRecovery,
+                 (unsigned)sOrbActorId, sOrbRoom, sOrbSnapshotValid ? 1 : 0,
+                 sTearRenderFlagsPushed ? 1 : 0,
+                 d.isLightDropGetFlag(0) ? 1 : 0, d.isLightDropGetFlag(1) ? 1 : 0,
+                 d.isLightDropGetFlag(2) ? 1 : 0, (int)d.getLightDropNum(0),
+                 (int)d.getLightDropNum(1), (int)d.getLightDropNum(2));
+}
+#define ALBW_SOUL_TRACE(ev) soulTrace(ev)
+#else
+#define ALBW_SOUL_TRACE(ev) ((void)0)
+#endif
 
 static constexpr u32 kRecoveryDropParams = 0x0000FF00u;
 static constexpr f32 kOrbFloatAboveGround = 135.0f;
@@ -271,6 +295,7 @@ void destroySpawnedOrbActor() {
 }
 
 void resetOrbState(bool deleteActor) {
+    ALBW_SOUL_TRACE("reset_enter");
     if (deleteActor) {
         albw_tear_actor_despawn();  // remove any live custom tear (new death / cleanup)
     }
@@ -284,6 +309,7 @@ void resetOrbState(bool deleteActor) {
     sOrbSpawnCooldown = 0;
     sOrbStage[0] = '\0';
     sOrbRoom = -1;
+    ALBW_SOUL_TRACE("reset_exit");
 }
 
 void clearLinkTearCollectEffect() {
@@ -416,6 +442,7 @@ void trySpawnOrbInRoom(const char* stageName, int roomNo) {
         return;
     }
     sOrbSpawned = true;
+    ALBW_SOUL_TRACE("spawned");
 }
 
 void tickSpawn() {
@@ -457,6 +484,7 @@ void on_dead_post(ModContext*, void*, void*, void*) {
     // it already hooks. refillSoulboundToMax self-gates (no-op without the potion),
     // so this is independent of the Soul-of-Light orb feature gated below.
     // ============================================
+    ALBW_SOUL_TRACE("death");
     dAlbwPotion_refillSoulboundToMax();
 
     if (!orbEnabled()) {
@@ -511,6 +539,7 @@ void on_dead_post(ModContext*, void*, void*, void*) {
     }
 
     sOrbPending = true;
+    ALBW_SOUL_TRACE("pending_armed");
     sOrbSpawned = false;
     sOrbSnapshotValid = false;
     // NOTE: the fork kicks the tear load here (onLinkDeathBegin), but doing the same in the
@@ -550,8 +579,10 @@ HookAction on_drop_get_pre(ModContext*, void* args, void*, void*) {
     if (!isRecoveryOrbDrop(drop)) {
         return HOOK_CONTINUE;
     }
+    ALBW_SOUL_TRACE("collect_pre");
     grantOrbRecovery();
     drop->mSetCollectDrop = false;
+    ALBW_SOUL_TRACE("collect_post");
     return HOOK_SKIP_ORIGINAL;
 }
 
