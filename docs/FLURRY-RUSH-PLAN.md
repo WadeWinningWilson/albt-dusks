@@ -81,6 +81,10 @@ with Link exempted by `daPy_frameCtrl_c::updateFrame()` calling
 `updateWithRateScale(1.0f)` (`FORK/src/d/actor/d_a_player.cpp:31-38`,
 comment: *"Flurry Rush slows the world, not Link"*). Stock has neither.
 
+Note also that the fork drives the scale every sim tick from `fapGm_Execute`
+(`f_ap_game.cpp:946-955`) while the mod sets it on entry/exit — equivalent
+today, but not once a second consumer of the scale exists.
+
 **There is no service alternative.** Every SDK service header was checked; no
 host-level time-scale API exists in Dusklight 2.0.1.
 
@@ -97,17 +101,29 @@ Link back to 1.0.
    actors, UI, materials, particles — many times per frame. The early-out on
    `scale >= 0.999f` must be the literal first statement or it costs FPS with
    the feature *off*. That early-out is also what keeps "toggle off == stock".
-2. **Fidelity delta on `SKIP_ORIGINAL`.** Stock's `update()` opens with
-   `IF_DUSK(dusk::interp::material::Update materialUpdate(*this));` — a
-   frame-interpolation RAII guard the fork's scaled variant does **not** have.
-   Skipping the original drops it for every animation while the rush is active.
-   Verify against the fork's real behaviour; it may be a fork oversight.
+2. **Fidelity delta on `SKIP_ORIGINAL`** — resolved, and it is not a fork
+   oversight. Stock's `update()` opens with
+   `IF_DUSK(dusk::interp::material::Update materialUpdate(*this));`, a
+   frame-interpolation guard. The fork's scaled variant lacks it because
+   `dusk/interp` **does not exist anywhere in the fork tree** — it never had
+   the guard to drop. Our ported body cannot keep it either: the header lives
+   in the host's `src/`, not the SDK, and `dusklight_exports.def` carries zero
+   `interp@dusk` symbols. Net cost: non-Link material animation loses frame
+   interpolation for the duration of a rush window. Link keeps it, because Link
+   runs the original — closer to stock than the fork's own
+   `updateWithRateScale(1.0f)`. Asking upstream to export it is the real DN-10
+   step 1 if this ever matters visually.
 3. **Blast radius.** Scaling all J3D frame controllers also slows UI, cutscene
    actors and material animation. The fork accepts this.
-4. **It obsoletes existing code.** The `fopAcM_posMove` speed-scaling hooks
-   (`flurry_hooks.cpp:69-106`) look like a mod-side workaround for the missing
-   engine scale — step-3 code that step 1 makes redundant. **Flag for deletion,
-   not preservation.**
+4. ~~It obsoletes existing code.~~ **CORRECTED after the port landed.** The
+   `fopAcM_posMove` hooks (`flurry_hooks.cpp:69-106`) do **NOT** double-apply
+   and must **not** be deleted: position advance and animation-frame advance
+   are different quantities and both are needed. The fork has its own
+   `fopAcM_posMove` edit (`f_op_actor_mng.cpp:823-849`) with the same ALINK
+   exemption. They ARE a paraphrase and want a proper re-port later — the donor
+   scales `pos` (and `i_movePos`) and never touches `speed`, whereas the mod
+   scales `speed` and divides it back (lossy, and `speed` reads wrong during
+   the call), skips `i_movePos`, and lacks the quick-equip clause.
 
 **Land this alone and verify it before anything stacks on it.** It is
 independently testable: enemies visibly slow, Link does not.
@@ -156,7 +172,8 @@ mechanism, the Link-exempt frame controller, the shop-row pattern.
 2. Proc overlay via port_tool
 3. Trigger predicate swap + `dShield_isBashBarFull()` + charge spend (cheap)
 4. Shop tier row, session-only
-5. Delete the obsolete `fopAcM_posMove` scaling hooks and the dead
+5. Re-port the `fopAcM_posMove` scaling from the donor (see §4 item 4 — a
+   paraphrase to replace, NOT code to delete) and remove the dead
    `shouldSuppressAlbwSpend`
 6. Un-hide the toggle (`albw_settings_ui.cpp:71-76`)
 

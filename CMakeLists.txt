@@ -77,6 +77,7 @@ add_mod(albt_full_plugin
             src/mail_hooks.cpp
             src/focused_arts.cpp
             src/sim_time_scale.cpp
+            src/sim_time_scale_hooks.cpp
             src/flurry_rush.cpp
             src/flurry_hooks.cpp
             src/wolf_arts.cpp

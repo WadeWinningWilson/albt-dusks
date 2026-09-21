@@ -12,6 +12,7 @@
 #include "menu_ring_ext.h"
 #include "focused_arts.h"
 #include "flurry_rush.h"
+#include "sim_time_scale.h"
 #include "hold_a_crawl.h"
 #include "enemy_lockout.h"
 #include "lockout.h"
@@ -195,6 +196,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_hurricane_init(error) != MOD_OK ||
         albw_deku_leaf_init(error) != MOD_OK ||
         albw_outfit_swim_init(error) != MOD_OK ||
+        albw_sim_time_scale_hooks_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
         albw_wolf_combat_init(error) != MOD_OK ||
         albw_e_s1_wolf_pack_init(error) != MOD_OK ||
@@ -285,6 +287,7 @@ MOD_EXPORT ModResult mod_shutdown(ModError* error) {
     albw_tear_glow_shutdown(error);   // frees tear_glow.wgsl + WebGPU objects
     albw_deku_leaf_shutdown(error);   // frees the bundled leaf BMD buffer
     albw_armogohma_shutdown(error);   // frees the bundled reveal BMD buffer
+    albw_sim_time_scale_hooks_shutdown(error);
     albw_flurry_hooks_shutdown(error);
     albw_mail_hooks_shutdown(error);
     albw_rental_postman_hooks_shutdown(error);
