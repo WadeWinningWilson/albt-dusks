@@ -67,6 +67,20 @@ namespace {
 
 ModResult register_all_config(ModError* error) {
     if (albw_register_int("progress_flags_a", 0, &g_progress_flags_a) != MOD_OK ||
+        albw_register_int("ctr_fa_tier", 0, &g_ctr_fa_tier) != MOD_OK ||
+        albw_register_int("ctr_potion_tier", 0, &g_ctr_potion_tier) != MOD_OK ||
+        albw_register_int("ctr_heart_shop_tier", 0, &g_ctr_heart_shop_tier) != MOD_OK ||
+        albw_register_int("ctr_meter_shop_tier", 0, &g_ctr_meter_shop_tier) != MOD_OK ||
+        albw_register_int("ctr_bonus_half_hearts", 0, &g_ctr_bonus_half_hearts) != MOD_OK ||
+        albw_register_int("ctr_bonus_quarter_hearts", 0, &g_ctr_bonus_quarter_hearts) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_bonus_0", 0, &g_ctr_sword_atp_bonus_0) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_bonus_1", 0, &g_ctr_sword_atp_bonus_1) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_bonus_2", 0, &g_ctr_sword_atp_bonus_2) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_bonus_3", 0, &g_ctr_sword_atp_bonus_3) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_step_0", 0, &g_ctr_sword_atp_step_0) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_step_1", 0, &g_ctr_sword_atp_step_1) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_step_2", 0, &g_ctr_sword_atp_step_2) != MOD_OK ||
+        albw_register_int("ctr_sword_atp_step_3", 0, &g_ctr_sword_atp_step_3) != MOD_OK ||
         albw_register_int("progress_flags_b", 0, &g_progress_flags_b) != MOD_OK ||
         albw_register_bool("meter", true, &g_meter_enabled) != MOD_OK ||
         albw_register_bool("stick_cycle", true, &g_stick_cycle) != MOD_OK ||

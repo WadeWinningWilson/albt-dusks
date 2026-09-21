@@ -67,3 +67,19 @@ extern ConfigVarHandle g_focused_arts_cheat;
 // save file. See albw_save_flags.h. Deliberately never given a UI control.
 extern ConfigVarHandle g_progress_flags_a;
 extern ConfigVarHandle g_progress_flags_b;
+
+// Mod progression counters, config.json-backed (were event regs 100-113).
+extern ConfigVarHandle g_ctr_fa_tier;
+extern ConfigVarHandle g_ctr_potion_tier;
+extern ConfigVarHandle g_ctr_heart_shop_tier;
+extern ConfigVarHandle g_ctr_meter_shop_tier;
+extern ConfigVarHandle g_ctr_bonus_half_hearts;
+extern ConfigVarHandle g_ctr_bonus_quarter_hearts;
+extern ConfigVarHandle g_ctr_sword_atp_bonus_0;
+extern ConfigVarHandle g_ctr_sword_atp_bonus_1;
+extern ConfigVarHandle g_ctr_sword_atp_bonus_2;
+extern ConfigVarHandle g_ctr_sword_atp_bonus_3;
+extern ConfigVarHandle g_ctr_sword_atp_step_0;
+extern ConfigVarHandle g_ctr_sword_atp_step_1;
+extern ConfigVarHandle g_ctr_sword_atp_step_2;
+extern ConfigVarHandle g_ctr_sword_atp_step_3;

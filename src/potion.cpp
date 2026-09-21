@@ -10,6 +10,7 @@
 // ============================================
 
 #include "helpers/string.hpp"  // TEXT_SPAN - must precede any d_save.h include
+#include "albw_save_flags.h"
 #include "potion.h"
 #include "albw_common.h"
 #include "albw_game.h"
@@ -52,7 +53,7 @@ static constexpr u8 kAlbwPotionCapacityShopTiers = 1;
 static constexpr int kAlbwPotionCapacityShopPrice = 80;
 
 static u8 readCapacityTier() {
-    const int tier = albw_game::get_event_reg(kAlbwPotionCapacityTierReg);
+    const int tier = albw_save_counter_get(ALBW_CTR_POTION_TIER);
     if (tier < 0) {
         return 0;
     }
@@ -63,7 +64,7 @@ static u8 readCapacityTier() {
 }
 
 static void writeCapacityTier(u8 tier) {
-    albw_game::set_event_reg(kAlbwPotionCapacityTierReg, tier);
+    albw_save_counter_set(ALBW_CTR_POTION_TIER, tier);
 }
 
 }  // namespace

@@ -1,4 +1,5 @@
 #include "mq_hearts.h"
+#include "albw_save_flags.h"
 
 #include "albw_common.h"
 #include "albw_game.h"
@@ -23,10 +24,10 @@ static constexpr int kHeartShopTiers = 17;
 static constexpr int kMeterShopTiers = 23;
 static constexpr int kMeterUnitsPerBuy = 632;
 
-static constexpr u16 kHeartShopTierReg = static_cast<u16>(100 << 8) | 0xFF;
-static constexpr u16 kMeterShopTierReg = static_cast<u16>(101 << 8) | 0xFF;
-static constexpr u16 kBonusHalfHeartsReg = static_cast<u16>(102 << 8) | 0xFF;
-static constexpr u16 kBonusQuarterHeartsReg = static_cast<u16>(104 << 8) | 0xFF;
+static constexpr int kHeartShopTierReg = ALBW_CTR_HEART_SHOP_TIER;
+static constexpr int kMeterShopTierReg = ALBW_CTR_METER_SHOP_TIER;
+static constexpr int kBonusHalfHeartsReg = ALBW_CTR_BONUS_HALF_HEARTS;
+static constexpr int kBonusQuarterHeartsReg = ALBW_CTR_BONUS_QUARTER_HEARTS;
 
 static constexpr int kHeartShopPrices[kHeartShopTiers] = {
     225, 250, 275, 325, 375, 425, 500, 575, 675, 800,
@@ -38,12 +39,16 @@ static constexpr int kMeterShopPrices[kMeterShopTiers] = {
     2500, 2750, 3000, 3033, 3333, 3333, 3333,
 };
 
-u8 readReg(u16 reg) {
-    return albw_game::get_event_reg(reg);
+// Storage moved off the save into config.json (albw_save_flags.h). These
+// counters were only ever read back by this module - the bonus reaches the
+// game through the getMaxLifeGauge POST hook below, never by writing the
+// stock heart count - so nothing in the engine needs to see them.
+u8 readReg(int counter) {
+    return static_cast<u8>(albw_save_counter_get(counter));
 }
 
-void writeReg(u16 reg, u8 value) {
-    albw_game::set_event_reg(reg, value);
+void writeReg(int counter, u8 value) {
+    albw_save_counter_set(counter, value);
 }
 
 // Fork grantHalfHeartMaxCapacity (d_albw_master_quest.cpp:63): bump the bonus

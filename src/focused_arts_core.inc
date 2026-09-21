@@ -315,13 +315,14 @@ static void logFaEvent(const char* i_msg) {
 }
 
 // [NEW helper] readShopTierReg
+// Storage moved off the save into config.json - see albw_save_flags.h.
 static u8 readShopTierReg() {
-    return dComIfGs_getEventReg(kFocusedArtsShopTierReg);
+    return static_cast<u8>(albw_save_counter_get(ALBW_CTR_FA_TIER));
 }
 
 // [NEW helper] writeShopTierReg
 static void writeShopTierReg(u8 tier) {
-    dComIfGs_setEventReg(kFocusedArtsShopTierReg, tier);
+    albw_save_counter_set(ALBW_CTR_FA_TIER, tier);
 }
 
 // [NEW helper] clampPurchasedTier

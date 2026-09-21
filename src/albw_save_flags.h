@@ -84,3 +84,46 @@ enum AlbwSaveFlag {
 // unknown item to -1 need no extra guard.
 bool albw_save_flag_get(int flag);
 void albw_save_flag_set(int flag, bool on);
+
+// ============================================
+// COUNTERS - the same store, for the small 0-255 progression counters that
+// used to live in event registers 100-113.
+//
+// Those registers were SAFE (100-234 is outside anything stock reads, unlike
+// the saveBitLabels disaster) but they were still bytes in the player's save
+// file. Every one of them is read back only by the mod and applied through a
+// mod hook - mq_hearts, for instance, never writes the stock heart count, it
+// hooks dComIfGs_getMaxLifeGauge and adds its bonus at read time
+// (mq_hearts.cpp:111) - so nothing in the game engine needs to see them and
+// they belong in config.json with the flags.
+//
+// They get one NAMED config var each rather than being packed, so config.json
+// stays readable and a "New Game" reset can rewrite them individually.
+//
+// NOT MOVED, deliberately: anything STOCK reads stays in the save. Granting a
+// purchased item, spending rupees, draining life, setting a bottle or an equip
+// slot are all invisible to the engine if written to config.json - that would
+// not remove a write, it would remove the effect.
+// ============================================
+enum AlbwSaveCounter {
+    ALBW_CTR_FA_TIER = 0,          // was event reg 103
+    ALBW_CTR_POTION_TIER,          // was 105
+    ALBW_CTR_HEART_SHOP_TIER,      // was 100
+    ALBW_CTR_METER_SHOP_TIER,      // was 101
+    ALBW_CTR_BONUS_HALF_HEARTS,    // was 102
+    ALBW_CTR_BONUS_QUARTER_HEARTS, // was 104
+
+    // Four swords x (bonus, step) - were 106-109 and 110-113. Indexed by
+    // swordId, so these two must stay contiguous and in order.
+    ALBW_CTR_SWORD_ATP_BONUS_0,
+    ALBW_CTR_SWORD_ATP_BONUS_3 = ALBW_CTR_SWORD_ATP_BONUS_0 + 3,
+    ALBW_CTR_SWORD_ATP_STEP_0,
+    ALBW_CTR_SWORD_ATP_STEP_3 = ALBW_CTR_SWORD_ATP_STEP_0 + 3,
+
+    ALBW_CTR_COUNT,
+};
+
+// Clamped to 0-255, matching the u8 the event registers held. An out-of-range
+// id reads 0 and writes nothing.
+int  albw_save_counter_get(int counter);
+void albw_save_counter_set(int counter, int value);

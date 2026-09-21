@@ -30,6 +30,7 @@
 // ============================================
 
 #include "global.h"
+#include "albw_save_flags.h"
 
 #include "focused_arts.h"
 

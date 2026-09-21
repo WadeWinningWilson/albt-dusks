@@ -79,5 +79,63 @@ void albw_save_flag_set(int flag, bool on) {
 }
 
 // ============================================
+// COUNTERS. One named config var each - see the header for why these left the
+// event registers even though those were safe.
+//
+// The table is indexed by AlbwSaveCounter, so its order is load-bearing for
+// the two sword_atp runs, which are addressed as base + swordId. The
+// static_assert below is what stops a reordered enum from silently writing a
+// sword's attack bonus into the potion tier.
+// ============================================
+namespace {
+
+ConfigVarHandle* const kCounterVars[] = {
+    &g_ctr_fa_tier,
+    &g_ctr_potion_tier,
+    &g_ctr_heart_shop_tier,
+    &g_ctr_meter_shop_tier,
+    &g_ctr_bonus_half_hearts,
+    &g_ctr_bonus_quarter_hearts,
+    &g_ctr_sword_atp_bonus_0, &g_ctr_sword_atp_bonus_1,
+    &g_ctr_sword_atp_bonus_2, &g_ctr_sword_atp_bonus_3,
+    &g_ctr_sword_atp_step_0,  &g_ctr_sword_atp_step_1,
+    &g_ctr_sword_atp_step_2,  &g_ctr_sword_atp_step_3,
+};
+
+static_assert(sizeof(kCounterVars) / sizeof(kCounterVars[0]) == ALBW_CTR_COUNT,
+              "counter var table is out of step with AlbwSaveCounter - the sword_atp runs "
+              "are addressed as base + swordId, so a mismatch misroutes a write");
+
+}  // namespace
+
+int albw_save_counter_get(int counter) {
+    if (counter < 0 || counter >= ALBW_CTR_COUNT) {
+        return 0;
+    }
+    const int v = albw_cfg_int(*kCounterVars[counter], 0);
+    // Clamp on READ as well as write: config.json is user-editable, so a
+    // hand-typed 9999 must not reach code that assumed a u8 register.
+    if (v < 0) {
+        return 0;
+    }
+    return v > 255 ? 255 : v;
+}
+
+void albw_save_counter_set(int counter, int value) {
+    if (counter < 0 || counter >= ALBW_CTR_COUNT) {
+        return;
+    }
+    const ConfigVarHandle var = *kCounterVars[counter];
+    if (var == 0 || svc_config == nullptr) {
+        return;
+    }
+    const int clamped = value < 0 ? 0 : (value > 255 ? 255 : value);
+    if (albw_cfg_int(var, 0) == clamped) {
+        return;  // debounced, not free - do not dirty the file for a no-op
+    }
+    svc_config->set_int(mod_ctx, var, static_cast<int64_t>(clamped));
+}
+
+// ============================================
 // NEW CODE ENDS HERE
 // ============================================

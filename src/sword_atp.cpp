@@ -13,6 +13,7 @@
 
 
 #include "sword_atp.h"
+#include "albw_save_flags.h"
 #include "albw_common.h"
 #include "albw_game.h"
 #include "config_vars.h"
@@ -66,20 +67,23 @@ static constexpr int kStepRegIndexBase  = 110;
 
 static char sDescBuf[kAlbwSwordAtpCount][256];
 
-static u8 readReg(u16 reg) {
-    return albw_game::get_event_reg(reg);
+// Storage moved off the save into config.json (albw_save_flags.h). The
+// reg-shaped helpers are kept so the call sites are unchanged; what they now
+// pass is an AlbwSaveCounter id rather than an encoded register.
+static u8 readReg(int counter) {
+    return static_cast<u8>(albw_save_counter_get(counter));
 }
 
-static void writeReg(u16 reg, u8 value) {
-    albw_game::set_event_reg(reg, value);
+static void writeReg(int counter, u8 value) {
+    albw_save_counter_set(counter, value);
 }
 
-static u16 bonusRegFor(int swordId) {
-    return static_cast<u16>((kBonusRegIndexBase + swordId) << 8) | 0xFFu;
+static int bonusRegFor(int swordId) {
+    return ALBW_CTR_SWORD_ATP_BONUS_0 + swordId;
 }
 
-static u16 stepRegFor(int swordId) {
-    return static_cast<u16>((kStepRegIndexBase + swordId) << 8) | 0xFFu;
+static int stepRegFor(int swordId) {
+    return ALBW_CTR_SWORD_ATP_STEP_0 + swordId;
 }
 
 static int countInsectFirstBits() {
