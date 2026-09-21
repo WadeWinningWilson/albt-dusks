@@ -33,6 +33,7 @@
 #include "deku_leaf.h"
 #include "outfit_swim.h"
 #include "modules.h"
+#include "magic_jar_probe.h"
 #include "tear_actor.hpp"  // albw_tear_actor_init / albw_tear_glow_init (Dusklight 2.0 tear)
 #include "potion_grant.h"  // albw_potion_grant_init / albw_potion_grant_tick (soulbound potion)
 #include "potion_bottle.h"  // albw_potion_bottle_init (soulbound potion drink/heal/consume)
@@ -283,6 +284,13 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     // phase is owned by nobody, and without this any interruption stranded it.
     albw_hurricane_frame_watch();
     albw_flurry_tick();
+
+#if ALBW_MAGICJAR_PROBE
+    // Bring-up only: samples the meter for a few frames after a jar grant, to
+    // tell "the value does not persist" apart from "the HUD does not show it".
+    // Compiles out with the probe off.
+    albw_magic_jar_probe_tick();
+#endif
     albw_colossal_wallet_tick();
     albw_rental_shop_tick();
     albw_end_game_transform_tick();

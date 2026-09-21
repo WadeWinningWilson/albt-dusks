@@ -59,7 +59,14 @@
 // Temporary chain probe: jars spawn and can be picked up but grant nothing.
 // Logs each link once per pickup so one run shows exactly where it dies.
 // MUST be 0 before release (docs/RELEASE-PROCEDURE.md step 1).
-#define ALBW_MAGICJAR_PROBE 1
+#include "magic_jar_probe.h"
+
+#if ALBW_MAGICJAR_PROBE
+// Post-grant meter sampler state; armed in the itemGet hook, drained by
+// albw_magic_jar_probe_tick() from the mod tick.
+static int s_probeSampleFrames = 0;
+static int s_probeLastValue = -1;
+#endif
 
 #if TARGET_PC
 
@@ -164,6 +171,14 @@ HookAction on_item_get_pre(ModContext*, void* args, void*, void*) {
 #if ALBW_MAGICJAR_PROBE
     DuskLog.info("[jar] 4 after execItemGet: meter={}/{}", albw_meter_get_value(),
                  albw_meter_get_max());
+    // ============================================
+    // PERSISTENCE ARM. The first run proved the GRANT works - the meter moved
+    // 4885 -> 8518, exactly 10900/3, the L_MAGIC third - but the player did not
+    // see it on the bar. So the open question is no longer "does the jar give
+    // anything", it is "does the value survive, and does the HUD read it".
+    // Arm a short sampler so the next run shows whether it holds or is reverted
+    // within a few frames by something downstream.
+    s_probeSampleFrames = 12;
 #endif
     return HOOK_SKIP_ORIGINAL;
 }
@@ -257,6 +272,21 @@ void install(const char* what, ModResult r) {
 }
 
 }  // namespace
+
+#if ALBW_MAGICJAR_PROBE
+void albw_magic_jar_probe_tick() {
+    if (s_probeSampleFrames <= 0) {
+        return;
+    }
+    --s_probeSampleFrames;
+    const int v = albw_meter_get_value();
+    if (v != s_probeLastValue) {
+        DuskLog.info("[jar] 5 +{}f meter={}/{}", 12 - s_probeSampleFrames, v,
+                     albw_meter_get_max());
+        s_probeLastValue = v;
+    }
+}
+#endif
 
 ModResult albw_magic_jar_init(ModError*) {
     // --- field (dropped-in-world) models: {arc, bmd, bck, brk, field_0xa, heap} ---

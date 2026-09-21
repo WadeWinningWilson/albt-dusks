@@ -315,10 +315,17 @@ void AlbwBtn_c::albwDebugLogEvent(const char* event) const {
     const f32 animFrame = mpModelMorf2 != NULL ? mpModelMorf2->getFrame() : -1.0f;
     const int animStop = mpModelMorf2 != NULL && mpModelMorf2->isStop() ? 1 : 0;
 
-    DuskLog.info("[b_tn] f={} evt={} act={}/{} a2={} shield={} headLock={} window={} flags={} "
+    // `headLock` used to name field_0xaa8 here, which is the "this bash already
+    // counted" latch and NOT fopEn_flag_HeadLock. Reading the first run I nearly
+    // called the head-lock risk closed on the wrong field. aa8 now says what it
+    // is, and hlock is the real checkHeadLockFlg() the scope flagged: our port
+    // calls onHeadLockFlg() and H02 removes setActionMode's unconditional
+    // offHeadLockFlg() rescue, so a stranded lock is the actual release risk.
+    DuskLog.info("[b_tn] f={} evt={} act={}/{} a2={} shield={} aa8={} hlock={} window={} flags={} "
                  "break={} anim={} stop={} bash={}/{} pending={} inFlight={} mType={}",
                  g_Counter.mCounter0, event, albwDarknutAction1Name(mActionMode1), mActionMode1,
-                 mActionMode2, field_0xa91 ? 1 : 0, field_0xaa8 ? 1 : 0, (int)field_0xaa2,
+                 mActionMode2, field_0xa91 ? 1 : 0, field_0xaa8 ? 1 : 0,
+                 checkHeadLockFlg() ? 1 : 0, (int)field_0xaa2,
                  (int)field_0xa9d, mNextBreakPart, animFrame, animStop, dShield_getBashCharges(),
                  dShield_getMaxBashCharges(), dShield_hasFullBarPunishPending() ? 1 : 0,
                  dShield_hasFullBarBashInFlight() ? 1 : 0, (int)mType);
@@ -400,38 +407,6 @@ DEFINE_HOOK(&daB_TN_c::executeChaseL, BtnExecuteChaseL);
 DEFINE_HOOK(&daB_TN_c::executeGuardL, BtnExecuteGuardL);
 DEFINE_HOOK(&daB_TN_c::executeYoroke, BtnExecuteYoroke);
 
-#if ALBW_DARKNUT_PROBE
-// ============================================
-// BRING-UP PROBE ONLY - not part of the port, and not compiled at all with
-// the probe off.
-//
-// THE QUESTION IT ANSWERS. field_0xaa2 is the guard-open window. Stock
-// DECLARES the byte (d_a_b_tn.h:191) and never reads or writes it anywhere
-// in the tree, which is exactly why it was free to take - but it also means
-// nothing in stock is known to initialise it. If daB_TN_c::create leaves it
-// holding whatever was in the actor heap, a Darknut spawns with a guard
-// window already open and takes damage it should block, for up to 255 frames
-// until the H33 countdown drains it.
-//
-// OBSERVE ONLY, deliberately. Zeroing it here would make the symptom go away
-// and destroy the evidence; if the log says nonzero we add a real initialiser
-// and say why. POST, because the question is what create LEAVES behind.
-// ============================================
-DEFINE_HOOK(&daB_TN_c::create, BtnCreateProbe);
-
-void on_btn_create_probe_post(ModContext*, void* args, void*, void*) {
-    auto* self = static_cast<AlbwBtn_c*>(mods::arg<daB_TN_c*>(args, 0));
-    if (self == nullptr) {
-        return;
-    }
-    const int a2 = (int)self->field_0xaa2;
-    DuskLog.info("[b_tn] f={} evt=create_probe a2={} mType={} {}", g_Counter.mCounter0, a2,
-                 (int)self->mType,
-                 a2 == 0 ? "(zero-init OK)"
-                         : "*** NONZERO: create does NOT clear field_0xaa2 - the window "
-                           "needs an explicit initialiser ***");
-}
-#endif  // ALBW_DARKNUT_PROBE
 
 AlbwBtn_c* self_of(void* args) {
     return static_cast<AlbwBtn_c*>(mods::arg<daB_TN_c*>(args, 0));
@@ -686,12 +661,6 @@ ModResult albw_btn_parry_init(ModError*) {
     ok &= report("BtnExecuteYoroke",
                  mods::hook_add_pre<BtnExecuteYoroke>(svc_hook, on_btn_execute_yoroke_pre));
 
-#if ALBW_DARKNUT_PROBE
-    // Bring-up only. A miss here must not disable the feature, so its result
-    // is deliberately NOT folded into ok - the probe is not load-bearing.
-    (void)report("BtnCreateProbe",
-                 mods::hook_add_post<BtnCreateProbe>(svc_hook, on_btn_create_probe_post));
-#endif
 
     s_featureReady = ok;
     if (!s_featureReady) {
