@@ -312,12 +312,55 @@ void resetOrbState(bool deleteActor) {
     ALBW_SOUL_TRACE("reset_exit");
 }
 
+// ============================================
+// ROOT CAUSE of the reported softlock: this used to write -1.0f, which is
+// the one value that guarantees the effect keeps running.
+//
+// The tear-absorb glow is a loop in daAlink_c, stock d_a_alink_effect.inc:
+// 407-428:
+//     if (checkEndResetFlg0(ERFLG0_UNK_20000000) || 0.0f != field_0x346c) {
+//         if (ERFLG0 && field_0x346c < 0.0f) field_0x346c *= -1.0f;
+//         field_0x346c += 0.0625f;
+//         if (field_0x346c > 1.0f) {
+//             if (FLG3_UNK_200000 && need == getLightDropNum(darkArea)) {
+//                 field_0x346c = 1.0f;                      // PINNED
+//                 if (checkEventRun()) { changeOriginalDemo();
+//                                        changeDemoMode(DEMO_UNK_94_e, ...); }
+//             } else {
+//                 field_0x346c = -1.0f;                     // loop and ramp again
+//             }
+//         }
+//     }
+//
+// Its only exit is `0.0f == field_0x346c`, and STOCK NEVER ASSIGNS 0 - grep
+// of every assignment in the tree gives *= -1.0f, += 0.0625f, = 1.0f and
+// = -1.0f, and nothing else. The field starts at 0 on a fresh actor and can
+// never return there on its own. In stock that is harmless: the wolf
+// collection sequence ends in a scene change, so the actor is rebuilt. In
+// this mod a HUMAN Link collects the tear during normal play, the actor
+// persists, and the loop runs forever.
+//
+// -1.0f was therefore the worst possible choice: it is literally stock's
+// "go round again" branch. 0.0f is the only value that ends it.
+//
+// WHY THAT ALSO EXPLAINS THE DEATH SOFTLOCK. While the loop runs with
+// FLG3_UNK_200000 set and the tear count equal to the needed count, the pin
+// branch calls changeDemoMode(DEMO_UNK_94_e) on EVERY FRAME that
+// checkEventRun() is true. A death IS an event, so the death sequence gets
+// hijacked into a demo mode each frame - Link in a death proc and a demo
+// pose at once, which is the reported "alive and dead at the same time",
+// the warped model, and the softlock.
+//
+// ERFLG0_UNK_20000000 needs no clearing here: daAlink_c::execute zeroes
+// mEndResetFlg0 every frame (stock d_a_alink.cpp:18897), so it is transient
+// and field_0x346c was the only thing holding the loop open.
+// ============================================
 void clearLinkTearCollectEffect() {
     if (daPy_py_c* py = playerActor()) {
         py->offNoResetFlg3(daPy_py_c::FLG3_UNK_200000);
     }
     if (daAlink_c* alink = linkActor()) {
-        alink->field_0x346c = -1.0f;
+        alink->field_0x346c = 0.0f;
     }
 }
 
