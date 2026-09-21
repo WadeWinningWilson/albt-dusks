@@ -11,6 +11,9 @@
 
 #include "d/d_com_inf_game.h"
 #include "d/actor/d_a_player.h"
+#define private public
+#include "d/actor/d_a_alink.h"
+#undef private
 #include "f_op/f_op_actor.h"
 #include "f_op/f_op_actor_mng.h"
 #include "Z2AudioLib/Z2AudioMgr.h"
@@ -39,6 +42,39 @@ daPy_py_c* playerActor() {
     return static_cast<daPy_py_c*>(g_dComIfG_gameInfo.play.getPlayer(0));
 }
 
+
+// ============================================
+// COLLECT FLOURISH - the blue absorb glow, driven WITHOUT the wolf state.
+//
+// The previous version got this glow by calling onWolfLightDropGet(), which
+// softlocked the game (see the block at the pickup site). This drives the
+// same native visual directly and is safe for one specific reason:
+//
+// The glow loop (stock d_a_alink_effect.inc:407-428) is driven by
+// field_0x346c, and the dangerous branch inside it - the one that pins the
+// value and calls changeDemoMode(DEMO_UNK_94_e) every frame an event is
+// running - is gated on checkNoResetFlg3(FLG3_UNK_200000). We never set that
+// flag, so that branch is unreachable by construction. What remains is the
+// harmless else: ramp up, and on passing 1.0 flip to -1.0 and ramp again.
+//
+// That loop has no exit of its own (stock never assigns 0 to field_0x346c
+// anywhere), so ending it is OUR job - which is the whole lesson of the
+// softlock. The countdown below does exactly that and nothing else.
+// ============================================
+int  sGlowFrames = 0;
+
+// One ramp is 1.0 / 0.0625 = 16 frames. Two gives a visible pulse without
+// outstaying the pickup.
+constexpr int kGlowFrames = 32;
+
+void beginCollectGlow() {
+    if (daAlink_c* alink = static_cast<daAlink_c*>(daPy_getPlayerActorClass())) {
+        // Any non-zero value opens the loop; start at the ramp step so the
+        // first frame looks like a natural beginning rather than a pop.
+        alink->field_0x346c = 0.0625f;
+        sGlowFrames = kGlowFrames;
+    }
+}
 void playSe(u32 se) {
     if (Z2AudioMgr* audio = Z2GetAudioMgr()) {
         audio->seStart(se, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
@@ -103,6 +139,7 @@ int maAlbwTear_c::Execute() {
         if (daPy_py_c* player = playerActor()) {
             if (current.pos.abs(player->current.pos) < kPickupRange) {
                 grantRecovery(mRecovery);
+                beginCollectGlow();
                 // ============================================
                 // DO NOT call player->onWolfLightDropGet() here. It was added
                 // for cosmetics ("douse Link in the blue light-absorb glow")
@@ -192,6 +229,30 @@ ModResult albw_tear_actor_init(ModError*) {
         return MOD_ERROR;
     }
     return MOD_OK;
+}
+
+// ============================================
+// The terminator. stock NEVER assigns 0 to field_0x346c anywhere in the tree
+// (every assignment is *= -1.0f, += 0.0625f, = 1.0f, = -1.0f), so once the
+// loop is open only we can close it. This runs every frame from the mod tick,
+// independent of the tear actor, because the actor deletes itself on pickup -
+// the glow must not depend on the thing that started it still existing.
+//
+// Also zeroes on a null player: if the actor was rebuilt (stage change,
+// death) the new one starts at 0 anyway, and our countdown must not leak
+// into it.
+// ============================================
+void albw_tear_collect_glow_tick() {
+    if (sGlowFrames <= 0) {
+        return;
+    }
+    --sGlowFrames;
+    if (sGlowFrames > 0) {
+        return;
+    }
+    if (daAlink_c* alink = static_cast<daAlink_c*>(daPy_getPlayerActorClass())) {
+        alink->field_0x346c = 0.0f;  // the only value that exits the loop
+    }
 }
 
 ActorId albw_tear_actor_spawn(const cXyz& pos, s8 room, u16 recovery) {

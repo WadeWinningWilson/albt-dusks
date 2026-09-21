@@ -49,5 +49,9 @@ bool  albw_tear_actor_get_draw(cXyz* outPos, f32* outScale, f32* outAlpha);  // 
 // Visual half (tear_glow.cpp): GfxService billboard. Declared here so mod.cpp
 // can register it in the init chain (needs FEATURES webgpu). ModResult/ModError
 // come from mods/api.h via mods/svc/actor.h above.
+// Ends the native collect glow. MUST be ticked: the stock loop it uses has
+// no exit of its own. See the comment on the definition.
+void albw_tear_collect_glow_tick();
+
 ModResult albw_tear_glow_init(ModError*);
 ModResult albw_tear_glow_shutdown(ModError*);

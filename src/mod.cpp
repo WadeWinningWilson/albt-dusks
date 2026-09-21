@@ -284,6 +284,7 @@ MOD_EXPORT ModResult mod_update(ModError*) {
     // phase is owned by nobody, and without this any interruption stranded it.
     albw_hurricane_frame_watch();
     albw_flurry_tick();
+    albw_tear_collect_glow_tick();
 
 #if ALBW_MAGICJAR_PROBE
     // Bring-up only: samples the meter for a few frames after a jar grant, to
