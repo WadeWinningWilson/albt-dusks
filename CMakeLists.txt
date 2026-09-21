@@ -80,6 +80,7 @@ add_mod(albt_full_plugin
             src/sim_time_scale_hooks.cpp
             src/flurry_rush.cpp
             src/flurry_hooks.cpp
+            src/flurry_proc.cpp
             src/wolf_arts.cpp
             src/parry_master.cpp
             src/parry_hooks.cpp

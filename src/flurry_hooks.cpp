@@ -1,10 +1,10 @@
 #include "flurry_rush.h"
 
 #include "albw_common.h"
+#include "flurry_proc.h"
 #include "sim_time_scale.h"
 #include "mods/hook.hpp"
 
-#include "d/d_cc_uty.h"
 #include "d/d_com_inf_game.h"
 #include "d/actor/d_a_player.h"
 #define private public
@@ -19,9 +19,7 @@ DEFINE_HOOK(&daAlink_c::procSideStepInit, ProcSideStepInit);
 DEFINE_HOOK(&daAlink_c::procBackJumpInit, ProcBackJumpInit);
 DEFINE_HOOK(&daAlink_c::procSideStepLandInit, ProcSideStepLandInit);
 DEFINE_HOOK(&daAlink_c::procBackJumpLandInit, ProcBackJumpLandInit);
-DEFINE_HOOK(&daAlink_c::swordSwingTrigger, SwordSwingTrigger);
 DEFINE_HOOK(fopAcM_posMove, FopAcMPosMove);
-DEFINE_HOOK(cc_at_check, FlurryCcAtCheck);
 
 void on_proc_side_step_init_post(ModContext*, void* args, void*, void*) {
     if (!dFlurryRush_isEnabled()) {
@@ -43,27 +41,58 @@ void on_proc_back_jump_init_post(ModContext*, void* args, void*, void*) {
     }
 }
 
-void try_arm_flurry_after_dodge() {
-    dFlurryRush_tryEnterFromDodge();
-}
-
-void on_proc_side_step_land_init_post(ModContext*, void*, void*, void*) {
-    try_arm_flurry_after_dodge();
-}
-
-void on_proc_back_jump_land_init_post(ModContext*, void*, void*, void*) {
-    try_arm_flurry_after_dodge();
-}
-
-void on_sword_swing_trigger_post(ModContext*, void* args, void* retval, void*) {
-    if (!dFlurryRush_isActive()) {
-        return;
+// ============================================
+// PROC ENTRY - PORTED, and moved from POST to PRE.
+//
+// Donor, the FIRST STATEMENT of both land procs:
+//     fork d_a_alink.cpp:17613-17620   procSideStepLandInit
+//     fork d_a_alink.cpp:18377-18386   procBackJumpLandInit
+//
+//     if (dFlurryRush_tryEnterProcFromPerfectDodge()) {
+//         const int flurryResult = procFlurryRushInit();
+//         if (flurryResult != 0) {
+//             return flurryResult;
+//         }
+//         dFlurryRush_end(dFlurryRushEnd_Interrupt);
+//     }
+//     commonProcInit(PROC_..._LAND);   <- donor never reaches this on success
+//
+// POSITION - and why the old POST hook was the WRONG position, not merely a
+// later one. The donor RETURNS before commonProcInit, so on a successful
+// entry the land proc never runs at all. A POST hook let the whole land init
+// run first - commonProcInit(PROC_BACK_JUMP_LAND), setSingleAnimeParam,
+// mNormalSpeed = 0, the foot effect - and only then armed the rush; the
+// overlay's own commonProcInit would then have torn that half-started proc
+// down from underneath itself. PRE + SKIP_ORIGINAL with the donor's return
+// value in retval is the donor's position exactly: nothing of the land proc
+// executes, and the value the engine reads is the value the donor returned.
+//
+// On failure (procFlurryRushInit returned 0 - not armed, Link's proc
+// untouched, the donor's own contract) the hook falls through to the stock
+// land proc, which is what the donor's fall-through does.
+// ============================================
+HookAction on_flurry_land_init_pre(void* args, void* retval) {
+    if (!dFlurryRush_tryEnterFromDodge()) {
+        return HOOK_CONTINUE;
     }
     auto* link = mods::arg<daAlink_c*>(args, 0);
-    if (link == nullptr || retval == nullptr || *static_cast<BOOL*>(retval) == FALSE) {
-        return;
+    const int flurryResult = albw_flurry_proc_try_enter(link);
+    if (flurryResult != 0) {
+        if (retval != nullptr) {
+            *static_cast<int*>(retval) = flurryResult;
+        }
+        return HOOK_SKIP_ORIGINAL;
     }
-    dFlurryRush_onAttackStarted();
+    dFlurryRush_end(dFlurryRushEnd_Interrupt);
+    return HOOK_CONTINUE;
+}
+
+HookAction on_proc_side_step_land_init_pre(ModContext*, void* args, void* retval, void*) {
+    return on_flurry_land_init_pre(args, retval);
+}
+
+HookAction on_proc_back_jump_land_init_pre(ModContext*, void* args, void* retval, void*) {
+    return on_flurry_land_init_pre(args, retval);
 }
 
 HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
@@ -105,16 +134,30 @@ void on_fop_ac_m_pos_move_post(ModContext*, void* args, void*, void*) {
     }
 }
 
-void on_flurry_cc_at_check_post(ModContext*, void* args, void*, void*) {
-    if (!dFlurryRush_isActive()) {
-        return;
-    }
-    auto* enemy = mods::arg<fopAc_ac_c*>(args, 0);
-    auto* info = mods::arg<dCcU_AtInfo*>(args, 1);
-    if (enemy != nullptr && info != nullptr && info->mHitBit != 0) {
-        dFlurryRush_onHitLanded(enemy);
-    }
-}
+// ============================================
+// RETIRED with the proc port - two receiver stand-ins the donor replaces.
+//
+// 1. swordSwingTrigger POST -> dFlurryRush_onAttackStarted().
+//    In the donor, onAttackStarted has exactly ONE gameplay caller:
+//    flurryBeginSwing(0) (fork d_a_alink_flurry.inc:128-130), i.e. the moment
+//    the FIRST swing actually begins. The hook fired on any sword-swing
+//    trigger while a rush was pending, so hasStartedAttack went true before
+//    Link had swung - which both cleared the 2s start gate early and, with
+//    the donor's update tail now live, would immediately report "started but
+//    not in the rush proc" and interrupt.
+//
+// 2. cc_at_check POST -> dFlurryRush_onHitLanded(enemy).
+//    The donor registers hits from inside the proc, via flurryCheckSwordHit
+//    (fork .inc:133-154) guarded by mProcVar3.field_0x300e so at most one hit
+//    counts per swing, and it is that function - not a collision callback -
+//    that carries the slow-mo fallback. Leaving the collision hook installed
+//    would double-count every swing that also resolved through the AT
+//    primitives, and would keep counting hits landed outside the attack
+//    window.
+//
+// Nothing else called either callback, so both hooks and their DEFINE_HOOK
+// entries are gone rather than left dormant.
+// ============================================
 
 // ============================================
 // A hook that fails to resolve must NOT abort mod_initialize.
@@ -149,20 +192,16 @@ ModResult albw_flurry_hooks_init(ModError* error) {
                  mods::hook_add_post<ProcSideStepInit>(svc_hook, on_proc_side_step_init_post)) ||
         !install(error, "FlurryBackJumpPost",
                  mods::hook_add_post<ProcBackJumpInit>(svc_hook, on_proc_back_jump_init_post)) ||
-        !install(error, "FlurrySideLandPost",
-                 mods::hook_add_post<ProcSideStepLandInit>(svc_hook,
-                                                           on_proc_side_step_land_init_post)) ||
-        !install(error, "FlurryBackLandPost",
-                 mods::hook_add_post<ProcBackJumpLandInit>(svc_hook,
-                                                           on_proc_back_jump_land_init_post)) ||
-        !install(error, "FlurrySwingPost",
-                 mods::hook_add_post<SwordSwingTrigger>(svc_hook, on_sword_swing_trigger_post)) ||
+        !install(error, "FlurrySideLandPre",
+                 mods::hook_add_pre<ProcSideStepLandInit>(svc_hook,
+                                                          on_proc_side_step_land_init_pre)) ||
+        !install(error, "FlurryBackLandPre",
+                 mods::hook_add_pre<ProcBackJumpLandInit>(svc_hook,
+                                                          on_proc_back_jump_land_init_pre)) ||
         !install(error, "FlurryPosMovePre",
                  mods::hook_add_pre<FopAcMPosMove>(svc_hook, on_fop_ac_m_pos_move_pre)) ||
         !install(error, "FlurryPosMovePost",
-                 mods::hook_add_post<FopAcMPosMove>(svc_hook, on_fop_ac_m_pos_move_post)) ||
-        !install(error, "FlurryCcPost",
-                 mods::hook_add_post<FlurryCcAtCheck>(svc_hook, on_flurry_cc_at_check_post)))
+                 mods::hook_add_post<FopAcMPosMove>(svc_hook, on_fop_ac_m_pos_move_post)))
     {
         return MOD_ERROR;
     }

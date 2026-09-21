@@ -39,6 +39,7 @@
 
 #include "albw_common.h"
 #include "albw_dusk_log.h"
+#include "flurry_probe.h"  // ALBW_FLURRY_PROBE (shared with flurry_proc.cpp)
 
 #include "d/actor/d_a_player.h"                        // daPy_frameCtrl_c (stock :15)
 #include "JSystem/J3DGraphAnimator/J3DAnimation.h"     // J3DFrameCtrl (stock :980)
@@ -49,7 +50,11 @@
 // before release (docs/RELEASE-PROCEDURE.md step 1). With it on, one run tells
 // "working" from "hooked but inert" without guessing: the scale in effect,
 // that Link is exempt, and how many controllers were actually scaled.
-#define ALBW_FLURRY_PROBE 1
+//
+// ALBW_FLURRY_PROBE itself now lives in flurry_probe.h (included above). It
+// moved there when the attack proc landed so the two halves of Flurry Rush -
+// this world slow-motion and flurry_proc.cpp - share ONE switch to turn off
+// before a release, rather than each carrying its own.
 
 namespace {
 

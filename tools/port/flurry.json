@@ -1,0 +1,42 @@
+{
+  "fork": "../dusklight/src/d/actor/d_a_alink_flurry.inc",
+  "stock": "tools/port/_empty_stock.cpp",
+  "out": "build/port/flurry_port.inc",
+  "renames": { "daAlink_c::": "AlbwFlurry_c::" },
+  "port_funcs": [
+    "flurryReserveChainInput",
+    "flurryConsumeChainInput",
+    "flurryBeginSwing",
+    "flurryCheckSwordHit",
+    "flurryExitToWait",
+    "flurryTryChainSwing",
+    "flurryEngageDistance",
+    "flurryIsWithinEngageRange",
+    "flurryEnterWaitFirstSwing",
+    "flurryUpdateSnapToTarget",
+    "procFlurryRushInit",
+    "procFlurryRush"
+  ],
+  "diag_zero": [],
+  "substitutions": [
+    ["commonProcInit(PROC_FLURRY_RUSH);", "flurryOverlayProcInit();"]
+  ],
+  "engine_symbols": [
+    "daAlink_c",
+    "daPy_py_c",
+    "daPy_frameCtrl_c",
+    "daAlink_cutParamTbl",
+    "daAlinkHIO_c",
+    "daAlinkHIO_cutNormal_c1",
+    "fopAc_ac_c",
+    "cXyz",
+    "csXyz",
+    "f32",
+    "s16",
+    "u16",
+    "u8",
+    "int",
+    "bool",
+    "BOOL"
+  ]
+}
