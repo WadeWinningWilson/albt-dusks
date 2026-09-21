@@ -47,6 +47,14 @@ If the static count grew and that is intended, raise `BASELINE` in
 `tools/check_hooks.py` **in the same commit** — knowingly shipping a feature
 that is inert on Linux.
 
+> **This gate's meaning changes if the Linux coverage plan lands.**
+> [LINUX-HOOK-COVERAGE.md](LINUX-HOOK-COVERAGE.md) converts these sites to an
+> address fallback, after which a bare-name hook is no longer Linux-fragile but
+> still *looks* like one to the script. See its §6: the count has to learn the
+> difference, `BASELINE` drops as sites convert, and the rule flips from
+> counting to failing on any new unfallbacked bare-name hook. A passing gate
+> that no longer measures what it names is worse than no gate.
+
 **Why:** two cross-platform outages, both invisible to a Windows build. The Apple
 `ALBT_SYM` underscore made every symbol-string hook miss on macOS/iOS from the
 first release, and file-local statics do not resolve on Linux at all.
