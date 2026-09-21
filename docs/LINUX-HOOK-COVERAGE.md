@@ -201,3 +201,15 @@ measures the thing it names is worse than no gate.
 Upstream indexing file-local statics on Linux remains the real fix, and would
 light up all thirty sites with no code change here. Worth asking for regardless
 of whether this plan is built.
+
+**The report is drafted: [UPSTREAM-LINUX-STATICS.md](UPSTREAM-LINUX-STATICS.md).**
+Its working hypothesis is that symgen's ELF reader walks `.dynsym` (exported
+only) where its Mach-O reader walks `LC_SYMTAB` (which includes `STB_LOCAL`) —
+which would explain statics resolving on Windows and Apple but not Linux, with
+no error anywhere. Stripping was ruled out: `symgen --embed` is a POST_BUILD
+step and both platforms' strips run at install time and keep the symbol table
+anyway.
+
+If upstream takes the fix, Routes 1-3 all become unnecessary and the
+`check_hooks.py` baseline goes to 0 honestly rather than by reclassification.
+Send the report before building Route 1, so the sweep is not wasted work.
