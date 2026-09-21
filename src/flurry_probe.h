@@ -3,7 +3,7 @@
 // ============================================
 // ALBW_FLURRY_PROBE - the ONE Flurry Rush probe switch.
 //
-// It used to live as a bare `#define ALBW_FLURRY_PROBE 1` at the top of
+// It used to live as a bare `#define ALBW_FLURRY_PROBE 0` at the top of
 // sim_time_scale_hooks.cpp. The attack proc needs the same switch, and a
 // second macro would mean two things to remember to turn off before a
 // release, so the definition moved here and both TUs include it:
@@ -19,4 +19,4 @@
 // (docs/RELEASE-PROCEDURE.md step 1); at 0 every probe block compiles out
 // and neither TU carries probe state.
 // ============================================
-#define ALBW_FLURRY_PROBE 1
+#define ALBW_FLURRY_PROBE 0

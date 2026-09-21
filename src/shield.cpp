@@ -356,11 +356,28 @@ void logChargeEvent(const char* i_event) {
               sBashSpendChainActive ? 1 : 0, albw_meter_get_value(), albw_meter_get_max());
 }
 
-static void dShield_debugLogToFile(const char* fmt, ...) {
-    if (true) {
-        return;
-    }
+// ============================================
+// PRIVACY GATE - was `if (true) return;`, a RUNTIME guard.
+//
+// A runtime guard stops the write but does NOT stop the compiler emitting the
+// body, so the literal "%s/Documents/dusklight/albw_darknut_debug.txt" stayed
+// in the shipped binary - and "Documents/dusklight" is one of the strings the
+// release privacy scan searches every slice for
+// (docs/RELEASE-PROCEDURE.md step 1). Whether it survives is an optimiser
+// decision, which is not a thing to leave to chance in a release gate.
+//
+// A preprocessor gate cannot be optimised wrong: with the macro at 0 the body
+// does not exist. The call sites stay put and compile to nothing, so turning
+// this back on for a Darknut debugging session is a one-character change.
+// ============================================
+#define ALBW_SHIELD_FILELOG 0
 
+static void dShield_debugLogToFile(const char* fmt, ...) {
+#if !ALBW_SHIELD_FILELOG
+    (void)fmt;
+    return;
+}
+#else
     static bool sResetDone = false;
 
     char path[512];
@@ -390,6 +407,7 @@ static void dShield_debugLogToFile(const char* fmt, ...) {
     va_end(args);
     fclose(fp);
 }
+#endif  // ALBW_SHIELD_FILELOG
 
 void logEquipTierIfChanged(const daAlink_c* i_link) {
     const u8 equip = albw_shield_game::get_select_equip_shield();
