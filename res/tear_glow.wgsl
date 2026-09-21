@@ -41,12 +41,31 @@ fn fs_main(in : VsOut) -> @location(0) vec4f {
     let alpha = u.params.z;
     let r     = length(in.uv);            // 0 at center
 
-    let core  = clamp(1.0 - r, 0.0, 1.0);
-    let glow  = pow(core, 2.5);           // tight hot center
-    let pulse = 0.78 + 0.22 * sin(t * 3.0);
-    let intensity = glow * pulse * alpha;
+    let core = clamp(1.0 - r, 0.0, 1.0);
 
-    // Bright blue tear.
-    let col = vec3f(0.30, 0.60, 1.0) * intensity;
+    // ---- TUNABLES (edit these four, rebuild, look) ----
+    // BODY_FALLOFF was 2.5, which is why it read as haze rather than an orb:
+    // at half radius pow(0.5, 2.5) = 0.177, so the whole outer half of the
+    // sphere sat under 18% intensity - a hot pip in a faint cloud. 1.2 gives
+    // 0.435 at the same point, so the body actually carries light. Raise it
+    // toward 2.5 for wispier, lower toward 1.0 for a harder ball.
+    let BODY_FALLOFF = 1.2;
+    let BODY_GAIN    = 1.00;   // overall fill brightness
+    let HOT_GAIN     = 1.40;   // nucleus punch; >1 is intentional (additive)
+    let PULSE_DEPTH  = 0.12;   // was 0.22 - the old dip cost up to 22% of the body
+
+    let body = pow(core, BODY_FALLOFF);   // the filled volume
+    let hot  = pow(core, 6.0);            // small bright nucleus
+    let pulse = (1.0 - PULSE_DEPTH) + PULSE_DEPTH * sin(t * 3.0);
+
+    let intensity = (body * BODY_GAIN + hot * HOT_GAIN) * pulse * alpha;
+
+    // White-hot centre falling off to blue at the rim. A real light orb is
+    // near-white in the middle; the old flat vec3(0.30,0.60,1.0) capped the
+    // brightest pixel at 30% red, which reads washed-out against bright
+    // scenery no matter how high the alpha goes.
+    let tint = mix(vec3f(0.30, 0.62, 1.0), vec3f(0.88, 0.96, 1.0), hot);
+
+    let col = tint * intensity;
     return vec4f(col, intensity);
 }
