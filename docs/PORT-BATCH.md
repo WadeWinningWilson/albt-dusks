@@ -79,7 +79,18 @@ Several handles are pre-declared/registered but **not fully wired** — audit ea
   `field_0xaa2` is unused in stock so the stock layout carries it. Needs
   `dAlbwCombat_isGuardOpenerHit` + `kAlbwGuardOpenerWindowFrames` in the mod's
   `albw_combat` first, then `port_tool.py` whole-function replacement for
-  `damage_check` and `action`.
+  `damage_check`. (`action` needs no hook of its own — its only in-scope change
+  sits immediately before the `damage_check()` call with nothing in between, so
+  a `damage_check` PRE hook already *is* the donor position.)
+
+  **Shared seam with the lockout lane — resolved, do not re-litigate.** Both
+  this port and the pending `B_TN` entry in `enemy_lockout.cpp` need
+  `daB_TN_c::damage_check`, and there is exactly ONE fork `damage_check`
+  (`d_a_b_tn.cpp:1475-1991`) carrying both feature sets interleaved. It is
+  ported ONCE, whole; the second lane verifies instead of re-porting. The only
+  genuine open question is the `mType` gate (boss-only vs. zako too) and what
+  that costs in `m_attack_tn` handling — written up in full at the top of
+  `src/enemy_lockout.cpp`.
 - [x] **7. Region damage multiplier master + deps organization** — defaults
   aligned to fork, master→dependent nesting w/ is_disabled gating, Difficulty +
   Economy sections. Commit 42c5866.

@@ -17,6 +17,39 @@
 //   E_WW (Deku Like / "ww")  — checkSideStep guard + damage_check whole-func.
 // Pending (same pattern): E_OC, E_SM, B_TN (member fns); E_DN, E_ST (file-static
 //   state fns — reproduced at the actor Execute seam).
+//
+// ============================================
+// ⚠ B_TN SHARES ITS damage_check WITH THE PARRY/BASH LANE. READ BEFORE PORTING.
+//
+// The Darknut (B_TN — NOT E_DN; see docs/PORT-BATCH.md item 6) is wanted by two
+// lanes at once: this one, and the shield-bash guard-open port. Both need
+// daB_TN_c::damage_check, and the fork does not give them separate seams —
+// there is exactly ONE fork damage_check (fork d_a_b_tn.cpp:1475-1991) and it
+// carries both feature sets interleaved through the same body: the lockout
+// calls (dMeter2_isALBWLocked / dAlbwLockout_onSlingshotHit /
+// getSlingshotStunFrames / isRangedOpened) and the parry calls
+// (albwTryApplyBashGuardBreakFromHit / albwHandleParryCombatBashShieldHit /
+// dAlbwCombat_isGuardOpenerHit / the field_0xaa2 window).
+//
+// THE RULE: damage_check is ported ONCE, whole and verbatim. Whichever lane
+// lands it lands ALL of it; the other lane then VERIFIES rather than re-ports.
+// Two partial replacements cannot coexist — the second silently erases the
+// first. This is just DN-10: port the donor's function, not a slice of it.
+//
+// THE ONE REAL SCOPE QUESTION — the mType gate:
+//   * The parry lane only needs mType == 0, the Temple of Time boss.
+//   * THIS lane needs every Darknut, zako (mType == 1) included.
+//   * A replacement cannot write m_attack_tn — a non-exported file static
+//     (stock :1061). Under an mType == 0 gate that is harmless and provably
+//     so: the only READ is in checkNormalAttackAble's `if (mType == 1)` block
+//     (stock :1066-1072), and action() clears it unconditionally for mType == 0
+//     (stock :4440). So the writes we cannot perform are already dead.
+//   * LIFT the gate to cover zako and they stop being dead. m_attack_tn is the
+//     "only one zako Darknut attacks at a time" throttle; with no writes the
+//     read is always false and every zako attacks at once. The fix at that
+//     point is a mod-side mirror plus a PRE hook on checkNormalAttackAble
+//     (exported, typed DEFINE_HOOK) answering from the mirror — NOT a bare
+//     unguarded replacement. Budget that hook when this lane starts.
 // ============================================
 
 #include "global.h"
