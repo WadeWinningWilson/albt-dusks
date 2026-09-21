@@ -721,6 +721,34 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     }
 
     dAlbwDevil_tickActor(self);
+
+#if ALBW_DEVIL_PROBE
+    // ============================================
+    // HEARTBEAT. The first bring-up run produced ZERO devil lines and I could
+    // not tell why, because the only trace was on ARM: "the hook never fired",
+    // "it fired but never crossed 25%" and "it crossed but the policy refused"
+    // all look identical from silence. That is the same blind spot that cost a
+    // run earlier today, so the probe now reports the state it is deciding on.
+    //
+    // Throttled on CHANGE plus a slow floor, so a long fight does not flood
+    // the log but a still one still proves the hook is alive.
+    // ============================================
+    {
+        static int sLastPct = -1;
+        static u32 sLastFrame = 0;
+        const float frac = dAlbwDevil_healthFraction(self);
+        const int pct = frac >= 0.0f ? static_cast<int>(frac * 100.0f) : -1;
+        if (pct != sLastPct || (g_Counter.mCounter0 - sLastFrame) > 300) {
+            sLastPct = pct;
+            sLastFrame = g_Counter.mCounter0;
+            DuskLog.info("[devil] hb f={} pct={} taken={}/{} armed={} atLive={} act={}",
+                         g_Counter.mCounter0, pct, self->field_0x6fc, self->field_0x700,
+                         dAlbwDevil_isArmed(self) ? 1 : 0,
+                         dAlbwDevil_isAttackLive(self) ? 1 : 0, self->mActionMode1);
+        }
+    }
+#endif
+
     if (!dAlbwDevil_isArmed(self)) {
         return;
     }
