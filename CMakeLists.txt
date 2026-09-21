@@ -86,6 +86,7 @@ add_mod(albt_full_plugin
             src/parry_master.cpp
             src/parry_hooks.cpp
             src/albw_combat.cpp
+            src/btn_parry.cpp
             src/boss_hp_hud.cpp
             src/lop_hud.cpp
             src/lop_item_belt.cpp

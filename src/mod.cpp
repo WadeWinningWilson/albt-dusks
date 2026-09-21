@@ -15,6 +15,7 @@
 #include "sim_time_scale.h"
 #include "hold_a_crawl.h"
 #include "enemy_lockout.h"
+#include "btn_parry.h"
 #include "lockout.h"
 #include "mail.h"
 #include "meter.h"
@@ -202,6 +203,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
 
     if (albw_meter_init(error) != MOD_OK || albw_lockout_init(error) != MOD_OK ||
         albw_enemy_lockout_init(error) != MOD_OK ||
+        albw_btn_parry_init(error) != MOD_OK ||
         albw_magic_jar_init(error) != MOD_OK ||
         albw_rupee_popup_init(error) != MOD_OK ||
         albw_tear_particles_init(error) != MOD_OK ||

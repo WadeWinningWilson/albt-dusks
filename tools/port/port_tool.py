@@ -41,10 +41,59 @@ def strip_comments(t):
     t = re.sub(r"//[^\n]*", "", t)
     return re.sub(r"/\*.*?\*/", "", t, flags=re.S)
 
-def brace_end(src, open_idx):
+def pp_inactive_mask(src, true_syms):
+    """Mark chars that sit in a preprocessor branch which is INACTIVE when every
+    symbol in true_syms is defined-and-true.
+
+    Why this exists: a donor that writes
+
+        #if TARGET_PC
+                if (window == 0 && cond) {
+        #else
+                if (cond) {
+        #endif
+
+    puts TWO '{' in the raw text for ONE logical scope. A naive brace scan then
+    runs past the end of the function (daB_TN_c::damage_check dropped out of the
+    extraction entirely this way). Masking the inactive branch fixes the SCAN
+    only - the emitted text is still sliced from the original source, so both
+    branches survive byte-verbatim.
+
+    Unknown conditions leave BOTH branches active (mask 0), so a config without
+    "pp_true" parses exactly as before.
+    """
+    mask = bytearray(len(src))
+    stack = []  # [known_true, in_if_branch]
+    i = 0
+    for line in src.splitlines(keepends=True):
+        n = len(line); s = line.lstrip()
+        if s.startswith('#if'):
+            if s.startswith('#ifdef'):
+                cond = s[len('#ifdef'):].strip()
+            elif s.startswith('#ifndef'):
+                cond = None
+            else:
+                parts = s.split(None, 1)
+                cond = parts[1].strip() if len(parts) > 1 else None
+            stack.append([cond in true_syms if cond else False, True])
+        elif s.startswith('#elif'):
+            if stack: stack[-1] = [False, True]   # unknown from here on: keep both
+        elif s.startswith('#else'):
+            if stack: stack[-1][1] = False
+        elif s.startswith('#endif'):
+            if stack: stack.pop()
+        elif any(known and not in_if for known, in_if in stack):
+            for k in range(i, i + n): mask[k] = 1
+        i += n
+    return mask
+
+def brace_end(src, open_idx, mask=None):
     depth = 0
     k = open_idx
     while k < len(src):
+        if mask is not None and mask[k]:
+            k += 1
+            continue
         c = src[k]
         if c == '{': depth += 1
         elif c == '}':
@@ -53,7 +102,7 @@ def brace_end(src, open_idx):
         k += 1
     return -1
 
-def parse_decls(src):
+def parse_decls(src, mask=None):
     """Return dict name -> {'kind','text','refs'} for top-level decls."""
     decls = {}
     # functions / classes / structs / enums with a body { ... }
@@ -65,7 +114,7 @@ def parse_decls(src):
                          r'(?:const\s*)?(?::[^;{]*)?\{', src, re.M):
         name = m.group(3)
         if name in ('if','for','while','switch','do','else','return'): continue
-        s = m.start(); ob = src.index('{', m.start()); e = brace_end(src, ob)
+        s = m.start(); ob = src.index('{', m.start()); e = brace_end(src, ob, mask)
         if e < 0: continue
         # class/struct/enum end with '};'
         tail = src[e:e+2]
@@ -96,7 +145,10 @@ def norm(t):
 def main(cfg_path):
     cfg = json.load(io.open(cfg_path))
     fork = rd(cfg['fork']); stock = rd(cfg['stock'])
-    F = parse_decls(fork); S = parse_decls(stock)
+    pp_true = set(cfg.get('pp_true', []))
+    fmask = pp_inactive_mask(fork, pp_true) if pp_true else None
+    smask = pp_inactive_mask(stock, pp_true) if pp_true else None
+    F = parse_decls(fork, fmask); S = parse_decls(stock, smask)
 
     # classify functions
     new_fns  = [n for n,d in F.items() if d['kind']=='func' and n not in S]
@@ -106,16 +158,22 @@ def main(cfg_path):
     want = cfg.get('port_funcs') or (new_fns + mod_fns)
     want = [w for w in want if w in F]
 
-    # transitive dep closure over fork-LOCAL decls
+    # transitive dep closure over fork-LOCAL decls.
+    # skip_deps: fork-local symbols the RECEIVER already provides, so they must
+    # NOT be reproduced. For a SUBCLASS port every sibling method of the ported
+    # class is inherited from the exported stock base - pulling them would emit
+    # a second, shadowing copy of half the actor. Purely additive: a config
+    # without the key behaves exactly as before.
+    skip = set(cfg.get('skip_deps', []))
     need = set(); frontier = list(want)
     while frontier:
         n = frontier.pop()
         if n not in F or n in need: continue
         need.add(n)
         for r in F[n]['refs']:
-            if r in F and r not in need and r not in want:
+            if r in F and r not in need and r not in want and r not in skip:
                 frontier.append(r)
-    dep_only = [n for n in need if n not in want]
+    dep_only = [n for n in need if n not in want and n not in skip]
 
     # order: defines, types, vars, then funcs (funcs in file order)
     order = {'define':0,'enummember':0,'type':1,'var':2,'func':3}
@@ -167,10 +225,16 @@ def main(cfg_path):
         out.append("")
     text = '\n'.join(out)
 
-    # verify: brace balance
-    bal = text.count('{')-text.count('}')
+    # verify: brace balance (preprocessor-aware when pp_true is configured, so a
+    # donor's `#if X ... { #else ... { #endif` pair is not reported as an imbalance)
+    if pp_true:
+        tmask = pp_inactive_mask(text, pp_true)
+        live = ''.join(ch for k, ch in enumerate(text) if not tmask[k])
+        bal = live.count('{') - live.count('}')
+    else:
+        bal = text.count('{')-text.count('}')
     # unresolved refs: symbols referenced by ported funcs not in F and not engine-allowlisted
-    allow = set(cfg.get('engine_symbols',[]))
+    allow = set(cfg.get('engine_symbols',[])) | skip
     refd = set()
     for n in want+dep_only:
         refd |= F[n]['refs']
