@@ -650,24 +650,41 @@ void albw_shield_add_bash_charge(u8 amount) {
     dShield_addBashCharge(amount);
 }
 
+// ============================================
+// Hook priority on the targets Lazy Tweaks also hooks (procGuardAttackInit,
+// checkGuardActionChange, setBStatus, procGuardSlipInit, setShieldGuard,
+// procCutNormalInit). Pre/post callbacks from different mods ALL run - a higher
+// priority simply runs first, ties broken by registration order. ALBT's bash
+// entry has to observe the guard chord before another mod consumes or alters
+// it, and registration order is not something either mod controls, so leaving
+// this at the default 0 makes the outcome depend on load order.
+//
+// This is the unilateral half and it only reorders a race. The durable answer
+// is the dev.albt.albw.shield service (src/albt_shield_api.h), where the
+// handoff is explicit rather than won by going first.
+// ============================================
+static const HookOptions kGuardPriority = {sizeof(HookOptions), 100, HOOK_REPLACE_CONFLICT,
+                                           nullptr};
+
 ModResult albw_shield_init(ModError* error) {
     dShield_resetSession();
 
     if (!install(error, "CheckGuardAccept",
-                 mods::hook_add_pre<CheckGuardAccept>(svc_hook, on_check_guard_accept_pre)) ||
+                 mods::hook_add_pre<CheckGuardAccept>(svc_hook, on_check_guard_accept_pre, &kGuardPriority)) ||
         !install(error, "CheckGuardActionChange",
                  mods::hook_add_pre<CheckGuardActionChange>(svc_hook,
-                                                            on_check_guard_action_change_pre)) ||
+                                                            on_check_guard_action_change_pre,
+                                                            &kGuardPriority)) ||
         !install(error, "SetShieldGuard",
-                 mods::hook_add_post<SetShieldGuard>(svc_hook, on_set_shield_guard_post)) ||
+                 mods::hook_add_post<SetShieldGuard>(svc_hook, on_set_shield_guard_post, &kGuardPriority)) ||
         !install(error, "SwordSwingTrigger",
                  mods::hook_add_pre<SwordSwingTrigger>(svc_hook, on_sword_swing_trigger_pre)) ||
         !install(error, "CheckItemAction",
-                 mods::hook_add_pre<CheckItemAction>(svc_hook, on_check_item_action_pre)) ||
+                 mods::hook_add_pre<CheckItemAction>(svc_hook, on_check_item_action_pre, &kGuardPriority)) ||
         !install(error, "ProcGuardAttackInit",
-                 mods::hook_add_pre<ProcGuardAttackInit>(svc_hook, on_proc_guard_attack_init_pre)) ||
+                 mods::hook_add_pre<ProcGuardAttackInit>(svc_hook, on_proc_guard_attack_init_pre, &kGuardPriority)) ||
         !install(error, "ProcGuardSlipInit",
-                 mods::hook_add_pre<ProcGuardSlipInit>(svc_hook, on_proc_guard_slip_init_pre)) ||
+                 mods::hook_add_pre<ProcGuardSlipInit>(svc_hook, on_proc_guard_slip_init_pre, &kGuardPriority)) ||
         !install(error, "ProcGuardBreakInit",
                  mods::hook_add_pre<ProcGuardBreakInit>(svc_hook, on_proc_guard_break_init_pre)) ||
         !install(error, "LinkExecuteShield",
