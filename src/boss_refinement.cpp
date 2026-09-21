@@ -999,10 +999,44 @@ void dAlbwBoss_fyrusUpdateGolemWindow(fopAc_ac_c* i_fm) {
         (fm->mAction == kAlbwFmActionEnd || i_fm->health <= 0 ||
          fyrusHpAtMostPct(i_fm, kAlbwFmGolemExitPct)))
     {
+        // The fork despawns only on ACTION_END; the HP exit leaves the golem and
+        // its shed kids alive in phase 2 (fork d_albw_boss.cpp:910-919, which
+        // this matched byte for byte).
+        const bool hpExit = fm->mAction != kAlbwFmActionEnd &&
+                            (i_fm->health <= 0 ||
+                             fyrusHpAtMostPct(i_fm, kAlbwFmGolemExitPct));
+
         if (fm->mAction == kAlbwFmActionEnd) {
             fyrusDespawnGolem();
         }
         s_fyrusGolemPhase = 2;
+
+        // ============================================
+        // DELIBERATE DIVERGENCE FROM THE FORK - user-directed.
+        // Clear the golem and its kids on the HP exit too, so the last phase
+        // cannot begin with kids still on the field.
+        //
+        // The despawn CANNOT stand alone. Phase 3 is reached only through
+        // dAlbwBoss_fyrusOnGolemKidsCleared(), whose only two callers are the
+        // golem's own per-frame sweep (fyrus_golem.cpp:338) and the last kid
+        // clearing itself (bgos_port.inc:430) - both of which this just
+        // deleted. Despawning without advancing would strand the fight in
+        // phase 2 forever: no golem, no kids, s_fyrusResumeFightPending never
+        // set and the core weak spot never reopened. That is a softlock, and
+        // avoiding one is the whole reason the HP exit exists.
+        //
+        // fyrusDespawnGolem()'s first branch also never clears s_fyrusGolemId
+        // (only its else-if does), so clear it here or fyrusGolemKidsLoose()
+        // keeps reporting a live golem that no longer exists.
+        //
+        // Order matters: OnGolemKidsCleared() early-returns unless the phase is
+        // already 2, so it must run after the assignment above.
+        // ============================================
+        if (hpExit) {
+            fyrusDespawnGolem();
+            s_fyrusGolemId = fpcM_ERROR_PROCESS_ID_e;
+            dAlbwBoss_fyrusOnGolemKidsCleared();
+        }
     }
 
     if (s_fyrusGolemPhase == 2 && fm->mAction == kAlbwFmActionEnd) {
