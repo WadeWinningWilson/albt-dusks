@@ -29,7 +29,13 @@
 //         bridge (meter.cpp:882-903) divides by getMaxMagic(), which is 0 on a
 //         normal TP save, so it grants nothing and still skips the original.
 //
-// All five targets are header-declared and exported, so every hook here takes the
+//   - item_func_GREEN/BLUE_RUPEE   fork d_item.cpp:562-579 / :581-596
+//         dMeter2_addALBWFraction(1,15) IN FRONT OF the vanilla
+//         dComIfGp_setItemRupeeCount(1) / (5) - the fork's small refill source,
+//         and the only pickup arms besides the two magic ids that the fork
+//         touches. YELLOW/RED/PURPLE/ORANGE/SILVER stay vanilla in the fork.
+//
+// All seven targets are header-declared and exported, so every hook here takes the
 // portable DEFINE_HOOK(&fn, Tag) form (tools/check_hooks.py BASELINE untouched).
 // Every hook self-gates on albw_meter_is_enabled(): meter off == stock behaviour.
 // ============================================
@@ -59,6 +65,9 @@ DEFINE_HOOK(&daItem_c::itemGetNextExecute, ItemGetNextExecute);
 DEFINE_HOOK(&daItem_c::itemGet, ItemGet);
 DEFINE_HOOK(&item_func_S_MAGIC, ItemFuncSMagic);
 DEFINE_HOOK(&item_func_L_MAGIC, ItemFuncLMagic);
+// fork d_item.cpp:562-579 / :581-596 - the OTHER half of the ALBW refill economy.
+DEFINE_HOOK(&item_func_GREEN_RUPEE, ItemFuncGreenRupee);
+DEFINE_HOOK(&item_func_BLUE_RUPEE, ItemFuncBlueRupee);
 
 bool magic_drops_active() {
     return albw_meter_is_enabled();
@@ -165,6 +174,50 @@ HookAction on_item_func_l_magic_pre(ModContext*, void*, void*, void*) {
     return HOOK_SKIP_ORIGINAL;
 }
 
+// ============================================
+// NEW CODE - ALBW Port (green/blue rupee meter refill)
+//
+// fork d_item.cpp:562-579
+//     void item_func_GREEN_RUPEE() {
+//     #if TARGET_PC
+//         dMeter2_addALBWFraction(1, 15);
+//     #endif
+//         dComIfGp_setItemRupeeCount(1);
+//     }
+// fork d_item.cpp:581-596 is the same with (1, 15) and setItemRupeeCount(5).
+//
+// These two are the fork's SMALL refill source and they were never ported: the
+// mod granted meter only from the dedicated magic drops, so the fork's actual
+// moment-to-moment economy (grass/pot/enemy green rupees topping the meter up)
+// was missing entirely. The fork's own comment records the design intent -
+// "Green rupees are the small magic fill source ... intentionally smaller than
+// L_MAGIC (1/3) so the dedicated orange-rupee drop feels meaningfully larger."
+//
+// UNLIKE the magic arms above these do NOT skip the original: the fork ADDS the
+// meter call in front of the vanilla dComIfGp_setItemRupeeCount and keeps the
+// wallet credit. A pre-hook returning HOOK_CONTINUE reproduces the fork's exact
+// statement order (meter first, then rupee count).
+//
+// The fork does NOT touch YELLOW/RED/PURPLE/ORANGE/SILVER (d_item.cpp:598-616
+// are vanilla one-liners), so neither do we - the refill is the two smallest
+// denominations only.
+// ============================================
+HookAction on_item_func_green_rupee_pre(ModContext*, void*, void*, void*) {
+    if (!magic_drops_active()) {
+        return HOOK_CONTINUE;
+    }
+    albw_meter_add_fraction(1, 15);
+    return HOOK_CONTINUE;
+}
+
+HookAction on_item_func_blue_rupee_pre(ModContext*, void*, void*, void*) {
+    if (!magic_drops_active()) {
+        return HOOK_CONTINUE;
+    }
+    albw_meter_add_fraction(1, 15);
+    return HOOK_CONTINUE;
+}
+
 // Loud-but-non-fatal, same shape as meter.cpp:1982 `install`. Returning MOD_ERROR
 // here would short-circuit mod_initialize (mod.cpp:187) and unload the WHOLE mod
 // over one missing jar hook; a silent skip would hide the miss. So: log it by
@@ -204,6 +257,10 @@ ModResult albw_magic_jar_init(ModError*) {
     install("daItem_c::itemGet", mods::hook::add_pre<ItemGet>(on_item_get_pre));
     install("item_func_S_MAGIC", mods::hook::add_pre<ItemFuncSMagic>(on_item_func_s_magic_pre));
     install("item_func_L_MAGIC", mods::hook::add_pre<ItemFuncLMagic>(on_item_func_l_magic_pre));
+    install("item_func_GREEN_RUPEE",
+            mods::hook::add_pre<ItemFuncGreenRupee>(on_item_func_green_rupee_pre));
+    install("item_func_BLUE_RUPEE",
+            mods::hook::add_pre<ItemFuncBlueRupee>(on_item_func_blue_rupee_pre));
 
     return MOD_OK;
 }
