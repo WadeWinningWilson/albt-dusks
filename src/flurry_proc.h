@@ -37,6 +37,13 @@ int albw_flurry_proc_try_enter(daAlink_c* link);
 // True while the overlay owns Link's proc.
 bool albw_flurry_proc_active();
 
+// The donor's flurryExitToWait (fork d_a_alink_flurry.inc:156), reachable from
+// outside flurry_proc.cpp. Same reason albw_flurry_proc_try_enter exists: the
+// ported bodies live on the AlbwFlurry_c subclass, so callers elsewhere in the
+// mod cannot name the method. dFlurryRush_cancelOnSwordEquipChange is the
+// donor's one out-of-actor caller.
+void albw_flurry_proc_exit_to_wait(daAlink_c* link, int reason);
+
 // Per-frame lifetime backstop, called once from mod_update (via
 // albw_flurry_tick). The primary end is the commonProcInit chokepoint below;
 // this catches an overlay left standing when the player actor itself went

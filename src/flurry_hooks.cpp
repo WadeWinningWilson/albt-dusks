@@ -6,6 +6,7 @@
 #include "mods/hook.hpp"
 
 #include "d/d_com_inf_game.h"
+#include "d/d_meter2_info.h"  // dMeter2Info_setSword - the sword-change seam
 #include "d/actor/d_a_player.h"
 #define private public
 #include "d/actor/d_a_alink.h"
@@ -20,6 +21,7 @@ DEFINE_HOOK(&daAlink_c::procBackJumpInit, ProcBackJumpInit);
 DEFINE_HOOK(&daAlink_c::procSideStepLandInit, ProcSideStepLandInit);
 DEFINE_HOOK(&daAlink_c::procBackJumpLandInit, ProcBackJumpLandInit);
 DEFINE_HOOK(fopAcM_posMove, FopAcMPosMove);
+DEFINE_HOOK(dMeter2Info_setSword, Meter2InfoSetSword);
 
 void on_proc_side_step_init_post(ModContext*, void* args, void*, void*) {
     if (!dFlurryRush_isEnabled()) {
@@ -174,6 +176,54 @@ void on_fop_ac_m_pos_move_post(ModContext*, void* args, void*, void*) {
 // still loads. Never make this silent - a quiet miss turns "never bound" into
 // "plausibly wrong forever".
 // ============================================
+// ============================================
+// NEW CODE - ALBW Port (cancel a live rush when the sword changes under it)
+//
+// FORK SPEC: d_meter2_info.cpp:1732-1737, inside dMeter2Info_setSword, just
+// above the two setters:
+//     const u8 prevSword = dComIfGs_getSelectEquipSword();
+//     if (prevSword != i_itemId) dFlurryRush_cancelOnSwordEquipChange();
+//     dComIfGs_setSelectEquipSword(i_itemId);
+//
+// POSITION: PRE is the donor's position here, not a convenience. The donor
+// reads the OLD equipped sword, and the only statement ahead of its insert
+// that touches save state is offItemFirstBit, which clears an item's
+// first-acquire bit and does not change the equipped sword - so a pre-hook
+// observes exactly the value the donor observes. Post would read the NEW
+// sword and the comparison would always be equal.
+//
+// The id validation is reproduced because the donor compares against the
+// SANITISED id: the function's leading switch rewrites an unrecognised id to
+// dItemNo_NONE_e before the comparison runs. A pre-hook sees the raw
+// argument, so without this an invalid id would compare differently than in
+// the donor. Error path only, but it is free to be exact.
+//
+// This writes nothing - it only reads the equipped sword and may end a rush.
+// ============================================
+HookAction on_meter2_info_set_sword_pre(ModContext*, void* args, void*, void*) {
+    if (!dFlurryRush_isActive()) {
+        return HOOK_CONTINUE;
+    }
+    u8 itemId = mods::arg<u8>(args, 0);
+    switch (itemId) {
+    case dItemNo_NONE_e:
+    case dItemNo_WOOD_STICK_e:
+    case dItemNo_SWORD_e:
+    case dItemNo_MASTER_SWORD_e:
+    case dItemNo_LIGHT_SWORD_e:
+        break;
+    default:
+        itemId = dItemNo_NONE_e;
+        break;
+    }
+
+    if (dComIfGs_getSelectEquipSword() != itemId) {
+        dFlurryRush_cancelOnSwordEquipChange();
+    }
+    // Always CONTINUE: the donor leaves the two setters below to run.
+    return HOOK_CONTINUE;
+}
+
 bool install(ModError*, const char* name, ModResult r) {
     if (r != MOD_OK) {
         if (svc_log != nullptr) {
@@ -201,7 +251,9 @@ ModResult albw_flurry_hooks_init(ModError* error) {
         !install(error, "FlurryPosMovePre",
                  mods::hook_add_pre<FopAcMPosMove>(svc_hook, on_fop_ac_m_pos_move_pre)) ||
         !install(error, "FlurryPosMovePost",
-                 mods::hook_add_post<FopAcMPosMove>(svc_hook, on_fop_ac_m_pos_move_post)))
+                 mods::hook_add_post<FopAcMPosMove>(svc_hook, on_fop_ac_m_pos_move_post)) ||
+        !install(error, "FlurrySwordEquipChangePre",
+                 mods::hook_add_pre<Meter2InfoSetSword>(svc_hook, on_meter2_info_set_sword_pre)))
     {
         return MOD_ERROR;
     }

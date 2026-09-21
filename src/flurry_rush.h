@@ -20,6 +20,11 @@ enum dFlurryRushEndReason {
     dFlurryRushEnd_StartGateExpired = 1,
     dFlurryRushEnd_HitCap = 2,
     dFlurryRushEnd_TargetLost = 3,
+    // PORTED - fork include/d/d_albw_flurry_rush.h. The fork's enum is
+    // numbered differently (Debug = 0, Interrupt = 4); this module's order
+    // predates the port and the values are internal to it, so only the
+    // MEMBER is adopted, appended rather than renumbering live reasons.
+    dFlurryRushEnd_EquipChange = 4,
 };
 
 // ============================================
@@ -58,6 +63,10 @@ bool dFlurryRush_tryEnterFromDodge();
 void dFlurryRush_onAttackStarted();
 void dFlurryRush_update();
 void dFlurryRush_end(dFlurryRushEndReason reason);
+
+// PORTED - fork d_albw_flurry_rush.cpp:339. Called when the equipped sword
+// changes underneath a live rush (fork d_meter2_info.cpp:1732-1737).
+void dFlurryRush_cancelOnSwordEquipChange();
 bool dFlurryRush_shouldSuppressAlbwSpend();
 bool dFlurryRush_isTargetActor(fopAc_ac_c* actor);
 fopAc_ac_c* dFlurryRush_getTargetActor();

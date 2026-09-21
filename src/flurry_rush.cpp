@@ -219,6 +219,43 @@ void dFlurryRush_end(dFlurryRushEndReason reason) {
     albw::set_sim_time_scale(1.0f);
 }
 
+// ============================================
+// PORTED - fork d_albw_flurry_rush.cpp:339-351, byte-for-byte in structure:
+//
+//     void dFlurryRush_cancelOnSwordEquipChange() {
+//         if (!s_state.active) return;
+//         daAlink_c* link = daAlink_getAlinkActorClass();
+//         if (link != NULL && link->mProcID == daAlink_c::PROC_FLURRY_RUSH) {
+//             link->flurryExitToWait(dFlurryRushEnd_EquipChange);
+//             return;
+//         }
+//         dFlurryRush_end(dFlurryRushEnd_EquipChange);
+//     }
+//
+// ONE OVERLAY TRANSLATION. The donor asks `mProcID == PROC_FLURRY_RUSH`; the
+// overlay has no such proc id, and its stand-in for exactly that question is
+// albw_flurry_proc_active() (flurry_proc.cpp:165 documents why the host proc
+// id alone cannot answer it - PROC_CUT_NORMAL is entered constantly in
+// ordinary play). Everything else, including the two-branch shape and the
+// fallback to a plain end when Link is not in the proc, is the donor's.
+//
+// WHY IT MATTERS: the swing table, the hit cap and the AT profile are all
+// read from the sword that was equipped when the rush began. Swapping swords
+// mid-rush - the Master Sword pedestal, a cutscene grant - would otherwise
+// leave a rush running against stale parameters.
+// ============================================
+void dFlurryRush_cancelOnSwordEquipChange() {
+    if (!s_state.active) {
+        return;
+    }
+    auto* link = static_cast<daAlink_c*>(daPy_getPlayerActorClass());
+    if (link != nullptr && albw_flurry_proc_active()) {
+        albw_flurry_proc_exit_to_wait(link, dFlurryRushEnd_EquipChange);
+        return;
+    }
+    dFlurryRush_end(dFlurryRushEnd_EquipChange);
+}
+
 bool dFlurryRush_tryPerfectDodge(dFlurryPerfectDodgeKind kind) {
     if (!flurry_enabled() || s_state.active) {
         return false;

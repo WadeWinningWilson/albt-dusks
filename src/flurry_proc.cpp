@@ -336,6 +336,21 @@ int albw_flurry_proc_try_enter(daAlink_c* link) {
 }
 
 // ============================================
+// The donor's flurryExitToWait, exposed to the rest of the mod. It runs the
+// verbatim fork body (flurry_port.inc), which ends the rush with the given
+// reason and returns Link through procWaitInit - so the commonProcInit
+// chokepoint below fires and clears s_overlayActive as it would for any other
+// exit. Guarded on s_overlayActive: calling it while the overlay does not own
+// Link would drive a stock cut-normal into PROC_WAIT.
+// ============================================
+void albw_flurry_proc_exit_to_wait(daAlink_c* link, int reason) {
+    if (link == nullptr || !s_overlayActive) {
+        return;
+    }
+    static_cast<AlbwFlurry_c*>(link)->flurryExitToWait(reason);
+}
+
+// ============================================
 // LIFETIME - layer 3 of 3. See MANIFEST "lifetime".
 //
 // Layers 1 and 2 are the donor's own two mechanisms (the commonProcInit
