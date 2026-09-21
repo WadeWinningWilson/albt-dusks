@@ -52,8 +52,14 @@
 
 #include "albw_common.h"
 #include "meter_bridge.h"
+#include "albw_dusk_log.h"
 #include "modules.h"
 #include "mods/svc/hook.hpp"
+
+// Temporary chain probe: jars spawn and can be picked up but grant nothing.
+// Logs each link once per pickup so one run shows exactly where it dies.
+// MUST be 0 before release (docs/RELEASE-PROCEDURE.md step 1).
+#define ALBW_MAGICJAR_PROBE 1
 
 #if TARGET_PC
 
@@ -118,6 +124,10 @@ HookAction on_item_get_next_execute_pre(ModContext*, void* args, void*, void*) {
 
         // fork :878-879 - magic drops behave like HEART / GREEN_RUPEE: no
         // canoe/horse and no wallet-full branching, the meter always accepts.
+#if ALBW_MAGICJAR_PROBE
+        DuskLog.info("[jar] 1 nextExecute arm: itemNo={} meter={}/{}", (int)item->m_itemNo,
+                     albw_meter_get_value(), albw_meter_get_max());
+#endif
         item->procInitSimpleGetDemo();
         item->itemGet();
 
@@ -146,8 +156,15 @@ HookAction on_item_get_pre(ModContext*, void* args, void*, void*) {
     if (item == nullptr || !magic_drops_active() || !is_magic_item(item->m_itemNo)) {
         return HOOK_CONTINUE;
     }
+#if ALBW_MAGICJAR_PROBE
+    DuskLog.info("[jar] 2 itemGet arm -> execItemGet({})", (int)item->m_itemNo);
+#endif
     mDoAud_seStart(Z2SE_RED_LUPY_GET, NULL, 0, 0);
     execItemGet(item->m_itemNo);
+#if ALBW_MAGICJAR_PROBE
+    DuskLog.info("[jar] 4 after execItemGet: meter={}/{}", albw_meter_get_value(),
+                 albw_meter_get_max());
+#endif
     return HOOK_SKIP_ORIGINAL;
 }
 
@@ -162,6 +179,10 @@ HookAction on_item_func_s_magic_pre(ModContext*, void*, void*, void*) {
     if (!magic_drops_active()) {
         return HOOK_CONTINUE;
     }
+#if ALBW_MAGICJAR_PROBE
+    DuskLog.info("[jar] 3 item_func_S_MAGIC FIRED, meter={}/{}", albw_meter_get_value(),
+                 albw_meter_get_max());
+#endif
     albw_meter_add_fraction(1, 5);
     return HOOK_SKIP_ORIGINAL;
 }
@@ -170,6 +191,10 @@ HookAction on_item_func_l_magic_pre(ModContext*, void*, void*, void*) {
     if (!magic_drops_active()) {
         return HOOK_CONTINUE;
     }
+#if ALBW_MAGICJAR_PROBE
+    DuskLog.info("[jar] 3 item_func_L_MAGIC FIRED, meter={}/{}", albw_meter_get_value(),
+                 albw_meter_get_max());
+#endif
     albw_meter_add_fraction(1, 3);
     return HOOK_SKIP_ORIGINAL;
 }
