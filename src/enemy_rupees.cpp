@@ -2,6 +2,7 @@
 
 #include "albw_common.h"
 #include "config_vars.h"
+#include "meter_bridge.h"
 #include "modules.h"
 #include "region_table.h"
 
@@ -388,6 +389,15 @@ void tryKillAfterDamage(fopAc_ac_c* enemy, s32 attackPower) {
 // unconditional on enemy kill, and the meter is always live in this mod.
 // ============================================
 void tryDropMagicJar(fopAc_ac_c* enemy, s32 attackPower) {
+    // Feature gate (project rule "toggle off == stock"): the jar exists only to
+    // refill the ALBW meter, and with the meter off magic_jar.cpp leaves
+    // check_itemno stock, which rewrites L_MAGIC to a green rupee
+    // (dusklight-main/src/d/d_item.cpp:2141-2143). Without this gate the mod
+    // would still hand out one extra green rupee on 10% of kills with every
+    // feature disabled. The fork has no toggle, so it has no equivalent line.
+    if (!albw_meter_is_enabled()) {
+        return;
+    }
     if (enemy == NULL || attackPower == 0) {
         return;
     }

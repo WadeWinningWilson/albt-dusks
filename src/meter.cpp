@@ -304,6 +304,29 @@ void flush_pending_spends(dMeter2_c* meter) {
     }
 }
 
+// ============================================
+// NEW CODE - ALBW Port (fork dMeter2_addALBWFraction, d_meter2.cpp:741-745)
+// Scales off the CURRENT ceiling (fork sOilMaxVar == this meter's g_max), so a
+// magic pickup grows with meter upgrades; add_base_fraction below scales off the
+// BASE pool and is a different fork function (dMeter2_addALBWBaseFraction,
+// d_meter2.cpp:747-759). The fork's clamp lives in albwRefreshLockoutState
+// (d_meter2.cpp:284-286); reproduced inline here because this meter's
+// refresh_lock_state does not clamp.
+// ============================================
+void add_fraction(int numerator, int denominator) {
+    if (denominator <= 0) {
+        return;
+    }
+    g_meter += (g_max * numerator) / denominator;
+    if (g_meter > g_max) {
+        g_meter = g_max;
+    }
+    refresh_lock_state(false);
+}
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
+
 void add_base_fraction(int numerator, int denominator) {
     if (denominator <= 0) {
         return;
@@ -2015,6 +2038,11 @@ void albw_meter_drain_to_lockout() {
 
 void albw_meter_add_base_fraction(int numerator, int denominator) {
     albw_meter_impl::add_base_fraction(numerator, denominator);
+}
+
+// Fork dMeter2_addALBWFraction (d_meter2.cpp:741-745) — magic pickups.
+void albw_meter_add_fraction(int numerator, int denominator) {
+    albw_meter_impl::add_fraction(numerator, denominator);
 }
 
 void albw_meter_sub_base_fraction(int numerator, int denominator) {
