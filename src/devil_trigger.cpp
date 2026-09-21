@@ -197,8 +197,20 @@ void albw_devil_trigger_reset() {
 }
 
 ModResult albw_devil_trigger_init(ModError*) {
+    // Reset the ARMED set only.
+    //
+    // sOverrideCount is deliberately NOT cleared here. Health overrides are
+    // registered by the actor modules during their own init, and this init
+    // runs AFTER btn_parry_init in the chain (mod.cpp:209-210) - so zeroing
+    // the table here silently discarded the Darknut override and the policy
+    // fell back to the generic health/field_0x560 reading. That is precisely
+    // the reading which is meaningless for a Darknut, so the probe showed a
+    // health fraction frozen at 31% while the real pool ran 0 -> 360.
+    //
+    // Making this order-independent is the fix, not reordering the chain: the
+    // table is statically zero-initialised, registration is one-time, and no
+    // init should depend on being called before its own clients.
     sArmedCount = 0;
-    sOverrideCount = 0;
     return MOD_OK;
 }
 

@@ -121,6 +121,7 @@
 #include "Z2AudioLib/Z2SeMgr.h"  // Z2SE_EN_TN_*
 
 #include "albw_combat.h"    // dAlbwCombat_isGuardOpenerHit, kAlbwGuardOpenerWindowFrames
+#include "hp_mult_port.h"   // dAlbwHP_scaleHpValue (the H-HP hunk, fork d_a_b_tn.cpp:5046)
 #include "lockout_port.h"   // dAlbwLockout_* (the L hunks of the shared damage_check)
 #include "shield.h"         // dShield_*
 #include "mods/hook.hpp"
@@ -510,6 +511,57 @@ HookAction on_btn_action_pre(ModContext*, void* args, void*, void*) {
 }
 
 // ============================================
+// action - H-HP, the true-max-HP hunk. Port of fork d_a_b_tn.cpp:5045-5047.
+//
+// WHY THIS EXISTS. dAlbwHP_tryApplyTrueMaxHp scales health and field_0x560,
+// which for this actor are not the durability pool. daB_TN_c::setDamage opens
+// `health = 100;` and then calls cc_at_check (stock :1147-1148), so health is a
+// SCRATCH register holding one hit's damage - the same reading btnHealthFraction
+// below already documents. The pool is
+//     field_0x6fc += 100 - health;                  // accumulated  (stock :1213)
+//     if (field_0x6fc >= field_0x700) -> ACT_ENDING // death        (stock :1216)
+// and field_0x700 is re-seeded from l_HIO.field_0x24 (360.0f, stock :272) on
+// EVERY frame at stock :4449. So the once-per-actor init scaler cannot reach it,
+// and "Mid-boss HP xN" left a Darknut exactly as durable as vanilla.
+//
+// PLACEMENT - POST, and the argument is exact, not "close enough". The fork puts
+// its line immediately after the stock `field_0x700 = (int)l_HIO.field_0x24;`
+// inside action(), which is unreachable for us: action() is NOT replaceable
+// (m_attack_timer, m_attack_tn and l_HIO are all file-static - see the H33
+// comment above, which already flags this hunk as owed to the HP lane).
+//   * VERIFIED: field_0x700 is WRITTEN in exactly one place in the whole stock
+//     file (action() :4449) and READ in exactly three (setDamage :1205, :1210,
+//     :1216), all reachable only from damage_check(), one statement earlier.
+//   * VERIFIED: nothing in the mActionMode1 switch, in any executeXxx, or in
+//     execute() reads or writes field_0x700.
+//   * The donor's placement guarantees one property: field_0x700 is scaled from
+//     the stock re-seed onward, and therefore scaled when the NEXT frame's
+//     damage_check() -> setDamage reads it. A POST hook on action() reproduces
+//     that cadence exactly, and leaves the value scaled for the HUD accessor too.
+//   * A PRE hook would be WRONG: the stock re-seed then wipes the scale for the
+//     rest of the frame, so btnHealthFraction would read the unscaled 360.
+//   * A POST on damage_check would be WRONG: it lands BEFORE the stock re-seed,
+//     which overwrites it on the very next statement.
+//
+// NOT gated on s_featureReady - that latch is the parry set's all-or-nothing
+// install guard, and an unrelated parry hook failing must not switch HP scaling
+// off. NOT mType-gated: the fork's line runs for every daB_TN_c, zako included.
+//
+// Toggle off == provably stock: scaleHpField returns its input when mult <= 1
+// (fork d_albw_hp_mult.cpp:105-111) and dAlbwRegionMult_scaleHp returns its input
+// when mult <= 1.0f (fork d_albw_region_mult.cpp:242-249), so with both sliders
+// at 1 this writes back the identical 360.
+// ============================================
+void on_btn_action_post(ModContext*, void* args, void*, void*) {
+    daB_TN_c* self = mods::arg<daB_TN_c*>(args, 0);
+    if (self == nullptr) {
+        return;
+    }
+    // fork d_a_b_tn.cpp:5046, verbatim
+    self->field_0x700 = dAlbwHP_scaleHpValue(fpcNm_B_TN_e, (s16)self->field_0x700);
+}
+
+// ============================================
 // checkAttackAble - H23. The Darknut cannot attack while the window is open.
 //
 // PLACEMENT: the fork's change is the LITERAL FIRST STATEMENT of the function
@@ -749,11 +801,11 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     }
 #endif
 
-    if (!dAlbwDevil_isArmed(self)) {
-        return;
-    }
-
+    // Computed here rather than after the armed gate: it is a MEASUREMENT as
+    // well as a decision, and gating it on armed meant the first run produced
+    // no signal data at all.
     const bool attacking = dAlbwDevil_isAttackLive(self);
+
 #if ALBW_DEVIL_PROBE
     // The measurement the whole design rests on: does the generic
     // AT-registry answer agree with the Darknut action mode we already know?
@@ -766,6 +818,11 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
                      attacking ? 1 : 0, truth ? 1 : 0);
     }
 #endif
+
+    if (!dAlbwDevil_isArmed(self)) {
+        return;
+    }
+
     if (attacking) {
         return;  // a swing is live - stock timing, stock hitbox, no sub-step
     }
@@ -782,6 +839,19 @@ ModResult albw_btn_parry_init(ModError*) {
     ok &= report("BtnDamageCheck",
                  mods::hook_add_pre<BtnDamageCheck>(svc_hook, on_btn_damage_check_pre));
     ok &= report("BtnAction", mods::hook_add_pre<BtnAction>(svc_hook, on_btn_action_pre));
+
+    // H-HP - the Darknut true-max-HP hunk (fork d_a_b_tn.cpp:5046). Deliberately
+    // NOT folded into `ok`: this is the HP lane, not the parry lane. If the parry
+    // set half-installs, HP scaling must still work; if this one misses, the parry
+    // port must still ship. Reported loudly either way - never a silent fallback.
+    if (!report("BtnActionTrueHp",
+                mods::hook_add_post<BtnAction>(svc_hook, on_btn_action_post))) {
+        if (svc_log != nullptr) {
+            svc_log->error(mod_ctx, "Darknut true-max-HP scaling is INACTIVE this run - "
+                                    "Mid-boss HP x will have no effect on Darknuts");
+        }
+    }
+
     ok &= report("BtnCheckAttackAble",
                  mods::hook_add_pre<BtnCheckAttackAble>(svc_hook, on_btn_check_attack_able_pre));
     ok &= report("BtnSetActionMode",
