@@ -26,4 +26,4 @@
 // bring-up session (steps 2-6 of the staged plan), then back to 0; at 0 the
 // adapter body compiles out entirely and the TU carries no probe state.
 // ============================================
-#define ALBW_DARKNUT_PROBE 0
+#define ALBW_DARKNUT_PROBE 1
