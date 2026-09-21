@@ -84,7 +84,9 @@ construction. Cost: needs per-enemy knowledge of which action modes count as
 "attacking" — for the Darknut we already have that (`mActionMode1`, the
 `ACT_ATTACKH` / `ACT_ATTACKSHIELDH` states we hook today).
 
-**Recommendation: B first, C as the target.** B proves the trigger, the tier
+**Recommendation: see 3b - the user's C-plus-movement refinement supersedes this.**
+
+~~B first, C as the target.~~ Kept for the reasoning: B proves the trigger, the tier
 gate and the knockback immunity end-to-end with zero collision risk. C is the
 version that actually reads well — a relentless enemy whose telegraphs stay
 readable — and it is *safer* than A, not merely prettier: the swing keeps stock
@@ -92,6 +94,67 @@ timing, so nothing about the attack can desync.
 
 A is the one to avoid. A widened hitbox on a fast enemy is the combination
 players experience as unfair, and it is the hardest of the three to tune.
+
+## 3b. THE CHOSEN SHAPE — C plus movement, via state-gated sub-stepping
+
+User asked whether C could also speed enemy *movement*. It can, and the way it
+combines is better than either half alone.
+
+**Movement and locomotion animation must scale TOGETHER or the enemy
+foot-slides** — feet planted at stock rate while the body travels faster is
+the classic tell. Scaling `speedF` alone would produce exactly that.
+
+Sub-stepping gives both for free, and here is the point: **the collision
+objection in §2 only applies to attack sweeps.** Gate the sub-step to
+NON-ATTACK states and there is no attack collider live to miss. So:
+
+| Enemy state | Treatment |
+|---|---|
+| approach / chase / recover / idle | sub-step N times — movement, locomotion animation, timers and state machine all advance together, in sync, no per-enemy morf offset needed |
+| attacking | untouched at 1.0x — telegraph, swing timing and the AT collider all stock |
+
+That is route C with movement included, and it costs nothing in collision
+fidelity because the two concerns are disjoint in time.
+
+Residual exposure, and it is small and in the forgiving direction: the
+enemy's own body/hurt sphere moves faster, so Link's sword can occasionally
+miss a fast-approaching enemy. A missed player hit reads as "I mistimed it";
+an enemy attack passing through you reads as broken. This design only risks
+the former.
+
+### How to know it is attacking, without per-enemy tables
+
+Per-enemy action-mode lists work (the Darknut is already mapped:
+`ACT_ATTACKH` / `ACT_ATTACKSHIELDH`) but do not scale to 106 actors.
+
+A generic signal may exist: **ask the collision system whether this actor has
+an AT collider registered.** `cCcS` holds `mpObjAt[0x100]` with `mObjAtCount`
+(`c_cc_s.h:14,21`) and every `cCcD_Obj` knows its owner via `GetAc()`
+(`c_cc_d.h:185`). Scanning for the actor answers "is an attack live right now"
+with no per-enemy knowledge at all.
+
+Two caveats before trusting it, both needing confirmation in game:
+
+1. **One frame of lag.** The AT list is filled during execute, so a check made
+   while sub-stepping reads the PREVIOUS frame. Acceptable for a state gate -
+   attacks last many frames - but it means the first frame of an attack may
+   still be sub-stepped. Worth a probe.
+2. **Permanent-AT enemies.** Contact-damage actors may keep an AT collider set
+   at all times, in which case they would never qualify for Devil Trigger.
+   That is a SAFE failure (no speed-up) rather than a dangerous one, but it
+   would quietly exclude a chunk of the roster, so measure which enemies it
+   silently drops before relying on it.
+
+Fallback if the generic signal proves unreliable: per-enemy lists, shipped
+incrementally, Darknut first.
+
+### Debt this touches
+
+The `fopAcM_posMove` PRE/POST pair (`flurry_hooks.cpp:100-136`) is already
+flagged in [FLURRY-RUSH-PLAN.md](FLURRY-RUSH-PLAN.md) §4 as a lossy paraphrase
+needing a re-port from the donor - it scales `speed` and divides it back, where
+the donor scales `pos`. If Devil Trigger leans on the same seam, two features
+depend on that re-port instead of one. Do it before building this, not after.
 
 ## 4. Knockback immunity — the easy half
 
@@ -127,9 +190,16 @@ and it would look like the feature "working" right up until nothing dies.
 
 ## 6. Sequencing
 
-1. Trigger + tier gate + latch, with a probe and **no** speed change — confirm
-   it arms on the right enemies at the right HP and never flickers.
-2. Knockback immunity alone. Visible, useful, zero collision risk.
-3. Route B: a capped sub-step, measured for collider-array headroom.
-4. Route C: per-enemy "attacking" state lists, starting with the Darknut since
-   its action modes are already mapped.
+1. **Re-port `fopAcM_posMove`** from the donor first (FLURRY-RUSH-PLAN §4). It
+   is already debt, and this feature would be the second thing standing on it.
+2. **Trigger + tier gate + latch**, with a probe and **no** speed change —
+   confirm it arms on the right enemies at the right HP and never flickers
+   around the 25% edge.
+3. **Probe the generic attacking-now signal** (§3b) against the Darknut, whose
+   action modes we already know, so we can compare the AT-registry answer to
+   the ground truth. This decides generic-vs-per-enemy before any speed code.
+4. **Knockback immunity alone.** Visible, useful, zero collision risk - and it
+   is the half that needs no speed decision at all.
+5. **State-gated sub-step at a low N** (~1.5x), measured for collider-array
+   headroom with a full room of low-HP enemies.
+6. Raise N only once 5 is clean, and only as far as it still reads fair.
