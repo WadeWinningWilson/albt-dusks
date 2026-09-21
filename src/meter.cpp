@@ -1081,6 +1081,41 @@ HookAction gate_cut_head_pre(ModContext*, void* args, void* retval, void*) {
     if (!meter_enabled() || !dAlbw_isHiddenSkillReworkEnabled()) {
         return HOOK_CONTINUE;
     }
+    // ============================================
+    // FORK FIX - Helm Splitter double count / double drain.
+    // Donor: fork d_a_alink_cut.inc:2573-2575, the first statement of
+    // procCutHeadInit's TARGET_PC block, ABOVE the cost block. Stock guards
+    // this re-entry only under DEMO_CUT_HEAD_e (dusklight-main
+    // d_a_alink_cut.inc:2248); the fork widened it because the fork attached
+    // a cost to the proc. procCutHeadLand() calls checkNextAction() on every
+    // frame past mLandAnm.mCancelFrame, which reaches checkDoCutAction() ->
+    // procCutHeadInit() again while mProcID is still PROC_CUT_HEAD_LAND. A
+    // Darknut's guard-open window (btn_parry.cpp:371-373) re-asserts
+    // onHeadLockFlg() for 75-90 frames, so checkCutHeadState() is still true
+    // and that second entry charges the hidden skill a second time.
+    //
+    // A pre-hook returning 1 with HOOK_SKIP_ORIGINAL is the donor's position:
+    // when the donor guard fires, procCutHeadInit returns 1 and no other
+    // statement in the body runs. The donor condition is a strict superset of
+    // the stock demo guard below it, so subsuming that guard changes nothing.
+    //
+    // ONE DELIBERATE DEVIATION. The fork puts this guard ABOVE its
+    // dAlbw_isHiddenSkillReworkEnabled() check, so it fires even with the
+    // rework off; here it sits below the feature gate, so a toggled-off mod
+    // is provably stock. Safe because the guard only exists to stop a DOUBLE
+    // CHARGE, and every charge in this hook (signal_drain,
+    // onHiddenSkillProcStarted) is itself below the same gate - with the
+    // feature off there is no cost to double.
+    // ============================================
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link != nullptr && (link->mProcID == daAlink_c::PROC_CUT_HEAD ||
+                            link->mProcID == daAlink_c::PROC_CUT_HEAD_LAND))
+    {
+        if (retval != nullptr) {
+            *static_cast<int*>(retval) = 1;
+        }
+        return HOOK_SKIP_ORIGINAL;
+    }
     if (!can_hidden_skill()) {
         if (retval != nullptr) {
             *static_cast<int*>(retval) = 0;
