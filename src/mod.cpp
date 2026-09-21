@@ -34,6 +34,7 @@
 #include "outfit_swim.h"
 #include "modules.h"
 #include "magic_jar_probe.h"
+#include "devil_trigger.h"
 #include "tear_actor.hpp"  // albw_tear_actor_init / albw_tear_glow_init (Dusklight 2.0 tear)
 #include "potion_grant.h"  // albw_potion_grant_init / albw_potion_grant_tick (soulbound potion)
 #include "potion_bottle.h"  // albw_potion_bottle_init (soulbound potion drink/heal/consume)
@@ -68,7 +69,8 @@ IMPORT_SERVICE(HostService, svc_host);
 namespace {
 
 ModResult register_all_config(ModError* error) {
-    if (albw_register_int("progress_flags_a", 0, &g_progress_flags_a) != MOD_OK ||
+    if (albw_register_bool("devil_trigger", false, &g_devil_trigger) != MOD_OK ||
+        albw_register_int("progress_flags_a", 0, &g_progress_flags_a) != MOD_OK ||
         albw_register_int("ctr_fa_tier", 0, &g_ctr_fa_tier) != MOD_OK ||
         albw_register_int("ctr_potion_tier", 0, &g_ctr_potion_tier) != MOD_OK ||
         albw_register_int("ctr_heart_shop_tier", 0, &g_ctr_heart_shop_tier) != MOD_OK ||
@@ -205,6 +207,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
     if (albw_meter_init(error) != MOD_OK || albw_lockout_init(error) != MOD_OK ||
         albw_enemy_lockout_init(error) != MOD_OK ||
         albw_btn_parry_init(error) != MOD_OK ||
+        albw_devil_trigger_init(error) != MOD_OK ||
         albw_magic_jar_init(error) != MOD_OK ||
         albw_rupee_popup_init(error) != MOD_OK ||
         albw_tear_particles_init(error) != MOD_OK ||

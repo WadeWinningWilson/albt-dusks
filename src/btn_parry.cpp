@@ -88,6 +88,8 @@
 #include "albw_common.h"
 #include "albw_dusk_log.h"
 #include "btn_probe.h"
+#include "devil_trigger.h"
+#include "devil_trigger_probe.h"
 
 // d_a_b_tn.h does not include headers for two of its own member types -
 // request_of_phase_process_class (c_phase.h) and mDoExt_McaMorfSO
@@ -406,6 +408,7 @@ DEFINE_HOOK(&daB_TN_c::executeGuardH, BtnExecuteGuardH);
 DEFINE_HOOK(&daB_TN_c::executeChaseL, BtnExecuteChaseL);
 DEFINE_HOOK(&daB_TN_c::executeGuardL, BtnExecuteGuardL);
 DEFINE_HOOK(&daB_TN_c::executeYoroke, BtnExecuteYoroke);
+DEFINE_HOOK(&daB_TN_c::execute, BtnExecute);  // Devil Trigger sub-step
 
 
 AlbwBtn_c* self_of(void* args) {
@@ -553,7 +556,30 @@ HookAction on_btn_set_action_mode_pre(ModContext*, void* args, void*, void*) {
     if (self == nullptr) {
         return HOOK_CONTINUE;
     }
-    self->AlbwBtn_c::setActionMode(mods::arg<int>(args, 1), mods::arg<int>(args, 2));
+
+    // ============================================
+    // DEVIL TRIGGER - knockback immunity.
+    //
+    // Refuse the STAGGER state transitions only. It is deliberately not a
+    // damage change: field_0x6fc still accumulates in setDamage, and ACT_ENDING
+    // is set from there too (stock d_a_b_tn.cpp:1213-1217), so an enraged
+    // Darknut still takes damage and still dies on schedule - it just does not
+    // flinch. Gating the damage path instead would make low-HP enemies
+    // unkillable, which is the failure this feature is most able to cause and
+    // the one that would look like it working until nothing died.
+    // ============================================
+    const int mode = mods::arg<int>(args, 1);
+    if (dAlbwDevil_isArmed(self) &&
+        (mode == daB_TN_c::ACT_YOROKE || mode == daB_TN_c::ACT_DAMAGEH ||
+         mode == daB_TN_c::ACT_DAMAGEL))
+    {
+#if ALBW_DEVIL_PROBE
+        DuskLog.info("[devil] no-flinch: refused mode={} (armed)", mode);
+#endif
+        return HOOK_SKIP_ORIGINAL;
+    }
+
+    self->AlbwBtn_c::setActionMode(mode, mods::arg<int>(args, 2));
     return HOOK_SKIP_ORIGINAL;
 }
 
@@ -635,6 +661,92 @@ bool report(const char* name, ModResult r) {
     return true;
 }
 
+// ============================================
+// DEVIL TRIGGER - Darknut wiring.
+//
+// WHAT "25% HEALTH" MEANS FOR THIS ENEMY, which is not obvious and not the
+// generic reading. daB_TN_c::setDamage opens with `health = 100;` and then
+// calls cc_at_check (stock d_a_b_tn.cpp:1147), so `health` is a SCRATCH
+// register holding one hit's damage - 100 minus whatever the hit took. It is
+// never a pool and never trends downward, so the generic
+// health / field_0x560 reading is meaningless here (and, separately, that is
+// why the enemy HP bar cannot be right for Darknuts either - noted, not fixed
+// here).
+//
+// The real pool is two ints further down the same function:
+//     field_0x6fc += 100 - health;                 // accumulated damage
+//     if (field_0x6fc >= field_0x700) -> ACT_ENDING  // death (stock :1213-1217)
+// with field_0x700 seeded from the HIO at stock :4449. So
+//     remaining = 1 - field_0x6fc / field_0x700
+// and that is a single pool spanning BOTH phases - armour breaking and
+// post-armour damage accumulate into the same counter - so the threshold
+// means the same thing either side of ACT_CHANGEDEMO.
+// ============================================
+bool btnHealthFraction(fopAc_ac_c* actor, float* outFraction) {
+    auto* tn = static_cast<daB_TN_c*>(actor);
+    if (tn == nullptr || tn->field_0x700 <= 0) {
+        return false;  // no threshold seeded yet - fall back, do not guess
+    }
+    const float taken = static_cast<f32>(tn->field_0x6fc);
+    const float pool  = static_cast<f32>(tn->field_0x700);
+    float frac = 1.0f - (taken / pool);
+    if (frac < 0.0f) {
+        frac = 0.0f;
+    }
+    *outFraction = frac;
+    return true;
+}
+
+// ============================================
+// The speed-up. State-gated sub-step, per docs/DEVIL-TRIGGER-SCOPE.md 3b:
+// run the actor a second time ONLY while no attack collider is live, so
+// movement, locomotion animation, timers and the state machine all advance
+// together while every swing keeps stock timing and a stock hitbox.
+//
+// POST, not PRE: the extra step must come after the real one, and calling the
+// original through g_orig would re-enter our own hook.
+//
+// s_inSubStep is not decoration. execute() reaches damage_check, which this
+// module also hooks; without the latch a sub-step would recurse.
+// ============================================
+bool s_inSubStep = false;
+
+void on_btn_execute_post(ModContext*, void* args, void*, void*) {
+    if (!s_featureReady || s_inSubStep) {
+        return;
+    }
+    auto* self = self_of(args);
+    if (self == nullptr || self->mType != 0) {
+        return;  // boss Darknut only, matching the parry port's own gate
+    }
+
+    dAlbwDevil_tickActor(self);
+    if (!dAlbwDevil_isArmed(self)) {
+        return;
+    }
+
+    const bool attacking = dAlbwDevil_isAttackLive(self);
+#if ALBW_DEVIL_PROBE
+    // The measurement the whole design rests on: does the generic
+    // AT-registry answer agree with the Darknut action mode we already know?
+    // ACT_ATTACKH/ATTACKSHIELDH/ATTACKL/ATTACKSHIELDL are the ground truth.
+    const int m = self->mActionMode1;
+    const bool truth = (m == daB_TN_c::ACT_ATTACKH || m == daB_TN_c::ACT_ATTACKSHIELDH ||
+                        m == daB_TN_c::ACT_ATTACKL || m == daB_TN_c::ACT_ATTACKSHIELDL);
+    if (truth != attacking) {
+        DuskLog.warn("[devil] signal MISMATCH act={} atRegistry={} truth={}", m,
+                     attacking ? 1 : 0, truth ? 1 : 0);
+    }
+#endif
+    if (attacking) {
+        return;  // a swing is live - stock timing, stock hitbox, no sub-step
+    }
+
+    s_inSubStep = true;
+    self->AlbwBtn_c::execute();
+    s_inSubStep = false;
+}
+
 }  // namespace
 
 ModResult albw_btn_parry_init(ModError*) {
@@ -661,6 +773,15 @@ ModResult albw_btn_parry_init(ModError*) {
     ok &= report("BtnExecuteYoroke",
                  mods::hook_add_pre<BtnExecuteYoroke>(svc_hook, on_btn_execute_yoroke_pre));
 
+
+    ok &= report("BtnExecuteDevil",
+                 mods::hook_add_post<BtnExecute>(svc_hook, on_btn_execute_post));
+
+    // The Darknut reads its health differently from every other enemy - see
+    // btnHealthFraction. Registered even when Devil Trigger is toggled off:
+    // the override is a READING, not a behaviour, and the policy module gates
+    // on the toggle itself.
+    dAlbwDevil_registerHealthOverride(fpcNm_B_TN_e, btnHealthFraction);
 
     s_featureReady = ok;
     if (!s_featureReady) {

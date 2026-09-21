@@ -72,16 +72,28 @@ ModResult build_combat_tab(ModContext*, UiWindowHandle, UiElementHandle left, Ui
     // src/flurry_port.inc, overlaid on PROC_CUT_NORMAL) and the slow-mo, the
     // snap-lunge and the swing chain are all live. This toggle is the FEATURE
     // switch; the player still has to buy the fourth Focused Arts tier for it
-    // to do anything (session-only, no save bit - focused_arts_core.inc).
+    // to do anything; that purchase now PERSISTS in config.json (never the
+    // save file) via ALBW_FLAG_FLURRY_TIER.
     // Remaining work is tracked in docs/FLURRY-RUSH-PLAN.md §7.
     // ============================================
+
     if (albw_ui_add_toggle(left, "Flurry Rush",
                            "Sold by the rental shop as Focused Arts IV, once tiers I-III are "
                            "bought. Backflip while Z-locked with a full shield bash bar to "
                            "enter a slow-motion window and a flurry combo; the backflip spends "
-                           "a bash charge. Requires Focused Arts. The purchase lasts the "
-                           "session - nothing is written to your save.",
+                           "a bash charge. Requires Focused Arts. The purchase is kept "
+                           "between sessions and is stored with the mod, never in your "
+                           "save file.",
                            g_flurry_rush) != MOD_OK)
+    {
+        return MOD_ERROR;
+    }
+    if (albw_ui_add_toggle(left, "Devil Trigger",
+                           "Enemies enrage below 25% health: they move and animate faster "
+                           "between attacks and stop flinching from hits. Attack swings keep "
+                           "their normal speed and reach, so telegraphs stay readable. Common "
+                           "enemies and mid-bosses only.",
+                           g_devil_trigger) != MOD_OK)
     {
         return MOD_ERROR;
     }

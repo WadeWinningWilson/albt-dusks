@@ -67,6 +67,7 @@ extern ConfigVarHandle g_focused_arts_cheat;
 // save file. See albw_save_flags.h. Deliberately never given a UI control.
 extern ConfigVarHandle g_progress_flags_a;
 extern ConfigVarHandle g_progress_flags_b;
+extern ConfigVarHandle g_devil_trigger;
 
 // Mod progression counters, config.json-backed (were event regs 100-113).
 extern ConfigVarHandle g_ctr_fa_tier;
