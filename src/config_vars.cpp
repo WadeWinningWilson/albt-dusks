@@ -56,3 +56,5 @@ ConfigVarHandle g_parry_icons_mode = 0;
 ConfigVarHandle g_shield_hud_visibility = 0;
 ConfigVarHandle g_epona_spur_hud = 0;
 ConfigVarHandle g_focused_arts_cheat = 0;
+ConfigVarHandle g_progress_flags_a = 0;
+ConfigVarHandle g_progress_flags_b = 0;

@@ -22,21 +22,22 @@
 // adding a flag now means adding an enumerator here, and the layout is derived
 // rather than chosen.
 //
-// WHERE IT LIVES. dSv_event_c::mEvent is 256 bytes. Stock occupies 0-99 (bits)
-// and 235-255 (registers); 100-234 is genuinely unused, and this mod's other
-// fourteen registers (mq_hearts 100-102/104, focused arts 103, potion 105,
-// sword_atp 106-113) already live there without incident. setEventReg encodes
-// as `index << 8 | mask` (dusklight-main/src/d/d_save.cpp), so a register byte
-// addresses individual bits.
+// WHERE IT LIVES: config.json, via ConfigService - NOT the player's save file.
+// The mod owns that file, so uninstalling takes our state with it and the save
+// is never written at all. See the block comment in the .cpp for the store's
+// mechanics and for the one real trade (config.json is per-INSTALL, not
+// per-save-file).
 //
-// Base 114 is the next free byte after sword_atp's 106-113. Thirty-six flags
-// occupy 114-118 and leave 119-234 free. If you add flags past ALBW_FLAG_COUNT
-// growing beyond byte 234, the static_assert in the .cpp fires.
+// v0.2.7 shipped an interim version of this that used event registers 114-118.
+// That fixed the corruption - those bytes are outside anything stock reads -
+// but it was still writing to the save. Anyone who played 0.2.7 has flags in
+// those registers which this version does not read; they re-arm through normal
+// play, and the stale bytes are inert.
 //
-// NOT A MIGRATION. The old saveBitLabels bits are deliberately left untouched.
-// A set F_0686 is indistinguishable from a player who legitimately earned the
-// Fused Shadow, so clearing it would take away real progress to tidy up our
-// own mess. Affected saves simply re-arm their mod flags through normal play.
+// NOT A MIGRATION. The original saveBitLabels bits are deliberately left
+// untouched too. A set F_0686 is indistinguishable from a player who
+// legitimately earned the Fused Shadow, so clearing it would take away real
+// progress to tidy up our own mess.
 // ============================================
 
 enum AlbwSaveFlag {

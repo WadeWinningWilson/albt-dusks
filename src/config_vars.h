@@ -62,3 +62,8 @@ extern ConfigVarHandle g_parry_icons_mode;
 extern ConfigVarHandle g_shield_hud_visibility;
 extern ConfigVarHandle g_epona_spur_hud;
 extern ConfigVarHandle g_focused_arts_cheat;
+
+// Mod-owned persistent progress, stored in config.json - NOT in the player's
+// save file. See albw_save_flags.h. Deliberately never given a UI control.
+extern ConfigVarHandle g_progress_flags_a;
+extern ConfigVarHandle g_progress_flags_b;

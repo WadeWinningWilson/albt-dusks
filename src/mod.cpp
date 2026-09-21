@@ -66,7 +66,9 @@ IMPORT_SERVICE(HostService, svc_host);
 namespace {
 
 ModResult register_all_config(ModError* error) {
-    if (albw_register_bool("meter", true, &g_meter_enabled) != MOD_OK ||
+    if (albw_register_int("progress_flags_a", 0, &g_progress_flags_a) != MOD_OK ||
+        albw_register_int("progress_flags_b", 0, &g_progress_flags_b) != MOD_OK ||
+        albw_register_bool("meter", true, &g_meter_enabled) != MOD_OK ||
         albw_register_bool("stick_cycle", true, &g_stick_cycle) != MOD_OK ||
         albw_register_int("hp_normal", 1, &g_hp_normal) != MOD_OK ||
         albw_register_int("hp_midboss", 1, &g_hp_midboss) != MOD_OK ||
