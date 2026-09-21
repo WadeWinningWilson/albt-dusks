@@ -246,13 +246,66 @@ void probe_sample(daAlink_c* link, bool before) {
 // The ONE adapted body. Everything else in flurry_port.inc is verbatim.
 // ============================================
 void AlbwFlurry_c::flurryOverlayProcInit() {
+#if ALBW_FLURRY_PROBE
+    const int equipBefore = mEquipItem;
+#endif
+
     commonProcInit(PROC_CUT_NORMAL);
     mModeFlg = 0x101;  // fork m_procInitTable[PROC_FLURRY_RUSH] (d_a_alink.cpp:2116)
+
+    // ============================================
+    // DRAW THE SWORD - the one thing the donor never had to do.
+    //
+    // THE DEFECT. Every stock route into a sword swing is gated on
+    // mEquipItem == 0x103, "sword in Link's hand":
+    //     checkForceSwordSwing   stock d_a_alink_cut.inc:512-514
+    //     checkCutJumpInFly      stock d_a_alink.cpp:11022
+    //     procSideStep follow-up stock d_a_alink.cpp:15922
+    // The overlay is the only entry that is not, because the fork's trigger is
+    // a perfect dodge mid-combat - the sword is already out, so its own gate
+    // asks for OWNERSHIP, not equip (checkSwordGet, fork
+    // d_albw_flurry_rush.cpp:542). Our trigger is a backflip on bash charges,
+    // which Link can perform with the sword on his back. The cut animation
+    // then plays with the sword model still parented to the sheath
+    // (setSwordPos takes the hand joint only for mEquipItem == 0x103, stock
+    // :5907-5914) - the reported "Link does not pull out his sword", and
+    // louder on non-wooden swords because those are the ones with a visible
+    // sheath to leave it in (draw pass, stock :19736-19742).
+    //
+    // THE ROUTE. There is no donor code for this: the fork never reaches the
+    // case, so DN-10 step 1 lands on STOCK's own system rather than on
+    // instance-authored logic. Stock's instant-equip idiom - request, commit,
+    // cancel the equip animation - is changeItemTriggerKeepProc
+    // (:14570-14581), which does exactly:
+    //     itemEquip(sel_item); commonChangeItem(); resetUpperAnime(UPPER_2, -1);
+    // for the swim-legal items. swordEquip(TRUE) is the sword's request half
+    // (:11999-12035) and SELF-GATES on checkSwordGet, so a swordless Link is
+    // left untouched and nothing here can invent a sword. commonChangeItem
+    // puts away whatever was held, plays Z2SE_AL_SWORD_PULLOUT and calls
+    // setSwordModel() (:12492-12499), so the draw reads and sounds as a draw
+    // instead of the sword teleporting into his hand.
+    //
+    // POSITION. This is the adapter body, which stands exactly where the donor
+    // calls commonProcInit(PROC_FLURRY_RUSH) - the first statement of
+    // procFlurryRushInit's committed path (fork .inc:250) - and therefore ahead
+    // of the same function's tail, where flurryBeginSwing(0) can fire on the
+    // entry frame (fork .inc:274-277). The sword is in hand before the first
+    // swing is armed, never after it.
+    // ============================================
+    if (mEquipItem != 0x103) {
+        swordEquip(TRUE);
+        if (field_0x2fde == 0x103) {  // the request took: checkSwordGet passed
+            commonChangeItem();
+            resetUpperAnime(UPPER_2, -1.0f);
+        }
+    }
+
     s_overlayActive = true;
 #if ALBW_FLURRY_PROBE
     probe_reset();
-    DuskLog.info("[flurry] overlay ENTER host=PROC_CUT_NORMAL modeFlg=0x101 target={}",
-                 (void*)dFlurryRush_getTargetActor());
+    DuskLog.info("[flurry] overlay ENTER host=PROC_CUT_NORMAL modeFlg=0x101 target={} "
+                 "equip {} -> {} (0x103 = sword in hand)",
+                 (void*)dFlurryRush_getTargetActor(), equipBefore, (int)mEquipItem);
 #endif
 }
 

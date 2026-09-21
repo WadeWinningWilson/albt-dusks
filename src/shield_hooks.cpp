@@ -40,6 +40,7 @@ DEFINE_HOOK(&daAlink_c::setShieldGuard, SetShieldGuard);
 DEFINE_HOOK(&daAlink_c::swordSwingTrigger, SwordSwingTrigger);
 DEFINE_HOOK(&daAlink_c::checkItemAction, CheckItemAction);
 DEFINE_HOOK(&daAlink_c::procGuardAttackInit, ProcGuardAttackInit);
+DEFINE_HOOK(&daAlink_c::procGuardAttack, ProcGuardAttack);
 DEFINE_HOOK(&daAlink_c::procGuardSlipInit, ProcGuardSlipInit);
 DEFINE_HOOK(&daAlink_c::procGuardBreakInit, ProcGuardBreakInit);
 DEFINE_HOOK(&daAlink_c::execute, LinkExecute);
@@ -338,6 +339,20 @@ HookAction on_proc_guard_slip_init_pre(ModContext*, void* args, void* retval, vo
     fopAc_ac_c* attacker = objinf != nullptr ? objinf->GetTgHitAc() : nullptr;
 
     if (link != nullptr && dShield_onShieldHit(link, at_spl, attacker)) {
+        // ============================================
+        // NEW CODE - ALBW Port (parry success feedback)
+        // Fork d_a_alink_damage.inc:743 plays this on the SAME line as the
+        // successful-parry return, for every attack class:
+        //     if (dShield_onShieldHit(this, at_spl, tghit_ac)) {
+        //         dShield_playParrySuccessFeedback(this, var_r29->GetTgHitPosP());
+        // The body was ported (shield.cpp:1255) but this seam never called it,
+        // so a successful parry landed silently here. objinf is this hook's
+        // var_r29. dParryMaster_onPerfectParry is deliberately NOT added: the
+        // mod's dShield_onShieldHit already calls it internally, where the
+        // fork's leaves it to alink.
+        // ============================================
+        dShield_playParrySuccessFeedback(link, objinf != nullptr ? objinf->GetTgHitPosP()
+                                                                 : nullptr);
         *static_cast<int*>(retval) = 0;
         return HOOK_SKIP_ORIGINAL;
     }
@@ -371,8 +386,29 @@ HookAction on_proc_guard_slip_init_pre(ModContext*, void* args, void* retval, vo
     return HOOK_CONTINUE;
 }
 
+// ============================================
+// NEW CODE - ALBW Port (deferred guard-break block chain)
+//
+// Re-entrancy latch. dShield_onFailedGuardBreakBlock ends with the FORK's own
+// nested call i_link->procGuardBreakInit()
+// (fork src/d/d_albw_shield.cpp:1387-1389, mod src/shield.cpp same body).
+// In the fork that call is made from daAlink_c::setDamage, i.e. from OUTSIDE
+// procGuardBreakInit. The mod can only reach this seam from INSIDE
+// procGuardBreakInit's pre-hook, so the donor's nested call re-enters this
+// hook. The latch lets that one nested call fall through to the ORIGINAL
+// body - which is exactly the single guard-break the fork produces. Without
+// it the nested call recurses. This latch is the only instance-authored line
+// in this hunk; everything else is the fork's own sequence in the fork's own
+// order. See the staged manifest, section "invented logic".
+// ============================================
+bool s_inDeferredGuardBreak = false;
+
 HookAction on_proc_guard_break_init_pre(ModContext*, void* args, void* retval, void*) {
     if (!albw_shield_parry_enabled()) {
+        return HOOK_CONTINUE;
+    }
+
+    if (s_inDeferredGuardBreak) {
         return HOOK_CONTINUE;
     }
 
@@ -396,13 +432,130 @@ HookAction on_proc_guard_break_init_pre(ModContext*, void* args, void* retval, v
     const int at_spl = tg_gobj != nullptr ? tg_gobj->GetAtSpl() : static_cast<int>(link->mCcStts.GetAtSpl());
     fopAc_ac_c* attacker = shield_hit->GetTgHitAc();
 
-    if (dShield_shouldDeferGuardBreak(at_spl, attacker)) {
+    if (!dShield_shouldDeferGuardBreak(at_spl, attacker)) {
+        return HOOK_CONTINUE;
+    }
+
+    // ============================================
+    // NEW CODE - ALBW Port (bash charge on a blocked guard-break attack)
+    //
+    // FORK SPEC: src/d/actor/d_a_alink_damage.inc:729-760. The fork replaces
+    // stock's unconditional
+    //     if (at_spl == 10 || at_spl == 11 || at_spl == 9)
+    //         return procGuardBreakInit();
+    // (stock dusklight-main/src/d/actor/d_a_alink_damage.inc:669-671) with a
+    // DEFERRED form, and then lets the attack fall through into the SAME
+    // block chain every other attack takes:
+    //     if (!armor_no_dmg) {
+    //         if (dShield_onShieldHit(this, at_spl, tghit_ac)) {          // :742
+    //             dShield_playParrySuccessFeedback(this, var_r29->GetTgHitPosP());
+    //             dParryMaster_onPerfectParry();
+    //             return 0;
+    //         }
+    //         if (dShield_onFailedGuardBreakBlock(this, at_spl, tghit_ac)) // :747
+    //             return 1;
+    //         ...
+    //     }
+    //
+    // WHY THIS MATTERS FOR THE DARKNUT (B_TN - fork src/d/d_albw_hp_mult.cpp:37
+    // names fpcNm_B_TN_e "Darknut (Temple of Time)"): daB_TN_c::setSwordAtBreak
+    // (d_a_b_tn.cpp:973-985) sets AtSpl 0xA on mSwordSphs[0..3] and mCps, and
+    // create() arms it with setSwordAtBreak(1) (d_a_b_tn.cpp:5753); the sword
+    // collider source cc_tt_at_src / cc_tt_at_cps_src already default to AtSpl 9
+    // (d_a_b_tn.cpp:197, :210). AtSpl 9/10 is exactly isGuardBreakAttack
+    // (shield.cpp isGuardBreakAttack). So EVERY armored-phase Darknut swing is a
+    // guard-break-class attack, stock routes it through procGuardBreakInit, and
+    // the mod's only charge-grant seam (on_proc_guard_slip_init_pre) is never
+    // reached. Enemies with AtSpl 0/1/7/8 do reach procGuardSlipInit and do earn
+    // charges - which is precisely the reported asymmetry.
+    //
+    // armor_no_dmg: the fork gates the whole chain on !armor_no_dmg and its
+    // guard-break early-return never fires when the attack is deferrable, so a
+    // magic-armour-absorbed guard-break attack does nothing in the fork either.
+    // Reproduced with checkMagicArmorNoDamage() below.
+    //
+    // dParryMaster_onPerfectParry() is NOT called here: the mod's
+    // dShield_onShieldHit already calls it internally (src/shield.cpp, last
+    // statement before `return true`), unlike the fork's, where alink calls it.
+    // Calling it here too would double-fire.
+    // ============================================
+    if (link->checkMagicArmorNoDamage()) {
         *static_cast<int*>(retval) = 0;
         return HOOK_SKIP_ORIGINAL;
     }
 
+    if (dShield_onShieldHit(link, at_spl, attacker)) {
+        dShield_playParrySuccessFeedback(link, shield_hit->GetTgHitPosP());
+        *static_cast<int*>(retval) = 0;
+        return HOOK_SKIP_ORIGINAL;
+    }
+
+    s_inDeferredGuardBreak = true;
+    const bool guardBroken = dShield_onFailedGuardBreakBlock(link, at_spl, attacker);
+    s_inDeferredGuardBreak = false;
+
+    *static_cast<int*>(retval) = guardBroken ? 1 : 0;
+    return HOOK_SKIP_ORIGINAL;
+}
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
+
+// ============================================
+// NEW CODE - ALBW Port (shield-bash connect seam)
+//
+// FORK SPEC: src/d/actor/d_a_alink_guard.inc:501-506, inside
+// daAlink_c::procGuardAttack():
+//     if (mProcVar0.field_0x3008 == 0 && mGuardAtCps.ChkAtHit()) {
+//         mProcVar0.field_0x3008 = 1;
+//         dShield_onGuardAttackConnect();                 // TARGET_PC only
+//         dComIfGp_getVibration().StartShock(...);
+//     }
+//
+// The mod ported dShield_onGuardAttackConnect verbatim (src/shield.cpp:1785)
+// and then never called it, so its two effects are dead code:
+//   - dShield_tryGrantHelmPunishCredit(hitActor) (src/shield.cpp:1711), which
+//     is what sets sHelmPunishTargetId / sPunishWindowFrames and calls
+//     setEnemyHeadLockForHelm(enemy) - the enemy-side reaction to a bash; and
+//   - dShield_armBashNextHitBoost() (+5% on the next hit).
+// dShield_pollGuardAttackHit, already wired in on_link_execute_post, only
+// reproduces grantBashAlbwOnce() - the FIRST line of onGuardAttackConnect.
+//
+// This is the precondition for the Darknut reacting to a bash at all: the
+// fork's daB_TN_c::albwApplyPhase1BashGuardBreak / albwApplyPhase2BashGuardBreak
+// (fork src/d/actor/d_a_b_tn.cpp:207-223) both open their guard window ONLY if
+// dShield_tryGrantHelmPunishCredit(this) returns true. With no credit ever
+// granted, no enemy responds to a bash. (The B_TN actor half is still unported
+// - see the staged manifest.)
+//
+// PLACEMENT: PRE, not POST, and not procGuardAttackInit. The fork's call sits
+// on the rising edge `field_0x3008 == 0 && mGuardAtCps.ChkAtHit()`, and stock
+// clears that edge by assigning 1 in the very next statement. A pre-hook sees
+// the frame with the flag still 0 and the At hit already latched by the
+// collision pass that ran before Link's execute, so the identical test selects
+// the identical frame, once per bash. A post-hook would always read
+// field_0x3008 == 1 and fire never. procGuardAttackInit is the wrong function
+// entirely - it runs when the bash STARTS, before any collider can have hit.
+// ============================================
+HookAction on_proc_guard_attack_pre(ModContext*, void* args, void*, void*) {
+    if (!albw_shield_parry_enabled()) {
+        return HOOK_CONTINUE;
+    }
+
+    auto* link = mods::arg<daAlink_c*>(args, 0);
+    if (link == nullptr) {
+        return HOOK_CONTINUE;
+    }
+
+    if (link->mProcVar0.field_0x3008 == 0 && link->mGuardAtCps.ChkAtHit()) {
+        dShield_onGuardAttackConnect();
+    }
+
     return HOOK_CONTINUE;
 }
+// ============================================
+// NEW CODE ENDS HERE
+// ============================================
 
 void on_link_execute_post(ModContext*, void* args, void*, void*) {
     auto* link = mods::arg<daAlink_c*>(args, 0);
@@ -631,6 +784,8 @@ ModResult albw_shield_init(ModError* error) {
                  mods::hook_add_pre<ProcGuardSlipInit>(svc_hook, on_proc_guard_slip_init_pre, &kGuardPriority)) ||
         !install(error, "ProcGuardBreakInit",
                  mods::hook_add_pre<ProcGuardBreakInit>(svc_hook, on_proc_guard_break_init_pre)) ||
+        !install(error, "ProcGuardAttackConnect",
+                 mods::hook_add_pre<ProcGuardAttack>(svc_hook, on_proc_guard_attack_pre, &kGuardPriority)) ||
         !install(error, "LinkExecuteShield",
                  mods::hook_add_post<LinkExecute>(svc_hook, on_link_execute_post)) ||
         !install(error, "SetShieldChangeSafe",

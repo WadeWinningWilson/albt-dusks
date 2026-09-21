@@ -53,13 +53,33 @@ Several handles are pre-declared/registered but **not fully wired** — audit ea
   both pool builders. Commit 6e6d571.
 - [x] **5. Sumo fists only** — mechanic was already wired; exposed the settings
   toggle. Commit e8f598d.
-- [~] **6. Darknut enemy changes for parry system** — **NEEDS USER DECISION.**
-  Research found the fork's Darknut changes are ALL confuse/lockout/wolf/rupee,
+- [~] **6. Darknut enemy changes for parry system** — **IN PROGRESS. The entry
+  below it was WRONG and is kept only as the record of the mistake.**
+
+  ~~Research found the fork's Darknut changes are ALL confuse/lockout/wolf/rupee,
   ZERO parry content; the dusk parry system is player-side/hook-based so Darknuts
   are already parryable with nothing ported. No parry source exists on either
   side. Options for the user: (a) a parry *fix* (player-side shield_hooks) if a
   specific behavior is wrong in-game, or (b) port the fork's Darknut
-  confuse/lockout feature (a different, non-parry feature). Not building blind.
+  confuse/lockout feature (a different, non-parry feature). Not building blind.~~
+
+  **CORRECTION — wrong actor.** That research diffed `d_a_e_dn.cpp`, which is
+  NOT the Darknut. The Darknut is **`B_TN` / `daB_TN_c` / `d_a_b_tn.cpp`** —
+  named in the fork's own table, `src/d/d_albw_hp_mult.cpp:37`:
+  `fpcNm_B_TN_e, // 0x213 Darknut (Temple of Time)`. `E_DN` is a different,
+  unarmoured common enemy, and the "zero parry content" finding is true of it
+  and false of the Darknut. `d_a_b_tn.cpp` carries 33 ALBW hunks.
+
+  Player-side half LANDED (see the shield-bash entries in the Log): the deferred
+  guard-break block chain and the `dShield_onGuardAttackConnect` seam. Actor-side
+  half STILL OPEN — `albwHandleParryCombatBashShieldHit` (`d_a_b_tn.cpp:1449`),
+  `albwTryApplyBashGuardBreakFromHit` (`:1408`) and the `field_0xaa2` guard-open
+  window. Favourable shape for a port: every edited function is a public
+  header-declared `daB_TN_c` member, the fork added no data members, and
+  `field_0xaa2` is unused in stock so the stock layout carries it. Needs
+  `dAlbwCombat_isGuardOpenerHit` + `kAlbwGuardOpenerWindowFrames` in the mod's
+  `albw_combat` first, then `port_tool.py` whole-function replacement for
+  `damage_check` and `action`.
 - [x] **7. Region damage multiplier master + deps organization** — defaults
   aligned to fork, master→dependent nesting w/ is_disabled gating, Difficulty +
   Economy sections. Commit 42c5866.
@@ -77,5 +97,13 @@ Several handles are pre-declared/registered but **not fully wired** — audit ea
 - Flurry toggle hidden (d30ecba).
 - Magic Armor (8b60a34), wolf howl ungate (6e6d571), sumo fists toggle (e8f598d).
 - Region org + incoming scaler (42c5866).
-- Darknut: flagged for user — no parry source; do not fabricate.
+- ~~Darknut: flagged for user — no parry source; do not fabricate.~~ WRONG
+  ACTOR — see the correction in item 6. The Darknut is B_TN, not E_DN.
+- Shield bash, player side: deferred guard-break block chain in
+  on_proc_guard_break_init_pre (a Darknut swing is AtSpl 9/10, so stock's
+  unconditional `return procGuardBreakInit()` meant it never reached the mod's
+  only charge-grant seam), and a procGuardAttack PRE hook finally calling the
+  already-ported-but-dead dShield_onGuardAttackConnect (helm-punish credit +
+  next-hit boost — the reason NO enemy reacted to a bash).
+- Parry success feedback added to the guard-slip seam (fork damage.inc:743).
 - Soulbound potion: starting (grant path + init first).
