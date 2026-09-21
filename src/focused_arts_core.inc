@@ -22,6 +22,38 @@ static constexpr int kFocusedArtsShopPrices[kFocusedArtsMaxTier] = {
     500,
 };
 
+// ============================================
+// NEW CODE - ALBW Port (Flurry Rush as a fourth Focused Arts tier)
+//
+// DN-10 LEDGER: INVENTED, and recorded as such in docs/FLURRY-RUSH-PLAN.md §6
+// item 3 with the user's go. The fork has no shop row for Flurry Rush at all -
+// it gates the rush on a perfect dodge and nothing else. Selling it as a
+// fourth tier is this project's design, so it gets its own constants rather
+// than an extension of the fork's kFocusedArtsShopPrices (fork
+// d_focused_arts.cpp:28-32), which stays byte-verbatim above.
+//
+// SESSION-ONLY, NO SAVE WRITE. kFocusedArtsShopTierReg carries tiers 1-3 and
+// is deliberately NOT used here: the purchase lives in a static that dies with
+// the session, the same shape as the Deity Armor row (rental_shop.cpp:170).
+// This is also why kFocusedArtsMaxTier stays 3 - bumping it would drag
+// getEffectiveTier / getMaxBank / hasSpecialFinishers along with it and give
+// the meter a fourth bank segment nobody asked for.
+//
+// The price is a free parameter with no donor to answer to; 1000 sits a step
+// above tier III's 500. Change it here.
+// ============================================
+static constexpr int kFlurryRushShopTier = kFocusedArtsMaxTier + 1;
+static constexpr int kFlurryRushShopPrice = 1000;
+
+static bool s_flurryTierPurchased = false;
+
+// The row is offered only once the saved tiers are exhausted, so it reads as
+// "the tier after III" in the shop even though nothing about it is saved.
+static bool flurryTierOffered() {
+    return albw_cfg_bool(g_flurry_rush, false) && !s_flurryTierPurchased &&
+           dFocusedArts_getPurchasedTier() >= kFocusedArtsMaxTier;
+}
+
 static constexpr int kItemFillStep = 2;
 
 static constexpr int kRecentEventLines = 4;
@@ -471,6 +503,9 @@ bool dFocusedArts_hasSpecialFinishers() {
 
 // [NEW helper] dFocusedArts_getShopTierPrice
 int dFocusedArts_getShopTierPrice(int tier) {
+    if (tier == kFlurryRushShopTier) {
+        return kFlurryRushShopPrice;
+    }
     if (tier < 1 || tier > kFocusedArtsMaxTier) {
         return 0;
     }
@@ -479,8 +514,8 @@ int dFocusedArts_getShopTierPrice(int tier) {
 
 // [NEW helper] dFocusedArts_getNextShopTierPrice
 int dFocusedArts_getNextShopTierPrice() {
-    const int nextTier = dFocusedArts_getPurchasedTier() + 1;
-    if (nextTier > kFocusedArtsMaxTier) {
+    const int nextTier = dFocusedArts_getNextShopTierIndex();
+    if (nextTier == 0) {
         return 0;
     }
     return dFocusedArts_getShopTierPrice(nextTier);
@@ -491,7 +526,7 @@ bool dFocusedArts_canPurchaseShopTier() {
     if (!dFocusedArts_shouldShowShopTierRow()) {
         return false;
     }
-    return dFocusedArts_getPurchasedTier() < kFocusedArtsMaxTier;
+    return dFocusedArts_getNextShopTierIndex() != 0;
 }
 
 // [NEW helper] dFocusedArts_tryPurchaseShopTier
@@ -499,8 +534,25 @@ bool dFocusedArts_tryPurchaseShopTier() {
     if (!dFocusedArts_canPurchaseShopTier()) {
         return false;
     }
+    // ============================================
+    // NEW CODE - the tier-4 branch. NO dComIfGs_setEventReg: the Flurry Rush
+    // tier is session-only by design, so it never touches the save. Tiers 1-3
+    // keep the fork's reg write untouched below.
+    // ============================================
+    if (dFocusedArts_getNextShopTierIndex() == kFlurryRushShopTier) {
+        s_flurryTierPurchased = true;
+        return true;
+    }
     writeShopTierReg(static_cast<u8>(dFocusedArts_getPurchasedTier() + 1));
     return true;
+}
+
+// [NEW helper] dFocusedArts_hasFlurryRushTier
+// The unlock predicate the Flurry Rush module asks. isCheatAllTiers() grants
+// it for the same reason it grants tiers 1-3 - it is the project's existing
+// "skip the shop" switch, and testing the rush should not require 1000 rupees.
+bool dFocusedArts_hasFlurryRushTier() {
+    return albw_cfg_bool(g_flurry_rush, false) && (isCheatAllTiers() || s_flurryTierPurchased);
 }
 
 // [NEW helper] dFocusedArts_getShopTierName
@@ -512,19 +564,29 @@ const char* dFocusedArts_getShopTierName(int tier) {
         return "Focused Arts II";
     case 3:
         return "Focused Arts III";
+    case kFlurryRushShopTier:
+        return "Focused Arts IV";
     default:
         return "Focused Arts";
     }
 }
 
 // [NEW helper] dFocusedArts_getShopTierDesc
-const char* dFocusedArts_getShopTierDesc(int /*tier*/) {
+const char* dFocusedArts_getShopTierDesc(int tier) {
+    if (tier == kFlurryRushShopTier) {
+        return "This last one isn't a scroll at all - it's a knack. Fill your shield, "
+               "leap back from a foe you've locked onto, and the world will wait for "
+               "you. Mind that the leap spends a charge.";
+    }
     return "I noticed you are adept with that sword you carry! I found this scroll "
            "left discarded on the Hyrule Castle grounds. Care to take a look?";
 }
 
 // [NEW helper] dFocusedArts_resetRuntimeState
 void dFocusedArts_resetRuntimeState() {
+    // Session-only tier: it dies with the session, exactly like the Deity
+    // Armor rental. Nothing to clear from the save because nothing was written.
+    s_flurryTierPurchased = false;
     s_bankCount = 0;
     s_fillNumerator = 0;
     s_spendColumn = 0;
@@ -1036,12 +1098,17 @@ bool dFocusedArts_shouldShowShopTierRow() {
     if (!dComIfGs_isEventBit(dSv_event_flag_c::F_0339) && !albw_cfg_bool(g_true_albw, false)) {
         return false;
     }
-    return dFocusedArts_getPurchasedTier() < kFocusedArtsMaxTier;
+    // The tier-4 clause: once tiers 1-3 are bought out the row keeps standing
+    // as long as Flurry Rush is on and unbought.
+    return dFocusedArts_getPurchasedTier() < kFocusedArtsMaxTier || flurryTierOffered();
 }
 
 // [NEW helper] dFocusedArts_getNextShopTierIndex
 int dFocusedArts_getNextShopTierIndex() {
     const int next = dFocusedArts_getPurchasedTier() + 1;
+    if (next == kFlurryRushShopTier && flurryTierOffered()) {
+        return kFlurryRushShopTier;
+    }
     if (next < 1 || next > kFocusedArtsMaxTier) {
         return 0;
     }

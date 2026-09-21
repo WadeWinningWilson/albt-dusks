@@ -47,6 +47,11 @@ bool dFocusedArts_shouldShowShopTierRow();
 const char* dFocusedArts_getShopTierName(int tier);
 const char* dFocusedArts_getShopTierDesc(int tier);
 
+// Flurry Rush is sold as a fourth tier (session-only, no save bit) — see the
+// DN-10 ledger block in focused_arts_core.inc. This is the unlock predicate
+// dFlurryRush_isEnabled consults.
+bool dFocusedArts_hasFlurryRushTier();
+
 // --- lifecycle / combat events ---
 void dFocusedArts_resetRuntimeState();
 void dFocusedArts_onStageLoad();

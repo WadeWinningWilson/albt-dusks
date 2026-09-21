@@ -168,14 +168,43 @@ mechanism, the Link-exempt frame controller, the shop-row pattern.
 
 ## 7. Sequencing
 
-1. Slow-mo port, alone, verified (**the risk lives here**)
-2. Proc overlay via port_tool
-3. Trigger predicate swap + `dShield_isBashBarFull()` + charge spend (cheap)
-4. Shop tier row, session-only
-5. Re-port the `fopAcM_posMove` scaling from the donor (see §4 item 4 — a
-   paraphrase to replace, NOT code to delete) and remove the dead
-   `shouldSuppressAlbwSpend`
-6. Un-hide the toggle (`albw_settings_ui.cpp:71-76`)
+1. ~~Slow-mo port, alone, verified~~ **DONE, user-confirmed** ("every enemy in
+   the world slowed down").
+2. ~~Proc overlay via port_tool~~ **DONE, user-confirmed** ("Flurry works,
+   thoroughly").
+3. ~~Trigger predicate swap + `dShield_isBashBarFull()` + charge spend~~ **DONE.**
+4. ~~Shop tier row, session-only~~ **DONE.** No new shop code was needed — the
+   `VISIBLE_FA_TIER` row is entirely data-driven from the `dFocusedArts_*ShopTier*`
+   accessors, so tier 4 is a table extension in `focused_arts_core.inc`.
+   `kFocusedArtsMaxTier` deliberately stays **3**: raising it would drag
+   `getEffectiveTier` / `getMaxBank` / `hasSpecialFinishers` with it and give the
+   meter a fourth bank segment. The purchase is a `static bool`, cleared by
+   `dFocusedArts_resetRuntimeState`, and writes nothing to the save.
+   `g_focused_arts_cheat` grants it so testing is free.
+5. **NEXT.** Re-port the `fopAcM_posMove` scaling from the donor (see §4 item 4 —
+   a paraphrase to replace, NOT code to delete) and remove the dead
+   `shouldSuppressAlbwSpend`.
+6. ~~Un-hide the toggle~~ **DONE** — exposed, and its help text now describes the
+   shipped behaviour rather than the half-built one.
+
+### Still open beyond the original sequence
+
+- **Sword draw on entry** — FIXED and user-confirmed. Every stock route into a
+  sword swing is gated on `mEquipItem == 0x103`; the overlay was not, because the
+  fork's dodge trigger always runs with the sword already out. Stock's own
+  instant-equip idiom (`swordEquip(TRUE)` → `commonChangeItem()` →
+  `resetUpperAnime`) now runs in `flurryOverlayProcInit`.
+- **`dFlurryRush_cancelOnSwordEquipChange`** (fork `d_albw_flurry_rush.cpp:339`,
+  called from fork `d_meter2_info.cpp:1735`) is **not ported** — a sword change
+  landing inside a rush window. Narrow, but it is donor code we are missing.
+- **D-1: rush invincibility** is not ported. Damage currently interrupts a rush;
+  the fork makes you immune for its duration. Needs the user's call.
+- **Hit-cap shape** — the user is considering per-shield or sword+shield instead
+  of the current per-sword table. `spendGate` / `barCost` in the profile struct
+  are dead fields today; `queryOcTelegraph` is dead code. Do not delete either
+  until the hit-cap decision lands, since a redesign may want the slots.
+- **Probes** — `ALBW_FLURRY_PROBE` and `ALBW_MAGICJAR_PROBE` must both be 0
+  before a release build (docs/RELEASE-PROCEDURE.md).
 
 ## 8. Not in scope
 

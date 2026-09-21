@@ -68,15 +68,19 @@ ModResult build_combat_tab(ModContext*, UiWindowHandle, UiElementHandle left, Ui
         return MOD_ERROR;
     }
     // ============================================
-    // Flurry Rush - exposed again so the slow-mo and the new trigger can be
-    // tested. STILL INCOMPLETE: the attack proc (fork d_a_alink_flurry.inc,
-    // 407 lines) is not ported, so entering a rush slows the world and holds
-    // the lock but plays no flurry combo. See docs/FLURRY-RUSH-PLAN.md.
+    // Flurry Rush. The attack proc IS ported now (fork d_a_alink_flurry.inc ->
+    // src/flurry_port.inc, overlaid on PROC_CUT_NORMAL) and the slow-mo, the
+    // snap-lunge and the swing chain are all live. This toggle is the FEATURE
+    // switch; the player still has to buy the fourth Focused Arts tier for it
+    // to do anything (session-only, no save bit - focused_arts_core.inc).
+    // Remaining work is tracked in docs/FLURRY-RUSH-PLAN.md §7.
     // ============================================
     if (albw_ui_add_toggle(left, "Flurry Rush",
-                           "Backflip while Z-locked with a full shield bash bar to enter a "
-                           "slow-motion window; costs one bash charge. Requires Focused Arts. "
-                           "Work in progress - the flurry attack chain is not implemented yet.",
+                           "Sold by the rental shop as Focused Arts IV, once tiers I-III are "
+                           "bought. Backflip while Z-locked with a full shield bash bar to "
+                           "enter a slow-motion window and a flurry combo; the backflip spends "
+                           "a bash charge. Requires Focused Arts. The purchase lasts the "
+                           "session - nothing is written to your save.",
                            g_flurry_rush) != MOD_OK)
     {
         return MOD_ERROR;

@@ -52,8 +52,20 @@ struct State {
 
 State s_state;
 
+// ============================================
+// NEW CODE - ALBW Port (Flurry Rush shop gate)
+// The two toggles say the FEATURE exists; dFocusedArts_hasFlurryRushTier says
+// the PLAYER has it, and that is a session-only purchase with no save bit (see
+// the DN-10 ledger block in focused_arts_core.inc). Gating the shared
+// predicate rather than each caller means every seam - the trigger, the proc
+// entry, the sim-time scale and the per-frame update - picks the gate up at
+// once, and the feature is provably inert before the purchase.
+// The existing all-tiers cheat (g_focused_arts_cheat) grants it, so testing
+// does not cost 1000 rupees.
+// ============================================
 bool flurry_enabled() {
-    return albw_cfg_bool(g_focused_arts, false) && albw_cfg_bool(g_flurry_rush, false);
+    return albw_cfg_bool(g_focused_arts, false) && albw_cfg_bool(g_flurry_rush, false) &&
+           dFocusedArts_hasFlurryRushTier();
 }
 
 dFlurryMeleeTelegraphAxis queryOcTelegraph(fopAc_ac_c* actor) {
