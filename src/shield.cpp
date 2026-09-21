@@ -1871,6 +1871,18 @@ u8 dShield_getDenyFlashFrames() {
     return sBashDenyFlashFrames;
 }
 
+bool dShield_isBashBarFull() {
+    if (!dShield_isParryCombatEnabled()) {
+        return false;
+    }
+    const ShieldTierConfig cfg = currentTierCfg(albw_link_actor());
+    return cfg.maxCharges != 0 && sBashCharges >= cfg.maxCharges;
+}
+
+void dShield_spendBashCharges(u8 i_amount) {
+    loseBashCharges(i_amount);
+}
+
 bool dShield_canSpendBash() {
     if (!dShield_isParryCombatEnabled()) {
         return true;

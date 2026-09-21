@@ -68,12 +68,19 @@ ModResult build_combat_tab(ModContext*, UiWindowHandle, UiElementHandle left, Ui
         return MOD_ERROR;
     }
     // ============================================
-    // Flurry Rush toggle intentionally HIDDEN for now (feature incomplete).
-    // The g_flurry_rush var stays registered (mod.cpp) and the feature code
-    // stays compiled/hooked; it is simply not exposed in the settings pane so
-    // players can't enable an unfinished mechanic. Restore the toggle here when
-    // Flurry Rush is finished.
+    // Flurry Rush - exposed again so the slow-mo and the new trigger can be
+    // tested. STILL INCOMPLETE: the attack proc (fork d_a_alink_flurry.inc,
+    // 407 lines) is not ported, so entering a rush slows the world and holds
+    // the lock but plays no flurry combo. See docs/FLURRY-RUSH-PLAN.md.
     // ============================================
+    if (albw_ui_add_toggle(left, "Flurry Rush",
+                           "Backflip while Z-locked with a full shield bash bar to enter a "
+                           "slow-motion window; costs one bash charge. Requires Focused Arts. "
+                           "Work in progress - the flurry attack chain is not implemented yet.",
+                           g_flurry_rush) != MOD_OK)
+    {
+        return MOD_ERROR;
+    }
 
     if (svc_ui->pane_add_section(mod_ctx, left, "Shield HUD") != MOD_OK) {
         return MOD_ERROR;

@@ -4,6 +4,7 @@
 #include "albw_game.h"
 #include "config_vars.h"
 #include "focused_arts.h"
+#include "shield.h"
 #include "sim_time_scale.h"
 
 #include "d/d_attention.h"
@@ -199,28 +200,47 @@ bool dFlurryRush_tryPerfectDodge(dFlurryPerfectDodgeKind kind) {
         return false;
     }
 
-    const dFlurryMeleeTelegraphAxis telegraph = queryOcTelegraph(target);
-    const bool axisMatch =
-        (kind == dFlurryPerfectDodge_SideStep && telegraph == dFlurryTelegraph_Vertical) ||
-        (kind == dFlurryPerfectDodge_BackJump && telegraph == dFlurryTelegraph_Horizontal);
-    if (!axisMatch) {
+    // ============================================
+    // TRIGGER - DELIBERATE DIVERGENCE FROM THE FORK (user-directed).
+    //
+    // The fork gates entry on an ENEMY TELEGRAPH: an E_OC mid-attack on the
+    // axis matching the dodge, inside a 6-8 frame window, paid for with a
+    // Focused Arts bank charge (fork d_focused_arts.cpp:521-615). That is a
+    // reaction test, and it is also why the fork's Flurry Rush only ever works
+    // against Bokoblins - queryOcTelegraph returns None for every other actor,
+    // which is the fork's own unfinished Phase 8.
+    //
+    // This build gates on PLAYER RESOURCE STATE instead: a backflip, while
+    // Z-locked, with the shield's bash bar at its tier maximum - and the
+    // backflip SPENDS a charge. Consequences, both intended:
+    //   * it works against every enemy, since no telegraph is consulted;
+    //   * bashing and flurrying draw on one bar, so spending bashes locks you
+    //     out at max-1 until the bar refills;
+    //   * entry is no longer a reaction test. If a skill check is wanted back,
+    //     the fork already built two places for it - the 2s start gate and the
+    //     recovery chain gate (d_a_alink_flurry.inc:383-404) - so it would move
+    //     from entry to sustain rather than being reintroduced here.
+    //
+    // The FA perfect-dodge spend economy (canPerfectDodgeSpend /
+    // onPerfectDodgeSpend) is therefore NOT consulted; bash charges replace it.
+    // Recorded as divergence 1 and 2 in docs/FLURRY-RUSH-PLAN.md section 6.
+    // ============================================
+    if (kind != dFlurryPerfectDodge_BackJump) {
+        return false;  // sidestep no longer opens a rush; the backflip is the input
+    }
+    if (!dShield_isBashBarFull()) {
         return false;
     }
 
     const dFlurryRushProfile profile = profileTable(swordProfileFromEquip());
-    if (profile.maxHits <= 0 ||
-        !dFocusedArts_canPerfectDodgeSpend(profile.spendGate, profile.barCost))
-    {
+    if (profile.maxHits <= 0) {
         return false;
     }
 
     if (!beginMelee(target)) {
         return false;
     }
-    if (!dFocusedArts_onPerfectDodgeSpend(profile.spendGate, profile.barCost)) {
-        dFlurryRush_end(dFlurryRushEnd_Interrupt);
-        return false;
-    }
+    dShield_spendBashCharges(1);
 
     s_state.pendingPerfectDodge = true;
     s_state.pendingKind = kind;

@@ -96,6 +96,13 @@ void dShield_fillBashChargesToMax();
 // Grant one bash charge (clamped to max). Used by lockout bombling block perk.
 void dShield_addBashCharge(u8 i_amount);
 u8 dShield_getBashThreshold();
+// True when the equipped shield's bash bar is at its tier maximum. Distinct
+// from dShield_canUseFullBarPunish(), which is a pending-punish latch rather
+// than a "bar is full" predicate.
+bool dShield_isBashBarFull();
+// Spend charges from outside shield.cpp (Flurry Rush entry). Clamps at 0 and
+// closes the spend chain when it empties, exactly like an internal spend.
+void dShield_spendBashCharges(u8 i_amount);
 u8 dShield_getDenyFlashFrames();
 bool dShield_canSpendBash();
 bool dShield_isBashSpendChainActive();
