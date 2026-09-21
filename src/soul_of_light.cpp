@@ -106,6 +106,10 @@ cXyz sOrbPos = {0.0f, 0.0f, 0.0f};
 f32 sOrbRefY = 0.0f;
 bool sOrbSnapshotValid = false;
 bool sTearRenderFlagWasSet[3] = {};
+// Set ONLY by pushTearRenderFlags. popTearRenderFlags must not touch a single
+// save bit unless this says a push actually happened - see the block comment
+// on popTearRenderFlags for the save damage that caused.
+bool sTearRenderFlagsPushed = false;
 
 static constexpr u32 kRecoveryDropParams = 0x0000FF00u;
 static constexpr f32 kOrbFloatAboveGround = 135.0f;
@@ -211,9 +215,41 @@ void pushTearRenderFlags() {
         sTearRenderFlagWasSet[i] = drops.isLightDropGetFlag(static_cast<u8>(i)) != FALSE;
         drops.onLightDropGetFlag(static_cast<u8>(i));
     }
+    sTearRenderFlagsPushed = true;
 }
 
+// ============================================
+// SAVE-DATA FIX - this function was destroying Vessel of Light possession.
+//
+// THE BUG. pushTearRenderFlags() has NO CALLER anywhere in the mod, so
+// sTearRenderFlagWasSet was never anything but all-false. The old body then
+// read `if (!sTearRenderFlagWasSet[i]) offLightDropGetFlag(i)` - which with an
+// all-false array is an UNCONDITIONAL clear of all three flags, every time.
+// resetOrbState() calls this on orb pickup, on death and on shutdown.
+//
+// mLightDropGetFlag is not a render flag. It is SAVE state (d_save.h:451) and
+// it means "the player has the Vessel of Light for this region":
+//   d_item.cpp:1760-1768   FARON/ELDIN/LANAYRU_VESSEL possession
+//   d_a_obj_drop.cpp:131,:304  gates the tear-drop actor get/complete logic
+//   d_a_e_ym.cpp:2808      Twilight bug behaviour
+//   d_meter2*.cpp          the vessel HUD
+// So every death was silently revoking the player's vessels and desyncing the
+// drop actor that owns the tear-collect and death-complete sequence.
+//
+// THE FIX. A pop may only undo a push. Without the latch this function has no
+// saved state to restore and therefore nothing legitimate to do.
+//
+// NOT AUTO-REPAIRED, deliberately, and for the same reason as the
+// saveBitLabels migration: a cleared vessel flag is indistinguishable from a
+// player who has not reached that region yet, so "repairing" it would GRANT
+// progress rather than restore it. A save damaged by an earlier build needs
+// the flag re-earned, or a deliberate, separately-reviewed repair keyed on the
+// one detectable inconsistency (getLightDropNum(i) == 16 with the flag off).
+// ============================================
 void popTearRenderFlags() {
+    if (!sTearRenderFlagsPushed) {
+        return;  // nothing was pushed - touching a save bit here is the bug
+    }
     dSv_light_drop_c& drops = g_dComIfG_gameInfo.info.getPlayer().getLightDrop();
     for (int i = 0; i < 3; ++i) {
         if (!sTearRenderFlagWasSet[i]) {
@@ -221,6 +257,7 @@ void popTearRenderFlags() {
         }
         sTearRenderFlagWasSet[i] = false;
     }
+    sTearRenderFlagsPushed = false;
 }
 
 void destroySpawnedOrbActor() {
