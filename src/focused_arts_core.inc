@@ -32,24 +32,29 @@ static constexpr int kFocusedArtsShopPrices[kFocusedArtsMaxTier] = {
 // than an extension of the fork's kFocusedArtsShopPrices (fork
 // d_focused_arts.cpp:28-32), which stays byte-verbatim above.
 //
-// SESSION-ONLY, NO SAVE WRITE. kFocusedArtsShopTierReg carries tiers 1-3 and
-// is deliberately NOT used here: the purchase lives in a static that dies with
-// the session, the same shape as the Deity Armor row (rental_shop.cpp:170).
-// This is also why kFocusedArtsMaxTier stays 3 - bumping it would drag
-// getEffectiveTier / getMaxBank / hasSpecialFinishers along with it and give
-// the meter a fourth bank segment nobody asked for.
+// PERSISTED, AND NOT IN THE SAVE. It was originally a session-only static -
+// correct at the time, because the only alternative then was writing the
+// player's save file. config.json did not exist as an option yet. The
+// consequence was that players had to re-buy it every launch, so it now uses
+// the flag allocator (ALBW_FLAG_FLURRY_TIER, albw_save_flags.h): persistent,
+// mod-owned, and gone when the mod is uninstalled.
+//
+// kFocusedArtsMaxTier still stays 3 - bumping it would drag getEffectiveTier /
+// getMaxBank / hasSpecialFinishers along with it and give the meter a fourth
+// bank segment nobody asked for.
 //
 // Price set by the user: 500, matching tier III rather than escalating past it.
 // ============================================
 static constexpr int kFlurryRushShopTier = kFocusedArtsMaxTier + 1;
 static constexpr int kFlurryRushShopPrice = 500;
 
-static bool s_flurryTierPurchased = false;
+// Persisted in config.json via the flag allocator (ALBW_FLAG_FLURRY_TIER),
+// not a session static and not the save file. See albw_save_flags.h.
 
 // The row is offered only once the saved tiers are exhausted, so it reads as
 // "the tier after III" in the shop even though nothing about it is saved.
 static bool flurryTierOffered() {
-    return albw_cfg_bool(g_flurry_rush, false) && !s_flurryTierPurchased &&
+    return albw_cfg_bool(g_flurry_rush, false) && !albw_save_flag_get(ALBW_FLAG_FLURRY_TIER) &&
            dFocusedArts_getPurchasedTier() >= kFocusedArtsMaxTier;
 }
 
@@ -540,7 +545,7 @@ bool dFocusedArts_tryPurchaseShopTier() {
     // keep the fork's reg write untouched below.
     // ============================================
     if (dFocusedArts_getNextShopTierIndex() == kFlurryRushShopTier) {
-        s_flurryTierPurchased = true;
+        albw_save_flag_set(ALBW_FLAG_FLURRY_TIER, true);
         return true;
     }
     writeShopTierReg(static_cast<u8>(dFocusedArts_getPurchasedTier() + 1));
@@ -552,7 +557,7 @@ bool dFocusedArts_tryPurchaseShopTier() {
 // it for the same reason it grants tiers 1-3 - it is the project's existing
 // "skip the shop" switch, and testing the rush should not require 1000 rupees.
 bool dFocusedArts_hasFlurryRushTier() {
-    return albw_cfg_bool(g_flurry_rush, false) && (isCheatAllTiers() || s_flurryTierPurchased);
+    return albw_cfg_bool(g_flurry_rush, false) && (isCheatAllTiers() || albw_save_flag_get(ALBW_FLAG_FLURRY_TIER));
 }
 
 // [NEW helper] dFocusedArts_getShopTierName
@@ -584,9 +589,9 @@ const char* dFocusedArts_getShopTierDesc(int tier) {
 
 // [NEW helper] dFocusedArts_resetRuntimeState
 void dFocusedArts_resetRuntimeState() {
-    // Session-only tier: it dies with the session, exactly like the Deity
-    // Armor rental. Nothing to clear from the save because nothing was written.
-    s_flurryTierPurchased = false;
+    // The Flurry tier is PERSISTED (config.json) and is deliberately not
+    // cleared here - a runtime reset must not repossess a purchase. The
+    // planned New Game control is what clears it.
     s_bankCount = 0;
     s_fillNumerator = 0;
     s_spendColumn = 0;

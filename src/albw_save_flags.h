@@ -77,6 +77,12 @@ enum AlbwSaveFlag {
     ALBW_FLAG_STORE_MAGIC_OUTFIT,
     ALBW_FLAG_STORE_DEITY_OUTFIT,
 
+    // Focused Arts IV / Flurry Rush. Was a session-only static, from before
+    // this allocator existed and config.json was an option - which meant
+    // re-buying it every launch. It is a purchase, so it persists; and it
+    // persists HERE, not in the save, like every other mod-owned flag.
+    ALBW_FLAG_FLURRY_TIER,
+
     ALBW_FLAG_COUNT,
 };
 
