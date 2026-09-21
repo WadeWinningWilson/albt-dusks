@@ -85,7 +85,85 @@ DEFINE_HOOK(cc_at_check, FaCcAtCheck);
 // (d_a_alink_cut.inc:2732 - the Jump Strike hidden-skill charge). Hooking the turn/spin
 // charge instead drained fill during ordinary sword combos, which pass through it.
 DEFINE_HOOK(&daAlink_c::procCutLargeJumpChargeInit, CutLargeJumpChargeInit);
-DEFINE_HOOK(&daAlink_c::procDamageInit, ProcDamageInit);
+
+// ============================================
+// MODIFIED CODE - ALBW Port (Focused Arts: hit-reset seam correction)
+//
+// FORK SEAM. dFocusedArts_onDamageTaken() is called from exactly ONE place in
+// the fork: daAlink_c::setDamagePoint, d_a_alink_damage.inc:239-241 - inside
+// the life-deducting else-branch, AFTER the DOUBLE_DEFENSE halving (:236-238),
+// gated `if (i_dmgAmount > 0)`, immediately before
+// dComIfGp_setItemLifeCount(-i_dmgAmount, 0) (:243). Its sibling
+// dParryMaster_onHpLoss sits under the identical gate three lines later
+// (:245-247). What it resets: the CURRENT TIER'S PARTIAL FILL ONLY -
+// clearFillProgress() zeroes s_fillNumerator and nothing else (fork
+// d_focused_arts.cpp:336-338, called at :739). Banked charges, the purchased
+// tier and every timer survive. There is no separate idle/decay timeout
+// anywhere in the fork module.
+//
+// WHAT THIS REPLACES. A post-hook on daAlink_c::procDamageInit. That is not
+// the fork's seam and it is wrong in BOTH directions:
+//
+//  * UNDER-fires. procDamageInit is only ONE of the damage REACTIONS that
+//    checkDamageAction dispatches AFTER it has already called setDamagePoint
+//    (fork d_a_alink_damage.inc:863/866/871). Every other reaction left the
+//    fill intact: procCoLargeDamageInit (:934 and :952 - every large/huge
+//    attack, i.e. most real hits), procWolfDamageInit (:959),
+//    procSwimDamageInit (:929), procCoElecDamageInit (:902),
+//    procHorseDamageInit / procHorseHangInit (:920 / :922), setDashDamage
+//    (:955), setWolfHeadDamage (:957), the no-reaction 0x4000000 arm
+//    (:894-900) and procCoPolyDamageInit (:659 / :666) - plus every
+//    setDamagePoint caller outside checkDamageAction entirely: fall/land
+//    damage (:101, :103, :1770, :1778), electric return damage (:670), enemy
+//    grab (d_a_alink_grab.inc:2047/2049), swim (d_a_alink_swim.inc:1685),
+//    scene damage (d_a_alink.cpp:5479), the field_0x318c throw settle
+//    (d_a_alink.cpp:18998) and daPy_py_c::setPlayerDamage
+//    (d_a_player.cpp:581).
+//
+//  * OVER-fires. procDamageInit also runs with NO life lost:
+//    d_a_alink_wolf.inc:1994 (checkWolfBarrierHitReverse stagger - no
+//    setDamagePoint anywhere on that path), and the armor-absorbed ICE arm
+//    (fork :953 `!armor_no_dmg || at_mtrl == dCcD_MTRL_ICE` -> :961), which
+//    wiped fill on a hit the Magic Armor had fully paid for.
+//
+// WHY A TRANSLATION AND NOT THE FORK'S OWN LINE (DN-10 order of resort,
+// step 2). The fork's call sits inside a setDamagePoint body the mod cannot
+// edit, and the whole-function replacement route is already refused IN WRITING
+// for this exact symbol - see the ALBW Magic Armor block in meter.cpp:
+// dusk::AchievementSystem is not in dusklight_exports.def, and setDamagePoint
+// already carries composed pre/post hooks from two modules (meter.cpp:233,
+// region_port.cpp:122). So the fork's GATE is reproduced at that same seam.
+//
+// THE GATE IS MEASURED, NOT RE-DERIVED. The fork's condition is exactly "the
+// life-deducting branch ran with a positive amount". setItemLifeCount is a
+// plain accumulator (`mItemInfo.mItemLifeCount += hearts`,
+// d_com_inf_game.h:611-614), so snapshotting it across the call and testing
+// delta < 0 answers that question without duplicating damageMagnification,
+// the checkMagicArmorNoDamage branch or the DOUBLE_DEFENSE halving - three
+// pieces of host logic that would silently drift out of sync. This is the
+// same technique meter.cpp already uses on the rupee accumulator for this very
+// function. Coverage check: the heal path (fork :188-191) queues a POSITIVE
+// amount -> delta >= 0, no fire; an armor-absorbed hit queues RUPEES, not life
+// -> delta == 0, no fire; a DEBUG invincible build skips the whole block, and
+// so does the fork's own call.
+//
+// PLACEMENT (a post-hook is a different position from the fork's line, so it
+// must be argued, not assumed). The fork calls onDamageTaken immediately
+// BEFORE setItemLifeCount; this fires after the body returns. The call's only
+// effect is a write to the file-static s_fillNumerator; nothing in the
+// remainder of setDamagePoint reads FA state, and no frame boundary is
+// crossed. The two other modules on this symbol touch the rupee accumulator
+// (meter.cpp) and the region damage-scale scope (region_port.cpp), never the
+// life accumulator - so the measured delta is attributable to the host body
+// alone, whatever order the hooks run in.
+//
+// Toggle off == provably stock: both halves sit behind dFocusedArts_isEnabled()
+// and neither writes any host state in either state.
+// ============================================
+DEFINE_HOOK(&daAlink_c::setDamagePoint, FaSetDamagePoint);
+
+f32 s_fa_life_queue_snap = 0.0f;
+bool s_fa_damage_armed = false;
 
 void on_cut_large_jump_charge_post(ModContext*, void*, void*, void*) {
     if (dFocusedArts_isEnabled() && dAlbw_isHiddenSkillReworkEnabled()) {
@@ -93,8 +171,25 @@ void on_cut_large_jump_charge_post(ModContext*, void*, void*, void*) {
     }
 }
 
-void on_damage_init_post(ModContext*, void*, void*, void*) {
-    if (dFocusedArts_isEnabled()) {
+HookAction on_set_damage_point_pre(ModContext*, void*, void*, void*) {
+    s_fa_damage_armed = false;
+    if (!dFocusedArts_isEnabled()) {
+        return HOOK_CONTINUE;
+    }
+    s_fa_life_queue_snap = g_dComIfG_gameInfo.play.getItemLifeCount();
+    s_fa_damage_armed = true;
+    return HOOK_CONTINUE;
+}
+
+void on_set_damage_point_post(ModContext*, void*, void*, void*) {
+    if (!s_fa_damage_armed) {
+        return;
+    }
+    s_fa_damage_armed = false;
+    // delta < 0 <=> the host ran `dComIfGp_setItemLifeCount(-i_dmgAmount, 0)`
+    // with i_dmgAmount > 0, i.e. exactly the branch the fork's call sits in.
+    const f32 delta = g_dComIfG_gameInfo.play.getItemLifeCount() - s_fa_life_queue_snap;
+    if (delta < 0.0f) {
         dFocusedArts_onDamageTaken();
     }
 }
@@ -213,8 +308,10 @@ ModResult albw_focused_arts_init(ModError* error) {
                  mods::hook_add_post<FaCcAtCheck>(svc_hook, on_cc_at_check_post)) ||
         !install(error, "FaCutLargeJumpChargePost",
                  mods::hook_add_post<CutLargeJumpChargeInit>(svc_hook, on_cut_large_jump_charge_post)) ||
-        !install(error, "FaDamageInitPost",
-                 mods::hook_add_post<ProcDamageInit>(svc_hook, on_damage_init_post)))
+        !install(error, "FaSetDamagePointPre",
+                 mods::hook_add_pre<FaSetDamagePoint>(svc_hook, on_set_damage_point_pre)) ||
+        !install(error, "FaSetDamagePointPost",
+                 mods::hook_add_post<FaSetDamagePoint>(svc_hook, on_set_damage_point_post)))
     {
         return MOD_ERROR;
     }
