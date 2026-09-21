@@ -59,7 +59,7 @@
 // Temporary chain probe: jars spawn and can be picked up but grant nothing.
 // Logs each link once per pickup so one run shows exactly where it dies.
 // MUST be 0 before release (docs/RELEASE-PROCEDURE.md step 1).
-#define ALBW_MAGICJAR_PROBE 0
+#define ALBW_MAGICJAR_PROBE 1
 
 #if TARGET_PC
 
