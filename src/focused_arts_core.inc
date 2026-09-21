@@ -39,11 +39,10 @@ static constexpr int kFocusedArtsShopPrices[kFocusedArtsMaxTier] = {
 // getEffectiveTier / getMaxBank / hasSpecialFinishers along with it and give
 // the meter a fourth bank segment nobody asked for.
 //
-// The price is a free parameter with no donor to answer to; 1000 sits a step
-// above tier III's 500. Change it here.
+// Price set by the user: 500, matching tier III rather than escalating past it.
 // ============================================
 static constexpr int kFlurryRushShopTier = kFocusedArtsMaxTier + 1;
-static constexpr int kFlurryRushShopPrice = 1000;
+static constexpr int kFlurryRushShopPrice = 500;
 
 static bool s_flurryTierPurchased = false;
 
@@ -573,10 +572,10 @@ const char* dFocusedArts_getShopTierName(int tier) {
 
 // [NEW helper] dFocusedArts_getShopTierDesc
 const char* dFocusedArts_getShopTierDesc(int tier) {
+    // Shop line written by the user - keep it verbatim.
     if (tier == kFlurryRushShopTier) {
-        return "This last one isn't a scroll at all - it's a knack. Fill your shield, "
-               "leap back from a foe you've locked onto, and the world will wait for "
-               "you. Mind that the leap spends a charge.";
+        return "You're a natural at parrying, yes? Perhaps try backflipping once you've "
+               "stored enough energy, might be just the rush you need";
     }
     return "I noticed you are adept with that sword you carry! I found this scroll "
            "left discarded on the Hyrule Castle grounds. Care to take a look?";
