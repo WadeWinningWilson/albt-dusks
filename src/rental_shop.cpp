@@ -17,6 +17,7 @@
 #include "outfit.h"
 #include "wardrobe.h"
 #include "sumo_test.h"
+#include "colossal_wallet.h"  // albw_colossal_wallet_owned - ownership is derived, not stored
 #include "albw_fork_compat.h"
 #include "albw_dusk_compat.h"
 
@@ -184,8 +185,11 @@ static constexpr int kDeityArmorPrice = 5000;
 // lands; nothing here fakes eligibility.
 // ============================================
 static bool deityRowEligible() {
-    return albw_rental_is_eligible((u8)dItemNo_ARMOR_e) &&
-           dComIfGs_getWalletSize() == 3 /* COLOSSAL_WALLET (fork d_save.h:66) */;
+    // Was `dComIfGs_getWalletSize() == 3`. Nothing writes 3 any more - storing
+    // that tier destroyed saves on uninstall (see the block comment in
+    // colossal_wallet.cpp), so ownership is derived instead. Comparing against
+    // the stored tier here would have silently removed this row.
+    return albw_rental_is_eligible((u8)dItemNo_ARMOR_e) && albw_colossal_wallet_owned();
 }
 
 // Storage description line, verbatim from fork d_albw_rental.cpp:270.
