@@ -103,10 +103,33 @@ int maAlbwTear_c::Execute() {
         if (daPy_py_c* player = playerActor()) {
             if (current.pos.abs(player->current.pos) < kPickupRange) {
                 grantRecovery(mRecovery);
-                // Douse Link in the blue light-absorb glow like a regular tear
-                // pickup (sets ERFLG0_UNK_20000000 + FLG3_UNK_200000, which drive
-                // the field_0x346c glow animation; clears naturally in wolf form).
-                player->onWolfLightDropGet();
+                // ============================================
+                // DO NOT call player->onWolfLightDropGet() here. It was added
+                // for cosmetics ("douse Link in the blue light-absorb glow")
+                // with the comment "clears naturally in wolf form" - and that
+                // assumption is false for this actor, which is collected in
+                // HUMAN form during normal play. It caused a softlock.
+                //
+                // onWolfLightDropGet (d_a_player.h:1198) sets FLG3_UNK_200000,
+                // a NO-RESET flag. The only code in the whole tree that clears
+                // it is daAlink_c::resetWolfBallGrab (d_a_alink_wolf.inc:6927),
+                // which is WOLF-ONLY. In human form nothing clears it, so the
+                // glow loop at d_a_alink_effect.inc:407-428 runs forever - and
+                // once the tear count reaches the needed count that loop calls
+                // changeDemoMode(DEMO_UNK_94_e) on every frame an event is
+                // running. A death is an event, so the death sequence gets
+                // hijacked into a demo pose: Link dead and in a demo at once,
+                // model deformed, softlocked.
+                //
+                // THE FORK DOES NOT DO THIS. Its only onWolfLightDropGet call
+                // is the stock one inside daObjDrop_c (fork d_a_obj_drop.cpp:
+                // 506 == stock :448), reached only by the real wolf tear. The
+                // custom death-tear never touches Link's wolf absorb state.
+                //
+                // If a collect flourish is wanted, draw it from tear_glow.cpp,
+                // which already owns this actor's visuals - do not borrow a
+                // wolf-only player state machine to get it.
+                // ============================================
                 mPicked = true;
                 g_tearCollected = true;
             }
