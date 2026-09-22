@@ -98,7 +98,6 @@
 // d_a_b_tn.h sees the macro.
 #include "SSystem/SComponent/c_phase.h"
 #include "m_Do/m_Do_ext.h"
-#include "sim_time_scale.h"  // anim_boost_begin/end (Devil Trigger direct scaling)
 
 #define private public
 #include "d/actor/d_a_b_tn.h"
@@ -500,10 +499,6 @@ HookAction on_btn_damage_check_pre(ModContext*, void* args, void*, void*) {
 // m_attack_tn and l_HIO are all file-static, and the l_HIO read there belongs
 // to the HP lane's hunk anyway).
 // ============================================
-// State the action bracket carries from PRE to POST. Non-reentrant: a
-// Darknut's action() does not run inside another's.
-bool s_actionBoostOpen = false;
-
 HookAction on_btn_action_pre(ModContext*, void* args, void*, void*) {
     if (!s_featureReady) {
         return HOOK_CONTINUE;
@@ -512,36 +507,7 @@ HookAction on_btn_action_pre(ModContext*, void* args, void*, void*) {
     if (self != nullptr) {
         self->AlbwBtn_c::albwTickGuardOpenWindow();
     }
-
-    // ============================================
-    // DIRECT SCALING - animation half, done the robust way this time.
-    //
-    // action() calls mpModelMorf->play() -> frameUpdate() -> J3DFrameCtrl::
-    // update(), the exact controller the flurry slow-mo already hooks. Opening
-    // an anim boost across action() makes every frame advance inside it scale
-    // by dAlbwDevil_boost(). Unlike the previous setPlaySpeed attempt, this is
-    // immune to setAnm re-seeds: the hook multiplies mRate at the instant of
-    // advance, so a state change mid-action() cannot skip a frame's scaling.
-    // That intermittency is what made the first direct-scaling build feel
-    // inconsistent (DEVIL-TRIGGER-METHODS section 2).
-    //
-    // All states, no gate: the target feel is "relentless but smooth", the
-    // first sub-step feel without its bugs. No re-run, so no crash and no
-    // double damage - the attack simply plays faster, hitbox and timing still
-    // one-to-one with the animation.
-    // ============================================
-    if (self != nullptr && self->mType == 0 && dAlbwDevil_isArmed(self)) {
-        albw::anim_boost_begin(dAlbwDevil_boost());
-        s_actionBoostOpen = true;
-    }
     return HOOK_CONTINUE;
-}
-
-void on_btn_action_boost_post(ModContext*, void*, void*, void*) {
-    if (s_actionBoostOpen) {
-        albw::anim_boost_end();
-        s_actionBoostOpen = false;
-    }
 }
 
 // ============================================
@@ -784,14 +750,21 @@ bool btnHealthFraction(fopAc_ac_c* actor, float* outFraction) {
 }
 
 // ============================================
-// The execute POST hook is now the PROBE seam only - the speed-up moved to
-// action() PRE/POST below (direct scaling). It stays because the heartbeat is
-// the cheapest place to watch arming, the health fraction and the
-// AT-registry-vs-action-mode comparison, none of which depend on the method.
+// The speed-up. State-gated sub-step, per docs/DEVIL-TRIGGER-SCOPE.md 3b:
+// run the actor a second time ONLY while no attack collider is live, so
+// movement, locomotion animation, timers and the state machine all advance
+// together while every swing keeps stock timing and a stock hitbox.
+//
+// POST, not PRE: the extra step must come after the real one, and calling the
+// original through g_orig would re-enter our own hook.
+//
+// s_inSubStep is not decoration. execute() reaches damage_check, which this
+// module also hooks; without the latch a sub-step would recurse.
 // ============================================
+bool s_inSubStep = false;
 
 void on_btn_execute_post(ModContext*, void* args, void*, void*) {
-    if (!s_featureReady) {
+    if (!s_featureReady || s_inSubStep) {
         return;
     }
     auto* self = self_of(args);
@@ -846,11 +819,18 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     }
 #endif
 
-    // Speed-up moved to the action() bracket (direct scaling); this hook is
-    // the probe seam only now.
-    (void)attacking;
-}
+    if (!dAlbwDevil_isArmed(self)) {
+        return;
+    }
 
+    if (attacking) {
+        return;  // a swing is live - stock timing, stock hitbox, no sub-step
+    }
+
+    s_inSubStep = true;
+    self->AlbwBtn_c::execute();
+    s_inSubStep = false;
+}
 
 }  // namespace
 
@@ -892,17 +872,8 @@ ModResult albw_btn_parry_init(ModError*) {
                  mods::hook_add_pre<BtnExecuteYoroke>(svc_hook, on_btn_execute_yoroke_pre));
 
 
-    // Devil Trigger sub-step + its generic collider-registration suppression.
-    // Movement for the sub-stepped actor comes from action() re-running
-    // fopAcM_posMove during the extra execute pass - not from a separate
-    // multiply. The flurry world-slow still owns the posMove hook.
     ok &= report("BtnExecuteDevil",
                  mods::hook_add_post<BtnExecute>(svc_hook, on_btn_execute_post));
-
-    // Devil Trigger animation half: close the boost bracket opened in
-    // on_btn_action_pre. Same typed BtnAction tag - no new hook target.
-    ok &= report("BtnActionBoostPost",
-                 mods::hook_add_post<BtnAction>(svc_hook, on_btn_action_boost_post));
 
     // The Darknut reads its health differently from every other enemy - see
     // btnHealthFraction. Registered even when Devil Trigger is toggled off:

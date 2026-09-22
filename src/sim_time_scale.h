@@ -31,27 +31,6 @@ inline float world_sim_time_scale() {
     return g_world_sim_time_scale;
 }
 
-// ============================================
-// PER-ACTOR ANIMATION BOOST (Devil Trigger). The flurry slows the WORLD via
-// g_world_sim_time_scale; this is the reverse and the narrow case - a single
-// actor advancing FASTER than the world, only while its own animation update
-// is running.
-//
-// It reuses the exact seam the flurry already owns (J3DFrameCtrl::update):
-// bracket the actor's play()/action() with begin/end, and every frame
-// controller that advances inside the bracket is scaled by the boost. This is
-// the Link-exemption mechanism (sim_time_scale_hooks.cpp) run in reverse, and
-// it is immune to the setAnm re-seed that made the setPlaySpeed approach
-// intermittent: it multiplies mRate at the instant of advance, whatever mRate
-// currently is.
-//
-// Depth-counted so nested brackets are safe. boost > 1.0 speeds up; the
-// bracket composes with the world scale by multiplication in the hook.
-// ============================================
-void anim_boost_begin(float boost);
-void anim_boost_end();
-float anim_boost_current();  // 1.0 when no bracket is open
-
 float get_sim_time_scale();
 void set_sim_time_scale(float scale);
 

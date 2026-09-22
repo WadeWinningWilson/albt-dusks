@@ -2,7 +2,6 @@
 
 #include "albw_common.h"
 #include "flurry_proc.h"
-#include "devil_trigger.h"  // Devil Trigger shares this movement seam
 #include "sim_time_scale.h"
 #include "mods/hook.hpp"
 
@@ -23,10 +22,6 @@ DEFINE_HOOK(&daAlink_c::procSideStepLandInit, ProcSideStepLandInit);
 DEFINE_HOOK(&daAlink_c::procBackJumpLandInit, ProcBackJumpLandInit);
 DEFINE_HOOK(fopAcM_posMove, FopAcMPosMove);
 DEFINE_HOOK(dMeter2Info_setSword, Meter2InfoSetSword);
-
-// Captured in PRE so POST divides by exactly what PRE multiplied by, even if
-// the actor armed or a swing started between the two.
-float s_posMoveScale = 1.0f;
 
 void on_proc_side_step_init_post(ModContext*, void* args, void*, void*) {
     if (!dFlurryRush_isEnabled()) {
@@ -102,25 +97,16 @@ HookAction on_proc_back_jump_land_init_pre(ModContext*, void* args, void* retval
     return on_flurry_land_init_pre(args, retval);
 }
 
-// ============================================
-// Two features share this seam. Flurry Rush slows the WORLD (world factor
-// below 1.0, Link exempt); Devil Trigger speeds ONE armed actor (boost above
-// 1.0). They compose by multiplication - an enraged enemy inside a flurry
-// window is still slowed by it. Direct scaling drives DT movement HERE (not
-// by re-running execute), so it pairs with the animation boost in
-// btn_parry.cpp and there is no double-count.
-// ============================================
 HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
+    const float scale = albw::get_sim_time_scale();
+    if (scale >= 0.999f) {
+        return HOOK_CONTINUE;
+    }
+
     auto* actor = mods::arg<fopAc_ac_c*>(args, 0);
     if (actor != nullptr && fopAcM_GetName(actor) == fpcNm_ALINK_e) {
         return HOOK_CONTINUE;
     }
-
-    const float scale = albw::get_sim_time_scale() * dAlbwDevil_boostFor(actor);
-    if (scale >= 0.999f && scale <= 1.001f) {
-        return HOOK_CONTINUE;
-    }
-    s_posMoveScale = scale;
 
     cXyz* speed = fopAcM_GetSpeed_p(actor);
     if (speed != nullptr) {
@@ -132,9 +118,8 @@ HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
 }
 
 void on_fop_ac_m_pos_move_post(ModContext*, void* args, void*, void*) {
-    const float scale = s_posMoveScale;
-    s_posMoveScale = 1.0f;
-    if (scale >= 0.999f && scale <= 1.001f) {
+    const float scale = albw::get_sim_time_scale();
+    if (scale >= 0.999f) {
         return;
     }
 

@@ -13,29 +13,6 @@ namespace albw {
 // ============================================
 float g_world_sim_time_scale = 1.0f;
 
-namespace {
-int   s_animBoostDepth = 0;
-float s_animBoost = 1.0f;
-}
-
-void anim_boost_begin(float boost) {
-    s_animBoost = boost;
-    ++s_animBoostDepth;
-}
-
-void anim_boost_end() {
-    if (s_animBoostDepth > 0) {
-        --s_animBoostDepth;
-    }
-    if (s_animBoostDepth == 0) {
-        s_animBoost = 1.0f;
-    }
-}
-
-float anim_boost_current() {
-    return s_animBoostDepth > 0 ? s_animBoost : 1.0f;
-}
-
 float get_sim_time_scale() {
     return g_world_sim_time_scale;
 }
