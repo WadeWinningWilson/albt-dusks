@@ -103,13 +103,12 @@ HookAction on_proc_back_jump_land_init_pre(ModContext*, void* args, void* retval
 }
 
 // ============================================
-// This seam is the FLURRY world-slow only. Devil Trigger deliberately does
-// NOT multiply here: it moves an actor by RE-RUNNING execute() (the hybrid
-// sub-step), and action() already calls fopAcM_posMoveF -> fopAcM_posMove, so
-// the second execute produces the second movement increment on its own.
-// Multiplying here as well would double-count it (~4x move vs 2x anim = a bad
-// foot-slide). The sub-step supplies Devil Trigger movement; this supplies
-// Flurry world-slow; they do not overlap in one call.
+// Two features share this seam. Flurry Rush slows the WORLD (world factor
+// below 1.0, Link exempt); Devil Trigger speeds ONE armed actor (boost above
+// 1.0). They compose by multiplication - an enraged enemy inside a flurry
+// window is still slowed by it. Direct scaling drives DT movement HERE (not
+// by re-running execute), so it pairs with the animation boost in
+// btn_parry.cpp and there is no double-count.
 // ============================================
 HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
     auto* actor = mods::arg<fopAc_ac_c*>(args, 0);
@@ -117,7 +116,7 @@ HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
         return HOOK_CONTINUE;
     }
 
-    const float scale = albw::get_sim_time_scale();  // flurry world-slow only
+    const float scale = albw::get_sim_time_scale() * dAlbwDevil_boostFor(actor);
     if (scale >= 0.999f && scale <= 1.001f) {
         return HOOK_CONTINUE;
     }

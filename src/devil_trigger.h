@@ -54,6 +54,15 @@ void dAlbwDevil_forget(fopAc_ac_c* actor);  // death / delete
 // Trigger (a safe failure, but one that silently excludes it).
 bool dAlbwDevil_isAttackLive(fopAc_ac_c* actor);
 
+// The enrage speed multiplier. One tunable, read by both halves (animation
+// bracket + movement scale) so they can never drift apart.
+float dAlbwDevil_boost();
+
+// Per-actor movement multiplier: dAlbwDevil_boost() if this actor is armed,
+// else 1.0. Read by the fopAcM_posMove hook - the movement half of direct
+// scaling, paired with the animation bracket in btn_parry.cpp.
+float dAlbwDevil_boostFor(fopAc_ac_c* actor);
+
 
 ModResult albw_devil_trigger_init(ModError* error);
 void albw_devil_trigger_reset();

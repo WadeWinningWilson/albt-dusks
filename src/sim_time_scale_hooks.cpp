@@ -268,8 +268,15 @@ DEFINE_HOOK(&daPy_frameCtrl_c::updateFrame, DaPyFrameCtrlUpdateFrame);
 // construction, not by review.
 // ============================================
 HookAction on_j3d_frame_ctrl_update_pre(ModContext*, void* args, void*, void*) {
-    const float scale = albw::world_sim_time_scale();
-    if (scale >= 0.999f || !s_slowmoInstalled) {
+    if (!s_slowmoInstalled) {
+        return HOOK_CONTINUE;
+    }
+    // World slow (flurry, <=1) and per-actor boost (Devil Trigger, >=1) compose
+    // by multiplication: a boosted enemy inside a flurry window is still slowed
+    // by it. Off, both are 1.0 and this is a load-compare-branch no-op - the
+    // hot-path contract the flurry port depends on is preserved.
+    const float scale = albw::world_sim_time_scale() * albw::anim_boost_current();
+    if (scale >= 0.999f && scale <= 1.001f) {
         return HOOK_CONTINUE;
     }
 

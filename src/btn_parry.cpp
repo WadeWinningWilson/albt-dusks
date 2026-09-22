@@ -98,6 +98,7 @@
 // d_a_b_tn.h sees the macro.
 #include "SSystem/SComponent/c_phase.h"
 #include "m_Do/m_Do_ext.h"
+#include "sim_time_scale.h"  // anim_boost_begin/end (Devil Trigger direct scaling)
 
 #define private public
 #include "d/actor/d_a_b_tn.h"
@@ -114,7 +115,6 @@
 #include "f_pc/f_pc_name.h"
 #include "m_Do/m_Do_mtx.h"
 #include "SSystem/SComponent/c_cc_d.h"
-#include "SSystem/SComponent/c_cc_s.h"
 #include "SSystem/SComponent/c_counter.h"
 #include "SSystem/SComponent/c_lib.h"
 #include "SSystem/SComponent/c_math.h"
@@ -411,7 +411,6 @@ DEFINE_HOOK(&daB_TN_c::executeChaseL, BtnExecuteChaseL);
 DEFINE_HOOK(&daB_TN_c::executeGuardL, BtnExecuteGuardL);
 DEFINE_HOOK(&daB_TN_c::executeYoroke, BtnExecuteYoroke);
 DEFINE_HOOK(&daB_TN_c::execute, BtnExecute);  // Devil Trigger sub-step
-DEFINE_HOOK(&cCcS::Set, CcsSet);              // suppressed during the sub-step
 
 
 AlbwBtn_c* self_of(void* args) {
@@ -501,6 +500,10 @@ HookAction on_btn_damage_check_pre(ModContext*, void* args, void*, void*) {
 // m_attack_tn and l_HIO are all file-static, and the l_HIO read there belongs
 // to the HP lane's hunk anyway).
 // ============================================
+// State the action bracket carries from PRE to POST. Non-reentrant: a
+// Darknut's action() does not run inside another's.
+bool s_actionBoostOpen = false;
+
 HookAction on_btn_action_pre(ModContext*, void* args, void*, void*) {
     if (!s_featureReady) {
         return HOOK_CONTINUE;
@@ -509,7 +512,36 @@ HookAction on_btn_action_pre(ModContext*, void* args, void*, void*) {
     if (self != nullptr) {
         self->AlbwBtn_c::albwTickGuardOpenWindow();
     }
+
+    // ============================================
+    // DIRECT SCALING - animation half, done the robust way this time.
+    //
+    // action() calls mpModelMorf->play() -> frameUpdate() -> J3DFrameCtrl::
+    // update(), the exact controller the flurry slow-mo already hooks. Opening
+    // an anim boost across action() makes every frame advance inside it scale
+    // by dAlbwDevil_boost(). Unlike the previous setPlaySpeed attempt, this is
+    // immune to setAnm re-seeds: the hook multiplies mRate at the instant of
+    // advance, so a state change mid-action() cannot skip a frame's scaling.
+    // That intermittency is what made the first direct-scaling build feel
+    // inconsistent (DEVIL-TRIGGER-METHODS section 2).
+    //
+    // All states, no gate: the target feel is "relentless but smooth", the
+    // first sub-step feel without its bugs. No re-run, so no crash and no
+    // double damage - the attack simply plays faster, hitbox and timing still
+    // one-to-one with the animation.
+    // ============================================
+    if (self != nullptr && self->mType == 0 && dAlbwDevil_isArmed(self)) {
+        albw::anim_boost_begin(dAlbwDevil_boost());
+        s_actionBoostOpen = true;
+    }
     return HOOK_CONTINUE;
+}
+
+void on_btn_action_boost_post(ModContext*, void*, void*, void*) {
+    if (s_actionBoostOpen) {
+        albw::anim_boost_end();
+        s_actionBoostOpen = false;
+    }
 }
 
 // ============================================
@@ -758,45 +790,6 @@ bool btnHealthFraction(fopAc_ac_c* actor, float* outFraction) {
 // AT-registry-vs-action-mode comparison, none of which depend on the method.
 // ============================================
 
-// ============================================
-// HYBRID sub-step support.
-// ============================================
-bool s_inSubStep = false;
-
-// Suppress collider registration during the extra execute pass. cc_set()
-// re-registers the actor's colliders, but they are stored by POINTER, so a
-// second registration resolves to the same final position - no coverage
-// gained, and the fixed cCcS arrays consumed twice as fast. One typed hook on
-// the registration primitive removes that for every actor, generically.
-//
-// Scoped to s_inSubStep, so with Devil Trigger off, or outside the extra
-// pass, cCcS::Set is exactly stock. Toggle-off == provably stock.
-HookAction on_ccs_set_pre(ModContext*, void*, void*, void*) {
-    return s_inSubStep ? HOOK_SKIP_ORIGINAL : HOOK_CONTINUE;
-}
-
-// Clear this actor's Tg (target) hit flags before the re-run, so the
-// second damage_check sees no hit. Without this, pass 1 clangs a bash and
-// opens the guard window, then pass 2 reads the SAME latched hit with the
-// window now open and lets it land - damage outside the intended window.
-//
-// Found via the same registry scan the attack-live check uses: every cCcD_Obj
-// the collision system holds knows its owner (GetAc). Generic - no dependency
-// on which collider members this actor happens to declare.
-void clearActorTgHits(fopAc_ac_c* actor) {
-    dCcS* ccs = dComIfG_Ccsp();
-    if (ccs == nullptr) {
-        return;
-    }
-    const int n = static_cast<int>(ccs->mObjTgCount);
-    for (int i = 0; i < n; ++i) {
-        cCcD_Obj* obj = ccs->mpObjTg[i];
-        if (obj != nullptr && obj->GetAc() == actor) {
-            obj->ClrTgHit();
-        }
-    }
-}
-
 void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     if (!s_featureReady) {
         return;
@@ -853,74 +846,9 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     }
 #endif
 
-    if (!dAlbwDevil_isArmed(self)) {
-        return;
-    }
-
-    // ============================================
-    // SUB-STEP ONLY IN SAFE LOCOMOTION STATES - an ALLOWLIST, not a blocklist.
-    //
-    // The first hybrid run CRASHED sub-stepping during ACT_ATTACKL, because
-    // the generic AT-registry gate (`attacking`) reported no attack live
-    // during a genuine lunge - the exact MISMATCH the probe was built to
-    // catch (act=10 truth=1 atRegistry=0, flooding the log right before the
-    // crash). Re-running execute() mid-attack double-advances the swing and
-    // its collider/state teardown, which is what crashed.
-    //
-    // So the registry signal is NOT trustworthy for this actor, and a
-    // blocklist of attack states would be one missed state from another
-    // crash. An allowlist fails safe: sub-step ONLY in chase and wait, where
-    // re-running execute is just movement + a timer tick. Every other state -
-    // attacks, damage, guard, yoroke, demos, ending - runs exactly once.
-    //
-    // This is the per-enemy knowledge DEVIL-TRIGGER-METHODS warned the hybrid
-    // would still need where the generic signal fails; the Darknut is that
-    // case. `attacking` is kept for the probe comparison only.
-    // ============================================
-    const int mode = self->mActionMode1;
-    const bool safeToSubStep = (mode == daB_TN_c::ACT_CHASEH ||
-                                mode == daB_TN_c::ACT_CHASEL ||
-                                mode == daB_TN_c::ACT_WAITH);
-    if (!safeToSubStep) {
-        return;
-    }
-
-    // ============================================
-    // HYBRID - sub-step, with the two costs the plain sub-step could not
-    // avoid neutralised GENERICALLY (docs/DEVIL-TRIGGER-METHODS.md section 3).
-    //
-    // Direct scaling (the previous method) applied only intermittently: its
-    // POST restore was skipped whenever action() re-seeded the anim rate, and
-    // the Darknut re-seeds on every state change. Re-running execute() sidesteps
-    // that entirely - the actor advances a whole extra frame of its OWN logic,
-    // so animation, movement, timers and the state machine all move together
-    // and consistently.
-    //
-    // The two sub-step hazards, killed generically:
-    //   1. double collider registration -> suppressed at cCcS::Set while
-    //      s_inSubStep (see the Set hook below). Kills the array-overflow risk
-    //      too.
-    //   2. double damage evaluation -> clear this actor's Tg hit flags before
-    //      the extra pass, so the re-run damage_check sees nothing. That is
-    //      what let a clanged hit re-register as a landed one last time.
-    //
-    // Residue (per DEVIL-TRIGGER-METHODS section 3): bespoke timers still tick
-    // twice. mInvincibilityTimer is put back by hand below because we know the
-    // member; the rest are left (attacks come more often = intended).
-    // ============================================
-    const s16 ivBefore = self->mInvincibilityTimer;
-
-    clearActorTgHits(self);  // neutralise hazard 2
-
-    s_inSubStep = true;      // suppresses cCcS::Set (hazard 1)
-    self->AlbwBtn_c::execute();
-    s_inSubStep = false;
-
-    // i-frames must not halve: an enraged enemy should not be MORE vulnerable.
-    // Undo the second decrement (never below 0).
-    if (self->mInvincibilityTimer < ivBefore) {
-        self->mInvincibilityTimer = ivBefore > 0 ? static_cast<s16>(ivBefore - 1) : 0;
-    }
+    // Speed-up moved to the action() bracket (direct scaling); this hook is
+    // the probe seam only now.
+    (void)attacking;
 }
 
 
@@ -970,8 +898,11 @@ ModResult albw_btn_parry_init(ModError*) {
     // multiply. The flurry world-slow still owns the posMove hook.
     ok &= report("BtnExecuteDevil",
                  mods::hook_add_post<BtnExecute>(svc_hook, on_btn_execute_post));
-    ok &= report("CcsSetSubStep",
-                 mods::hook_add_pre<CcsSet>(svc_hook, on_ccs_set_pre));
+
+    // Devil Trigger animation half: close the boost bracket opened in
+    // on_btn_action_pre. Same typed BtnAction tag - no new hook target.
+    ok &= report("BtnActionBoostPost",
+                 mods::hook_add_post<BtnAction>(svc_hook, on_btn_action_boost_post));
 
     // The Darknut reads its health differently from every other enemy - see
     // btnHealthFraction. Registered even when Devil Trigger is toggled off:

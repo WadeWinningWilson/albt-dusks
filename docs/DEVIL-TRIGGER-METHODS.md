@@ -230,6 +230,28 @@ member) and the audio question answered.
 
 ---
 
+## 3c. Hybrid, TESTED — crashes, and skips frames. Parked.
+
+Built (b69534a / c879b54), played, rejected. Two findings, both recorded
+because the future may want the mechanism even though now does not:
+
+1. **The generic AT-registry signal is unreliable.** During `ACT_ATTACKL` the
+   Darknut is mid-lunge (`truth=1`) yet the registry reported no attack live
+   (`atRegistry=0`) - a flood of `signal MISMATCH act=10` right before a
+   crash. Sub-stepping fired during the attack and re-running `execute()`
+   mid-swing crashed. So the hybrid's headline claim - generic, no per-enemy
+   knowledge - is FALSE for any enemy whose collider timing the registry
+   misreads. It still needs a per-actor state list.
+2. **Gated to safe locomotion states, the sub-step TELEPORTS.** Running a
+   whole extra `execute()` in chase skips the in-between animation frames, so
+   he snaps toward the player rather than running faster. A second full frame
+   of logic is not the same as a frame at 2x - the interpolation is lost.
+
+FUTURE USE: sub-stepping is right where you WANT discrete extra actions - an
+enemy that genuinely acts twice (double attack, extra dash) rather than moves
+smoothly faster. Kept in section 1's recipe for that. It is the wrong tool for
+"smoothly faster", which is what Devil Trigger wants.
+
 ## 4. Comparison
 
 | | Sub-step | Direct scaling | Hybrid |

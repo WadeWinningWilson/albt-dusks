@@ -193,6 +193,14 @@ bool dAlbwDevil_isAttackLive(fopAc_ac_c* actor) {
 }
 
 
+namespace { constexpr float kEnrageScale = 2.0f; }
+
+float dAlbwDevil_boost() { return kEnrageScale; }
+
+float dAlbwDevil_boostFor(fopAc_ac_c* actor) {
+    return dAlbwDevil_isArmed(actor) ? kEnrageScale : 1.0f;
+}
+
 void albw_devil_trigger_reset() {
     sArmedCount = 0;
 }
