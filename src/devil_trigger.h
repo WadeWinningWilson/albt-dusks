@@ -54,16 +54,6 @@ void dAlbwDevil_forget(fopAc_ac_c* actor);  // death / delete
 // Trigger (a safe failure, but one that silently excludes it).
 bool dAlbwDevil_isAttackLive(fopAc_ac_c* actor);
 
-// ============================================
-// The speed factor for this actor RIGHT NOW: 1.0 when not armed, or while a
-// swing is live (stock timing and stock reach for every attack), otherwise
-// the enrage multiplier.
-//
-// One source for both halves. Movement and locomotion animation MUST scale by
-// the same number on the same frames or the enemy foot-slides, and two call
-// sites reading one function is how that stays true.
-// ============================================
-float dAlbwDevil_speedScale(fopAc_ac_c* actor);
 
 ModResult albw_devil_trigger_init(ModError* error);
 void albw_devil_trigger_reset();

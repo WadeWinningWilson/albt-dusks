@@ -132,6 +132,65 @@ him back into that 500-unit cone almost immediately. Phase 1 becomes an
 armoured wall that never lets you reset spacing; phase 2 becomes frantic —
 with a full-length bash reward and honest hit trading.
 
+### TESTED — and it felt INCONSISTENT. Why.
+
+Built as commit d60e3ce, played, rejected by the user: *"direct scaling feels
+very inconsistent."*
+
+The likely mechanism is the conditional restore, which is the part that looked
+clever and was not. POST only restores the rate if it still equals what PRE
+wrote — the guard that stops us stamping an old rate over a fresh `setAnm`.
+But its corollary is that **on every frame `action()` calls `setAnm`, our
+scale is simply discarded**. The Darknut changes state constantly (chase ->
+attack -> recover -> guard), and each change re-seeds the rate, so the
+speed-up applies on some frames and not others. Intermittent by construction.
+
+Worse, it is intermittent in a way the player cannot read: he is fast while
+holding one animation and normal the instant he transitions, which is exactly
+when you would notice.
+
+Fixing it inside this method means scaling at the `play()` call instead of
+around `action()` — hooking `mDoExt_McaMorfSO::play`, or registering the DT
+actor's `J3DFrameCtrl*` into the rate hook the flurry already owns. Both are
+viable and neither was tried; if the hybrid disappoints, that is where this
+method goes next rather than being abandoned.
+
+### RECIPE — direct scaling, preserved
+
+Animation half, bracketing `action()`:
+
+```cpp
+f32  s_animNatural[2] = {1.0f, 1.0f};
+f32  s_animWrote[2]   = {0.0f, 0.0f};
+bool s_animScaled     = false;
+
+// PRE
+const f32 scale = dAlbwDevil_speedScale(self);
+if (scale > 1.0f) {
+    mDoExt_McaMorfSO* morf[2] = {self->mpModelMorf1, self->mpModelMorf2};
+    for (int i = 0; i < 2; ++i) {
+        if (morf[i] == nullptr) continue;
+        s_animNatural[i] = morf[i]->getPlaySpeed();
+        s_animWrote[i]   = s_animNatural[i] * scale;
+        morf[i]->setPlaySpeed(s_animWrote[i]);
+    }
+    s_animScaled = true;
+}
+
+// POST - conditional restore; THIS is what made it intermittent
+for (int i = 0; i < 2; ++i) {
+    if (morf[i] != nullptr && morf[i]->getPlaySpeed() == s_animWrote[i]) {
+        morf[i]->setPlaySpeed(s_animNatural[i]);
+    }
+}
+```
+
+Movement half: multiply `fopAcM_GetSpeed_p(actor)` by
+`world * dAlbwDevil_speedScale(actor)` in the `fopAcM_posMove` PRE hook and
+divide by the SAME captured value in POST (`s_posMoveScale`). That half is
+sound and is **kept** — the hybrid still uses it, so movement scaling and the
+two-feature composition survive this switch.
+
 ---
 
 ## 3. Hybrid — sub-step with generic neutralisations
