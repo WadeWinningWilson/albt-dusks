@@ -22,7 +22,7 @@
 namespace {
 
 // Fraction of health remaining at which an enemy enrages.
-constexpr float kArmThreshold = 0.25f;
+constexpr float kArmThreshold = 0.50f;  // user-set: enrage at half health
 
 // Small fixed table rather than a map: the armed set is bounded by how many
 // enemies can be alive and low at once, and a fixed array cannot allocate

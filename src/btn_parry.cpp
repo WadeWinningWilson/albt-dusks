@@ -823,6 +823,16 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
         return;
     }
 
+    // Death sequence: stop enraging. Re-running execute() through ACT_ENDING
+    // let the Darknut survive a killing blow ("persist for one more hit") -
+    // the extra frame re-touches the death path at the threshold boundary.
+    // Forget the actor so nothing here fires again, and let the real death
+    // play out at stock speed.
+    if (self->mActionMode1 == daB_TN_c::ACT_ENDING) {
+        dAlbwDevil_forget(self);
+        return;
+    }
+
     if (attacking) {
         return;  // a swing is live - stock timing, stock hitbox, no sub-step
     }
