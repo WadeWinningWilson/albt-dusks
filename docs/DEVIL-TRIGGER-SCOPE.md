@@ -95,6 +95,14 @@ timing, so nothing about the attack can desync.
 A is the one to avoid. A widened hitbox on a fast enemy is the combination
 players experience as unfair, and it is the hardest of the three to tune.
 
+> **SUPERSEDED IN PART.** The three speed-up methods and what each costs are
+> now in [DEVIL-TRIGGER-METHODS.md](DEVIL-TRIGGER-METHODS.md), written after
+> the first Darknut test. Two claims below did not survive it: sub-stepping
+> was thought safe once gated to non-attack states (it is not - `action()`
+> calls `damage_check()`, so damage is evaluated twice), and the per-enemy
+> "attacking" state lists were thought necessary (the generic AT-registry
+> signal works). Read the methods doc for the current picture.
+
 ## 3b. THE CHOSEN SHAPE — C plus movement, via state-gated sub-stepping
 
 User asked whether C could also speed enemy *movement*. It can, and the way it
