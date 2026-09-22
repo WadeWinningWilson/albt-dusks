@@ -856,8 +856,33 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     if (!dAlbwDevil_isArmed(self)) {
         return;
     }
-    if (attacking) {
-        return;  // a swing is live: stock timing, stock reach, no extra step
+
+    // ============================================
+    // SUB-STEP ONLY IN SAFE LOCOMOTION STATES - an ALLOWLIST, not a blocklist.
+    //
+    // The first hybrid run CRASHED sub-stepping during ACT_ATTACKL, because
+    // the generic AT-registry gate (`attacking`) reported no attack live
+    // during a genuine lunge - the exact MISMATCH the probe was built to
+    // catch (act=10 truth=1 atRegistry=0, flooding the log right before the
+    // crash). Re-running execute() mid-attack double-advances the swing and
+    // its collider/state teardown, which is what crashed.
+    //
+    // So the registry signal is NOT trustworthy for this actor, and a
+    // blocklist of attack states would be one missed state from another
+    // crash. An allowlist fails safe: sub-step ONLY in chase and wait, where
+    // re-running execute is just movement + a timer tick. Every other state -
+    // attacks, damage, guard, yoroke, demos, ending - runs exactly once.
+    //
+    // This is the per-enemy knowledge DEVIL-TRIGGER-METHODS warned the hybrid
+    // would still need where the generic signal fails; the Darknut is that
+    // case. `attacking` is kept for the probe comparison only.
+    // ============================================
+    const int mode = self->mActionMode1;
+    const bool safeToSubStep = (mode == daB_TN_c::ACT_CHASEH ||
+                                mode == daB_TN_c::ACT_CHASEL ||
+                                mode == daB_TN_c::ACT_WAITH);
+    if (!safeToSubStep) {
+        return;
     }
 
     // ============================================
