@@ -1,5 +1,7 @@
 # Devil Trigger — the three speed-up methods
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 Companion to [DEVIL-TRIGGER-SCOPE.md](DEVIL-TRIGGER-SCOPE.md), which covers the
 trigger, tiers and knockback immunity. This document is only about **how an
 enemy is made faster**, and what each choice costs.

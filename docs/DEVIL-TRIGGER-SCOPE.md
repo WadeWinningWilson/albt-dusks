@@ -1,5 +1,7 @@
 # Devil Trigger — enemy enrage below 25% HP
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 **Status: scoped, not started. INVENTED — no donor.**
 
 User's design: an enemy below 25% HP speeds up and ignores knockback. The

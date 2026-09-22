@@ -1,5 +1,7 @@
 # Linux hook coverage — getting the six missing features onto Linux
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 **Status: planned, not started.** Nothing in here is implemented.
 
 Thirty hook sites are inert on Linux, costing six features. This is the plan to

@@ -1,5 +1,7 @@
 # Release procedure — A Link Between Twilight (`dev.albt.albw`)
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 **Follow every step, in order, every time. No skipping, no reordering.**
 Each gate exists because skipping it once already shipped a broken build to
 players.

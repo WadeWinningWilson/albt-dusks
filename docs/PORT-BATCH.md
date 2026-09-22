@@ -1,5 +1,7 @@
 # Port Batch — feature parity pass (v0.3.0 target)
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 Working tracker for the current porting batch. Rules that bind this work:
 
 - **DN-10 / port native subsystems.** Read the fork's own system and PORT it

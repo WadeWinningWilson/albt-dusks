@@ -1,5 +1,7 @@
 # Upstream report — file-local statics missing from the Linux symbol manifest
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 Draft for the Dusklight issue tracker. Our own workaround plan is
 [LINUX-HOOK-COVERAGE.md](LINUX-HOOK-COVERAGE.md); this is the root-cause fix
 that would make it unnecessary.

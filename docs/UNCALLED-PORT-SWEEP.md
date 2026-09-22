@@ -1,5 +1,7 @@
 # Uncalled-port sweep — bodies we ported and never call
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 **Why this exists.** In a single day, five separate live defects turned out to
 be the same shape: a function ported faithfully from the fork, compiling,
 declared in a header — and never called. Four of the five were player-visible

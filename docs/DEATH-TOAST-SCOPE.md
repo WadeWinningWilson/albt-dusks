@@ -1,5 +1,7 @@
 # SCOPE — Death-Choice Toast ("Continue Here / Warp to Ordon" + Shade Watcher alternate)
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 **Target mod:** `dev.albt.albw` (`C:\Users\ryana\Documents\ALBT DUSKS STUFF`)
 **Fork (donor):** `C:\Users\ryana\Documents\dusklight`
 **Stock (baseline):** `C:\Users\ryana\Documents\dusklight-main`

@@ -1,5 +1,7 @@
 # dev.albt.albw.shield
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 Hey Kamilink — with both our mods installed, ALBT's shield bash never fires,
 because we both hook the same `daAlink_c` guard path (`procGuardAttackInit`,
 `checkGuardActionChange`, `setBStatus`, `procGuardSlipInit`, `setShieldGuard`,

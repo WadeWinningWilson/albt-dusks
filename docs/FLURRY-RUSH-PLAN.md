@@ -1,5 +1,7 @@
 # Flurry Rush — implementation plan
 
+> Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
+
 Status: **scoped, not started.** The toggle is registered and hidden
 (`albw_settings_ui.cpp:71-76`); the module compiles and hooks today but the
 feature is roughly one third built.
