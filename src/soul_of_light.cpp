@@ -158,8 +158,14 @@ DEFINE_HOOK(&dSv_memBit_c::isTbox, IsTbox);
 // the host's symbol manifest. See albw_symbols.h.
 DEFINE_HOOK(&fpcMtd_Execute, MtdExecute);
 
+// Set false when init cannot wire all of soul-of-light's hooks (e.g.
+// fpcMtd_Execute does not resolve on macOS). Gating the feature's own
+// predicate on it makes a partial install INERT rather than fatal - the death
+// hooks that did install then early-out, and the rest of the mod loads.
+bool s_soulHooksReady = true;
+
 bool orbEnabled() {
-    return albw_cfg_bool(g_recovery_orb, true);
+    return s_soulHooksReady && albw_cfg_bool(g_recovery_orb, true);
 }
 
 u16 getWallet() {
@@ -705,45 +711,49 @@ ModResult albw_soul_of_light_build_panel(UiElementHandle panel, ModError*) {
 }
 
 ModResult albw_soul_of_light_init(ModError*) {
-    if (!resolve_fast_create()) {
-        svc_log->error(mod_ctx, "fopAcM_fastCreate not found in host binary");
-        return MOD_ERROR;
+    // DOCTRINE (same as flurry_hooks.cpp / fyrus.cpp): a hook that fails to
+    // resolve must be LOUD and SCOPED, never fatal. This function used to
+    // `return MOD_ERROR` on any miss, which unloaded the ENTIRE mod - and
+    // fpcMtd_Execute does not resolve on macOS (likely inlined there, absent
+    // from the symbol manifest), so on macOS the whole mod failed with
+    // "mod_initialize failed with result 1" and NOTHING loaded. Now a miss
+    // disables ONLY soul of light and the mod loads.
+    auto need = [](const char* what, bool ok) -> bool {
+        if (!ok && svc_log != nullptr) {
+            svc_log->error(mod_ctx, what);
+        }
+        return ok;
+    };
+
+    bool ok = true;
+    ok = need("soul of light: fopAcM_fastCreate not found in host binary",
+              resolve_fast_create()) && ok;
+    ok = need("soul of light: failed to hook procCoDeadInit",
+              mods::hook::add_pre<DeadInit>(on_dead_pre) == MOD_OK &&
+              mods::hook::add_post<DeadInit>(on_dead_post) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook isTbox",
+              mods::hook::add_pre<IsTbox>(on_is_tbox_pre) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook daObjDrop_c::create",
+              mods::hook::add_post<DropCreate>(on_create_post) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook dropGet",
+              mods::hook::add_pre<DropGet>(on_drop_get_pre) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook checkGetArea",
+              mods::hook::add_pre<CheckGetArea>(on_check_get_area_pre) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook checkCompleteDemo",
+              mods::hook::add_pre<CheckCompleteDemo>(on_check_complete_pre) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook daObjDrop_c::execute",
+              mods::hook::add_post<DropExecute>(on_drop_execute_post) == MOD_OK) && ok;
+    ok = need("soul of light: failed to hook fpcMtd_Execute (play-scene tick)",
+              mods::hook::add_post<MtdExecute>(on_mtd_execute_post) == MOD_OK) && ok;
+
+    if (!ok) {
+        s_soulHooksReady = false;
+        if (svc_log != nullptr) {
+            svc_log->error(mod_ctx, "soul of light DISABLED this run (a hook above did not "
+                                    "resolve); the rest of the mod is unaffected");
+        }
     }
-    if (mods::hook::add_pre<DeadInit>(on_dead_pre) != MOD_OK ||
-        mods::hook::add_post<DeadInit>(on_dead_post) != MOD_OK)
-    {
-        svc_log->error(mod_ctx, "failed to hook procCoDeadInit");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_pre<IsTbox>(on_is_tbox_pre) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook isTbox");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_post<DropCreate>(on_create_post) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook daObjDrop_c::create");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_pre<DropGet>(on_drop_get_pre) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook dropGet");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_pre<CheckGetArea>(on_check_get_area_pre) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook checkGetArea");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_pre<CheckCompleteDemo>(on_check_complete_pre) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook checkCompleteDemo");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_post<DropExecute>(on_drop_execute_post) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook daObjDrop_c::execute");
-        return MOD_ERROR;
-    }
-    if (mods::hook::add_post<MtdExecute>(on_mtd_execute_post) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook fpcMtd_Execute (soul of light play-scene tick)");
-        return MOD_ERROR;
-    }
-    return MOD_OK;
+    return MOD_OK;  // never fatal - one feature's missing hook must not sink the mod
 }
 
 ModResult albw_soul_of_light_shutdown(ModError*) {
