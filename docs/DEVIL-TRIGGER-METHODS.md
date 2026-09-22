@@ -65,6 +65,36 @@ double rate, recovers instantly, re-engages before your swing finishes. But you
 get free damage you should not have, and your bash reward is quietly halved.
 The right feel, reached through four bugs.
 
+### RECIPE — the working sub-step implementation, preserved
+
+This shipped and ran (commit f9e0345). Kept verbatim so switching back costs
+nothing. Hook is `DEFINE_HOOK(&daB_TN_c::execute, BtnExecute)`, registered
+with `hook_add_post`.
+
+```cpp
+bool s_inSubStep = false;   // execute() reaches damage_check, which we also
+                            // hook - without this the sub-step recurses.
+
+void on_btn_execute_post(ModContext*, void* args, void*, void*) {
+    if (!s_featureReady || s_inSubStep) return;
+    auto* self = self_of(args);
+    if (self == nullptr || self->mType != 0) return;
+
+    dAlbwDevil_tickActor(self);
+    if (!dAlbwDevil_isArmed(self)) return;
+    if (dAlbwDevil_isAttackLive(self)) return;  // swing live: stock timing
+
+    s_inSubStep = true;
+    self->AlbwBtn_c::execute();
+    s_inSubStep = false;
+}
+```
+
+To revive it as the HYBRID, this is unchanged - the two generic
+neutralisations go elsewhere: a typed hook on `cCcS::Set` that returns early
+while `s_inSubStep`, and a `ClrTgHit` pass over the actor's colliders (found
+via the `mpObjTg` registry scan) immediately before the `execute()` re-call.
+
 ---
 
 ## 2. Direct scaling

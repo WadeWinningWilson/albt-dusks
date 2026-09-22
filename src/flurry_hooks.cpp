@@ -2,6 +2,7 @@
 
 #include "albw_common.h"
 #include "flurry_proc.h"
+#include "devil_trigger.h"  // Devil Trigger shares this movement seam
 #include "sim_time_scale.h"
 #include "mods/hook.hpp"
 
@@ -22,6 +23,10 @@ DEFINE_HOOK(&daAlink_c::procSideStepLandInit, ProcSideStepLandInit);
 DEFINE_HOOK(&daAlink_c::procBackJumpLandInit, ProcBackJumpLandInit);
 DEFINE_HOOK(fopAcM_posMove, FopAcMPosMove);
 DEFINE_HOOK(dMeter2Info_setSword, Meter2InfoSetSword);
+
+// Captured in PRE so POST divides by exactly what PRE multiplied by, even if
+// the actor armed or a swing started between the two.
+float s_posMoveScale = 1.0f;
 
 void on_proc_side_step_init_post(ModContext*, void* args, void*, void*) {
     if (!dFlurryRush_isEnabled()) {
@@ -97,16 +102,24 @@ HookAction on_proc_back_jump_land_init_pre(ModContext*, void* args, void* retval
     return on_flurry_land_init_pre(args, retval);
 }
 
+// ============================================
+// Two features share this seam now. Flurry Rush slows the WORLD (a global
+// factor below 1.0, Link exempt); Devil Trigger speeds ONE ACTOR (a per-actor
+// factor above 1.0). They compose by multiplication, which is correct: an
+// enraged enemy inside a flurry window should still be slowed by it.
+// ============================================
 HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
-    const float scale = albw::get_sim_time_scale();
-    if (scale >= 0.999f) {
-        return HOOK_CONTINUE;
-    }
-
     auto* actor = mods::arg<fopAc_ac_c*>(args, 0);
     if (actor != nullptr && fopAcM_GetName(actor) == fpcNm_ALINK_e) {
         return HOOK_CONTINUE;
     }
+
+    const float world = albw::get_sim_time_scale();
+    const float scale = world * dAlbwDevil_speedScale(actor);
+    if (scale >= 0.999f && scale <= 1.001f) {
+        return HOOK_CONTINUE;
+    }
+    s_posMoveScale = scale;
 
     cXyz* speed = fopAcM_GetSpeed_p(actor);
     if (speed != nullptr) {
@@ -118,8 +131,9 @@ HookAction on_fop_ac_m_pos_move_pre(ModContext*, void* args, void*, void*) {
 }
 
 void on_fop_ac_m_pos_move_post(ModContext*, void* args, void*, void*) {
-    const float scale = albw::get_sim_time_scale();
-    if (scale >= 0.999f) {
+    const float scale = s_posMoveScale;
+    s_posMoveScale = 1.0f;
+    if (scale >= 0.999f && scale <= 1.001f) {
         return;
     }
 

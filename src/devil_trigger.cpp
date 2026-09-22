@@ -192,6 +192,25 @@ bool dAlbwDevil_isAttackLive(fopAc_ac_c* actor) {
     return false;
 }
 
+// ============================================
+// The enrage multiplier. 2.0 matches what the sub-step produced, so the first
+// direct-scaling run is comparable to the run before it rather than changing
+// two variables at once.
+// ============================================
+namespace {
+constexpr float kEnrageScale = 2.0f;
+}
+
+float dAlbwDevil_speedScale(fopAc_ac_c* actor) {
+    if (!dAlbwDevil_isArmed(actor)) {
+        return 1.0f;
+    }
+    if (dAlbwDevil_isAttackLive(actor)) {
+        return 1.0f;  // a swing is live - stock timing, stock reach
+    }
+    return kEnrageScale;
+}
+
 void albw_devil_trigger_reset() {
     sArmedCount = 0;
 }

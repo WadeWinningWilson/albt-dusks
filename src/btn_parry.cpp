@@ -750,21 +750,14 @@ bool btnHealthFraction(fopAc_ac_c* actor, float* outFraction) {
 }
 
 // ============================================
-// The speed-up. State-gated sub-step, per docs/DEVIL-TRIGGER-SCOPE.md 3b:
-// run the actor a second time ONLY while no attack collider is live, so
-// movement, locomotion animation, timers and the state machine all advance
-// together while every swing keeps stock timing and a stock hitbox.
-//
-// POST, not PRE: the extra step must come after the real one, and calling the
-// original through g_orig would re-enter our own hook.
-//
-// s_inSubStep is not decoration. execute() reaches damage_check, which this
-// module also hooks; without the latch a sub-step would recurse.
+// The execute POST hook is now the PROBE seam only - the speed-up moved to
+// action() PRE/POST below (direct scaling). It stays because the heartbeat is
+// the cheapest place to watch arming, the health fraction and the
+// AT-registry-vs-action-mode comparison, none of which depend on the method.
 // ============================================
-bool s_inSubStep = false;
 
 void on_btn_execute_post(ModContext*, void* args, void*, void*) {
-    if (!s_featureReady || s_inSubStep) {
+    if (!s_featureReady) {
         return;
     }
     auto* self = self_of(args);
@@ -823,13 +816,84 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
         return;
     }
 
-    if (attacking) {
-        return;  // a swing is live - stock timing, stock hitbox, no sub-step
+    (void)attacking;  // the swing gate now lives in dAlbwDevil_speedScale
+}
+
+// ============================================
+// DIRECT SCALING - the animation half. Replaces the execute() sub-step, whose
+// recipe is preserved in docs/DEVIL-TRIGGER-METHODS.md section 1 if we switch
+// back.
+//
+// WHY action() AND NOT execute(): action() is where the Darknut advances its
+// animation - mpModelMorf2->play() / mpModelMorf1->play() (stock
+// d_a_b_tn.cpp, inside action). Bracketing that call is the whole mechanism:
+// raise the rate before it advances, put it back after.
+//
+// WHY IT RESTORES CONDITIONALLY. action() can call setAnm mid-frame on a state
+// change, which sets a rate for the NEW animation. Restoring unconditionally
+// would stamp the previous animation's rate over it. So POST only restores if
+// the rate is still the exact value we wrote; if action() changed it, that is
+// the donor's intent and we leave it alone - next frame's PRE picks up the
+// fresh value and scales that instead.
+//
+// Nothing here runs anything twice: damage, i-frames, collider registration
+// and the guard-open window are all untouched by construction, which is the
+// entire reason for preferring this over the sub-step.
+// ============================================
+f32  s_animNatural[2] = {1.0f, 1.0f};
+f32  s_animWrote[2]   = {0.0f, 0.0f};
+bool s_animScaled     = false;
+
+void on_btn_action_scale_pre(ModContext*, void* args, void*, void*) {
+    s_animScaled = false;
+    if (!s_featureReady) {
+        return;
+    }
+    auto* self = self_of(args);
+    if (self == nullptr || self->mType != 0) {
+        return;
     }
 
-    s_inSubStep = true;
-    self->AlbwBtn_c::execute();
-    s_inSubStep = false;
+    dAlbwDevil_tickActor(self);
+    const f32 scale = dAlbwDevil_speedScale(self);
+    if (scale <= 1.0f) {
+        return;
+    }
+
+    mDoExt_McaMorfSO* morf[2] = {self->mpModelMorf1, self->mpModelMorf2};
+    for (int i = 0; i < 2; ++i) {
+        if (morf[i] == nullptr) {
+            continue;
+        }
+        s_animNatural[i] = morf[i]->getPlaySpeed();
+        s_animWrote[i]   = s_animNatural[i] * scale;
+        morf[i]->setPlaySpeed(s_animWrote[i]);
+    }
+    s_animScaled = true;
+}
+
+// mods::hook_add_pre needs a HookAction-returning callback; the scaling work
+// itself never cancels the original.
+HookAction on_btn_action_scale_pre_hk(ModContext* c, void* args, void* rv, void* u) {
+    on_btn_action_scale_pre(c, args, rv, u);
+    return HOOK_CONTINUE;
+}
+
+void on_btn_action_scale_post(ModContext*, void* args, void*, void*) {
+    if (!s_animScaled) {
+        return;
+    }
+    s_animScaled = false;
+    auto* self = self_of(args);
+    if (self == nullptr) {
+        return;
+    }
+    mDoExt_McaMorfSO* morf[2] = {self->mpModelMorf1, self->mpModelMorf2};
+    for (int i = 0; i < 2; ++i) {
+        if (morf[i] != nullptr && morf[i]->getPlaySpeed() == s_animWrote[i]) {
+            morf[i]->setPlaySpeed(s_animNatural[i]);
+        }
+    }
 }
 
 }  // namespace
@@ -874,6 +938,14 @@ ModResult albw_btn_parry_init(ModError*) {
 
     ok &= report("BtnExecuteDevil",
                  mods::hook_add_post<BtnExecute>(svc_hook, on_btn_execute_post));
+
+    // Devil Trigger animation half: bracket action(), where the Darknut calls
+    // mpModelMorf1/2->play(). Same typed BtnAction tag the guard-window tick
+    // already uses - no new hook target, no check_hooks change.
+    ok &= report("BtnActionScalePre",
+                 mods::hook_add_pre<BtnAction>(svc_hook, on_btn_action_scale_pre_hk));
+    ok &= report("BtnActionScalePost",
+                 mods::hook_add_post<BtnAction>(svc_hook, on_btn_action_scale_post));
 
     // The Darknut reads its health differently from every other enemy - see
     // btnHealthFraction. Registered even when Devil Trigger is toggled off:
