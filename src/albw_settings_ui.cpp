@@ -200,7 +200,9 @@ ModResult build_story_tab(ModContext*, UiWindowHandle, UiElementHandle left, UiE
         return MOD_ERROR;
     }
     if (albw_ui_add_toggle(left, "Wolf Link combat",
-                           "Field-attack stun, bite charges, charge HUD.",
+                           "Grants new field-attack stun, bite charges, wolf howl, Midna's "
+                           "hand, charge HUD.<br/>Once unlocked in the shop, press d-pad up "
+                           "for wolf howl and d-pad right for Midna's Hand.",
                            g_wolf_combat) != MOD_OK)
     {
         return MOD_ERROR;

@@ -211,3 +211,50 @@ and it would look like the feature "working" right up until nothing dies.
 5. **State-gated sub-step at a low N** (~1.5x), measured for collider-array
    headroom with a full room of low-HP enemies.
 6. Raise N only once 5 is clean, and only as far as it still reads fair.
+
+---
+
+## 7. Perfect-parry openings (user design, planned — no code)
+
+An enraged enemy is harder to open: the bash guard-window is shorter under
+Devil Trigger (the sub-step ticks `field_0xaa2` twice, 90 -> 45). The user's
+answer is not only to fix that halving but to add a **skill-rewarded counter**:
+a perfect parry against a DT enemy creates a new opening.
+
+**This reuses a native seam we already ported — it is not a new system.** The
+Darknut already has `albwBeginGuardOpenWindow(u8 frames)` and
+`albwTryApplyBashGuardBreakFromHit()` (mod `src/btn_port.inc`; fork
+`d_a_b_tn.cpp:1337/1408`): a bash cracks the guard and opens a window where
+hits land. A perfect parry can trigger the same opening, paid for by the parry
+timing instead of bash charges.
+
+### Chosen flavour: parry = free guard-break, with a LONGER window
+- On a successful perfect parry (`dShield_onShieldHit` returns true /
+  `dParryMaster_onPerfectParry`), if the attacker is a DT-armed enemy that
+  supports a guard-open, call that enemy's `albwBeginGuardOpenWindow`.
+- Give the PARRY window a longer base than the bash window (bash 90/75 ->
+  parry e.g. 120), so parrying is the *dueling answer* to an enraged enemy:
+  bashing is short and competes for charges, parrying cracks them wider.
+- Composes with the window-halving fix (step-2 work): once the double-tick is
+  guarded, the parry window is full-length by design; until then the longer
+  base partly compensates.
+
+### Alternatives considered (kept on record)
+- **Stagger:** drop the enemy into its native stagger (`ACT_YOROKE`). Simpler,
+  blunter, less distinct from a bash.
+- **Mini-flurry:** reuse the DT anim-boost infrastructure IN REVERSE to slow the
+  parried enemy briefly (per-actor slow, not the world). Thematically ties to
+  Flurry Rush; most new code, least certain feel.
+
+### Seam + cost
+- Trigger seam: the perfect-parry success path the shield system already owns
+  (`dShield_onShieldHit` / `dParryMaster_onPerfectParry`), plus attacker
+  identification (the enemy whose attack was parried).
+- Per-enemy: the guard-open is per-actor. The Darknut has it; other DT enemies
+  would each need their own opening seam - the same per-actor reality DT
+  already lives with. The Darknut (test case) has everything needed.
+
+### Dependency
+Bundle with the step-2 once-per-frame fixes (i-frames, bash window, damage) -
+this mechanic reads correctly only once the window-halving is fixed, and DT is
+not shippable until those land regardless.
