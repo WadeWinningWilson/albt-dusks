@@ -149,3 +149,10 @@ enum AlbwSaveCounter {
 // id reads 0 and writes nothing.
 int  albw_save_counter_get(int counter);
 void albw_save_counter_set(int counter, int value);
+
+// "New Game" for the mod's per-install state: rewrites every progression flag
+// AND every counter back to its default (0). This is the deliberate reset the
+// store's per-install trade requires (see the .cpp block comment) - config.json
+// is per-install, not per-save, so a fresh playthrough clears mod unlocks here.
+// Touches ONLY the mod's own config vars; the player's save file is never opened.
+void albw_save_flags_reset_all();

@@ -257,29 +257,6 @@ void hurricane_begin(daAlink_c* link, int param_direction) {
     dComIfGp_setPlayerStatus0(0, 0x8000);
     link->onResetFlg0(daAlink_c::RFLG0_UNK_2);
     initHurricaneSpinSe(link);
-    // ============================================
-    // TEMP DIAG — HURR-SE (residency vs playback). After the mix starts, report each
-    // layer's LIVE handle: 1 = the wave is resident and the sound actually STARTED, 0 =
-    // null handle (wave missing / start failed). voiceCtrl is a resident Link voice
-    // (control). Branch: voiceCtrl=1 but zant/tornado/spinner=0 -> waves NOT resident ->
-    // a scene-wave loader (Z2SceneMgr::loadSceneWave) would fix it. All =1 but still
-    // silent -> resident-but-not-playing -> exe DSP loop (a loader won't help).
-    // Parse tag: "HURR-SE". STRIP before release.
-    // ============================================
-    if (svc_log != nullptr) {
-        auto live = [&](u32 id) -> int {
-            Z2SoundHandlePool* h = link->mZ2Link.mSoundObjSimple2.getHandleSoundID(id);
-            if (h == nullptr || !*h) {
-                h = link->mZ2Link.mSoundObjSimple1.getHandleSoundID(id);
-            }
-            return (h != nullptr && *h) ? 1 : 0;
-        };
-        char buf[128];
-        std::snprintf(buf, sizeof(buf), "[HURR-SE] zant=%d tornado=%d spinner=%d voiceCtrl=%d",
-                      live(kHurricaneSeMix.primarySe), live(kHurricaneSeMix.secondarySe),
-                      live(kHurricaneSeMix.tertiarySe), live(kHurricanePlaceholderVoiceSe));
-        svc_log->info(mod_ctx, buf);
-    }
     hurricane_emit_vfx(link);  // sustained tilted ring (fork gsSustainedVfx), not the vanilla one-shot
 
     s_phase = HP_SPIN;

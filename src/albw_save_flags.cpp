@@ -137,5 +137,28 @@ void albw_save_counter_set(int counter, int value) {
 }
 
 // ============================================
+// "NEW GAME" RESET. The control the store's per-install trade always required
+// (block comment above, and the header). Rewrites both flag ints and every
+// counter to 0 - the registered default of all of them (mod.cpp:74-88). Writes
+// go only to the mod's config vars; the player's save file is never touched.
+// ============================================
+void albw_save_flags_reset_all() {
+    if (svc_config == nullptr) {
+        return;
+    }
+    if (g_progress_flags_a != 0 && albw_cfg_int(g_progress_flags_a, 0) != 0) {
+        svc_config->set_int(mod_ctx, g_progress_flags_a, 0);
+    }
+    if (g_progress_flags_b != 0 && albw_cfg_int(g_progress_flags_b, 0) != 0) {
+        svc_config->set_int(mod_ctx, g_progress_flags_b, 0);
+    }
+    for (ConfigVarHandle* const var : kCounterVars) {
+        if (var != nullptr && *var != 0 && albw_cfg_int(*var, 0) != 0) {
+            svc_config->set_int(mod_ctx, *var, 0);
+        }
+    }
+}
+
+// ============================================
 // NEW CODE ENDS HERE
 // ============================================

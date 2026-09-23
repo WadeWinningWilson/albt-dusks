@@ -209,6 +209,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_enemy_lockout_init(error) != MOD_OK ||
         albw_btn_parry_init(error) != MOD_OK ||
         albw_devil_trigger_init(error) != MOD_OK ||
+        albw_bokoblin_dt_init(error) != MOD_OK ||
         albw_magic_jar_init(error) != MOD_OK ||
         albw_rupee_popup_init(error) != MOD_OK ||
         albw_tear_particles_init(error) != MOD_OK ||

@@ -37,12 +37,36 @@ off, so it ships dormant and does not block.
 - Three probes STILL ON, must go to 0: `ALBW_DARKNUT_PROBE` (btn_probe.h),
   `ALBW_MAGICJAR_PROBE` (magic_jar_probe.h), `ALBW_SOUL_PROBE` (soul_probe.h).
   (Pulled 2026-09-22: `ALBW_DEVIL_PROBE` → 0, and the wolf-guard `[wguard]/[watk]`
-  diagnostics removed from source entirely.)
+  diagnostics removed from source entirely.) NEW bring-up probe ON:
+  `ALBW_BOKO_DT_PROBE` (bokoblin_dt.h `[bokoDT]` audit) — pull once E_OC is validated.
 - Bump `mod.json` past the untagged 0.2.8 to **0.2.9**.
 - Magic jars: grant chain proven working (meter +3633 = 1/3), but the "player
   doesn't SEE it on the bar" question is open - a HUD read, not the grant.
 
 ## 3. Devil Trigger — working baseline, NOT shippable
+
+- **Profile abstraction — ✅ BUILT (step 1, behavior-preserving).** The generic DT
+  enforcement (arm → not-dead → not-mid-swing → second execute) now lives in
+  `dAlbwDevil_execProfile` (devil_trigger); per-enemy specifics are a `DTProfile`
+  struct (`isDead`, `redispatch`, optional pre/post-passes + `fallbackTick`;
+  health reader stays via `registerHealthOverride`). The Darknut is the FIRST
+  profile (`s_btnDtProfile` in btn_parry) and its `on_btn_execute_post` is now
+  just the latch + `dAlbwDevil_execProfile`. Same Darknut behavior; check_hooks
+  30/30. **Next: Bokoblin** = register a second `DTProfile` (+ its execute front
+  door, and an audit-probe pass) — measures per-enemy patch cost. Portable-seam
+  migration (typed hooks → one generic `g_fopAc_Method` actor dispatcher) only
+  swaps the front door, not the profiles; file [UPSTREAM-LINUX-STATICS.md] first.
+- **Bokoblin (E_OC) — ✅ SECOND profile BUILT (step 2 bring-up), awaiting audit.**
+  `bokoblin_dt.cpp`: `s_ocDtProfile` + a POST hook on `daE_OC_c::execute` (typed
+  member hook — portable, check_hooks 30/30). E_OC uses standard `health` (generic
+  reader, NO override — unlike the Darknut's scratch pool) and defaults to NORMAL
+  category, so it is DT-eligible out of the box; death predicate = `checkBeforeDeath`.
+  Proves the abstraction: the profile is ~4 fields + 2 tiny fns, no changes to the
+  generic core. **Audit probe `[bokoDT]` ON** (logs frac/action/dpos deltas across
+  the second execute) to measure double-execute anomalies = per-enemy patch cost.
+  `ALBW_BOKO_DT_PROBE` must go to 0 before release. E_OC has a multi-actor
+  structure (`mpBattle`/`mpDamage`/`mpTalk`) — the audit will show if the wrong
+  sub-instance arms or a value double-processes.
 
 - Design: [DEVIL-TRIGGER-SCOPE.md](DEVIL-TRIGGER-SCOPE.md). Methods post-mortem:
   [DEVIL-TRIGGER-METHODS.md](DEVIL-TRIGGER-METHODS.md).
@@ -239,6 +263,7 @@ Hard-won this cycle; apply to any future wolf-combat or enemy-reaction feature.
 | [DEVIL-TRIGGER-METHODS.md](DEVIL-TRIGGER-METHODS.md) | DT sub-step/direct/hybrid post-mortem + recipes |
 | [DEATH-TOAST-SCOPE.md](DEATH-TOAST-SCOPE.md) | death Continue/Warp toast port scope |
 | [WOLF-GUARD-SCOPE.md](WOLF-GUARD-SCOPE.md) | wolf guard/parry (Midna's Shield) design scope |
+| [SETTINGS-REORG-PLAN.md](SETTINGS-REORG-PLAN.md) | settings/menu reorg — target tab layout + move map |
 | [FLURRY-RUSH-PLAN.md](FLURRY-RUSH-PLAN.md) | Flurry Rush status + remaining steps |
 | [LINUX-HOOK-COVERAGE.md](LINUX-HOOK-COVERAGE.md) | Linux inert-hook plan (Routes 1-3) |
 | [UPSTREAM-LINUX-STATICS.md](UPSTREAM-LINUX-STATICS.md) | upstream bug report (symgen ELF statics) |

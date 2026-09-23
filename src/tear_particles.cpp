@@ -77,50 +77,9 @@ DEFINE_HOOK(&dPa_control_c::getRM_ID, TearGetRmId);
 // transition (the archive heap is being rebuilt then), which crashes in JPATexture::load.
 DEFINE_HOOK(&dPa_control_c::createCommon, TearCreateCommon);
 DEFINE_HOOK(&JPAResource::drawP, TearDrawP);
-DEFINE_HOOK(&daObjDrop_c::execute, TearObjDropExec);
 
-// TEMP DIAG — TEAR-EMTR (point 4): every frame the tear/light-drop orb executes, read
-// its six body emitters LIVE from the actor (no stale pointers) and log null-state +
-// particle count. This is the branch decider: -1 (null emitter) = routing/lookup
-// problem; 0 across frames = resource/calc/init problem; >0 but invisible = draw/texture
-// problem. Fires for any light-drop (recovery orb AND twilight-area tears -> point 6
-// diff). Throttled + sample-capped. Parse tag: "TEAR-EMTR". STRIP before release.
-void on_obj_drop_exec_post(ModContext*, void* args, void*, void*) {
-    auto* drop = mods::arg<daObjDrop_c*>(args, 0);
-    if (drop == nullptr || svc_log == nullptr) {
-        return;
-    }
-    bool anyEmtr = false;
-    for (int i = 0; i < 6; i++) {
-        if (drop->mpBodyEffEmtrs[i] != NULL) {
-            anyEmtr = true;
-            break;
-        }
-    }
-    static int s_samples = 0;
-    static u16 s_throttle = 0;
-    if (!anyEmtr || s_samples >= 40) {
-        return;
-    }
-    if ((s_throttle++ % 12) != 0) {
-        return;
-    }
-    s_samples++;
-    int pc[6];
-    for (int i = 0; i < 6; i++) {
-        JPABaseEmitter* e = drop->mpBodyEffEmtrs[i];
-        pc[i] = (e != NULL) ? (int)e->getParticleNumber() : -1;
-    }
-    char buf[160];
-    std::snprintf(buf, sizeof(buf), "[TEAR-EMTR] suppReady=%d parts=%d,%d,%d,%d,%d,%d (-1=null)",
-                  sTearResMng != NULL ? 1 : 0, pc[0], pc[1], pc[2], pc[3], pc[4], pc[5]);
-    svc_log->info(mod_ctx, buf);
-}
-
-// TEMP DIAGNOSTIC: JPALoadTex (the crash site) is too short to hook, so instrument
-// its hookable caller drawP and replicate JPALoadTex's index math:
-// mpResMgr->load(mpRes->getTexIdx(pBsp->getTexIdx())). Log the fault case (texIdx
-// out of the RM's registered range, or in range but the texture slot is NULL).
+// Crash GUARD at the JParticle consumption seam. JPALoadTex (the crash site) is too
+// short to hook, so guard its hookable caller drawP.
 HookAction on_draw_p_pre(ModContext*, void* args, void*, void*) {
     JPAResource* res = mods::arg<JPAResource*>(args, 0);
     JPAEmitterWorkData* work = mods::arg<JPAEmitterWorkData*>(args, 1);
@@ -135,74 +94,21 @@ HookAction on_draw_p_pre(ModContext*, void* args, void*, void*) {
     const u16 texIdx = res->getTexIdx(animIdx);
     const u16 texReg = work->mpResMgr->texRegNum;
     const bool inRange = texIdx < texReg;
-    const bool nullTex = inRange && work->mpResMgr->pTexAry != NULL &&
-                         work->mpResMgr->pTexAry[texIdx] == NULL;
 
-    // DECISIVE PROBE + GUARD: the crash is JUTTexture::load -> `if (mPalette) mPalette->load()`
-    // with a garbage mPalette (deterministic fault 0x41900148). Detect any drawP whose
-    // JPATexture has a non-canonical palette pointer, NAME it (identifies the culprit texture
-    // and which manager), and SKIP that single draw to prevent the crash - a mod-side guard at
-    // the JParticle consumption seam (no fork equivalent: the fork never reaches a bad palette).
+    // The crash is JUTTexture::load -> `if (mPalette) mPalette->load()` with a garbage
+    // mPalette (deterministic fault 0x41900148). Detect a non-canonical palette pointer
+    // and SKIP that single draw to prevent the crash - a mod-side guard at the JParticle
+    // consumption seam (no fork equivalent: the fork never reaches a bad palette).
     if (inRange && work->mpResMgr->pTexAry != NULL) {
         JPATexture* tex = work->mpResMgr->pTexAry[texIdx];
         if (tex != NULL) {
             const uintptr_t pal = reinterpret_cast<uintptr_t>(tex->getJUTTexture()->getPalette());
             if (pal != 0 && (pal < 0x10000ULL || pal >= 0x0000800000000000ULL)) {
-                if (svc_log != nullptr) {
-                    static int s_bad = 0;
-                    if (s_bad < 16) {
-                        s_bad++;
-                        const JPATextureData* data = tex->mpData;
-                        const char* name = (data != NULL) ? tex->getName() : "(nodata)";
-                        char buf[192];
-                        std::snprintf(
-                            buf, sizeof(buf),
-                            "[tear] BADTEX name='%.20s' pal=%p mng=%p tear=%d texIdx=%u/%u",
-                            name, (void*)pal, (void*)work->mpResMgr,
-                            work->mpResMgr == sTearResMng ? 1 : 0, (unsigned)texIdx,
-                            (unsigned)texReg);
-                        svc_log->info(mod_ctx, buf);
-                    }
-                }
-                return HOOK_SKIP_ORIGINAL;
+                return HOOK_SKIP_ORIGINAL;  // skip the bad draw; never deref the garbage palette
             }
         }
     }
 
-    // TEMP DIAGNOSTIC: log EVERY drawP that resolves through the supplemental tear
-    // manager (slot 2). The crash is JPATexture::load (mTexture.load) on a valid,
-    // non-null JPATexture, so the fault is the texture's BACKING data - most likely
-    // the swapped "dummy" (framebuffer timg). The LAST line before the log ends is the
-    // texture that JUTTexture::load choked on; its name tells us if it is "dummy".
-    if (svc_log != nullptr && work->mpResMgr == sTearResMng) {
-        static int s_t = 0;
-        if (s_t < 24) {
-            s_t++;
-            JPATexture* tex = (inRange && work->mpResMgr->pTexAry != NULL)
-                                  ? work->mpResMgr->pTexAry[texIdx]
-                                  : NULL;
-            const JPATextureData* data = (tex != NULL) ? tex->mpData : NULL;
-            const char* name = (data != NULL) ? tex->getName() : "(nodata)";
-            char buf[176];
-            std::snprintf(buf, sizeof(buf),
-                          "[tear] drawP SLOT2 animIdx=%u texIdx=%u/%u tex=%p data=%p name='%.20s'",
-                          (unsigned)animIdx, (unsigned)texIdx, (unsigned)texReg, (void*)tex,
-                          (const void*)data, name);
-            svc_log->info(mod_ctx, buf);
-        }
-    }
-
-    if ((!inRange || nullTex) && svc_log != nullptr) {
-        static int s_n = 0;
-        if (s_n < 20) {
-            s_n++;
-            char buf[128];
-            std::snprintf(buf, sizeof(buf),
-                          "[tear] drawP FAULT animIdx=%u texIdx=%u texReg=%u nullTex=%d",
-                          (unsigned)animIdx, (unsigned)texIdx, (unsigned)texReg, nullTex ? 1 : 0);
-            svc_log->info(mod_ctx, buf);
-        }
-    }
     return HOOK_CONTINUE;
 }
 
@@ -320,34 +226,6 @@ bool albw_tear_ensure_scene_res() {
         sTearResFailed = true;
         return false;
     }
-    // ============================================
-    // TEMP DIAG — TEAR-RES (6-point pipeline instrumentation, per the review plan).
-    // Prove the supplemental resource is valid BEFORE touching architecture: (1) the JPC
-    // header version at +4 must read "2-10"; (2) getResource() non-null for the six tear
-    // ids; (3) each resource's shape/dynamics blocks + user-work. Parse tag: "TEAR-RES".
-    // STRIP before release.
-    // ============================================
-    if (svc_log != nullptr) {
-        const u8* hdr = static_cast<const u8*>(data);
-        char hb[80];
-        std::snprintf(hb, sizeof(hb), "[TEAR-RES] hdr='%.4s%.4s' resReg=%u texReg=%u",
-                      reinterpret_cast<const char*>(hdr), reinterpret_cast<const char*>(hdr + 4),
-                      (unsigned)sTearResMng->resRegNum, (unsigned)sTearResMng->texRegNum);
-        svc_log->info(mod_ctx, hb);
-        static const u16 kTearIds[6] = {0x838B, 0x838C, 0x838D, 0x838E, 0x838F, 0x842B};
-        for (int i = 0; i < 6; i++) {
-            const u16 id = kTearIds[i];
-            const bool dup = sTearResMng->checkUserIndexDuplication(id);
-            JPAResource* r = dup ? sTearResMng->getResource(id) : NULL;
-            char rb[176];
-            std::snprintf(rb, sizeof(rb),
-                          "[TEAR-RES] id=0x%04X dup=%d res=%p bsp=%p dyn=%p userWork=0x%08X",
-                          id, dup ? 1 : 0, (void*)r, (void*)(r ? r->getBsp() : NULL),
-                          (void*)(r ? r->getDyn() : NULL),
-                          (unsigned)sTearResMng->getResUserWork(id));
-            svc_log->info(mod_ctx, rb);
-        }
-    }
     ResTIMG* fbTimg = mDoGph_gInf_c::getFrameBufferTimg();
     const ResTIMG* oldDummy = sTearResMng->swapTexture(fbTimg, "dummy");
     if (svc_log != nullptr) {
@@ -376,30 +254,6 @@ void on_get_rm_id_post(ModContext*, void* args, void* retval, void*) {
     u8* rmID = static_cast<u8*>(retval);
     const u16 resID = mods::arg<u16>(args, 0);
     dPa_control_c* pa = g_dComIfG_gameInfo.play.getParticle();
-
-    // TEMP DIAGNOSTIC: fires for tear-range ids BEFORE any early-return, so we see
-    // what the tear resolves to in Ordon even when the supplemental isn't resident.
-    if (svc_log != nullptr && resID >= 0x838B && resID <= 0x842B) {
-        static int s_n = 0;
-        if (s_n < 40) {
-            s_n++;
-            const bool sh = sceneHasRes(pa, resID);
-            const bool su = (sTearResMng != NULL) && sTearResMng->checkUserIndexDuplication(resID);
-            const int texReg = (sTearResMng != NULL) ? (int)sTearResMng->texRegNum : -1;
-            const int resReg = (sTearResMng != NULL) ? (int)sTearResMng->resRegNum : -1;
-            // Point 5: prove emitter slot 2 still holds OUR supplemental manager.
-            JPAEmitterManager* em = dPa_control_c::getEmitterManager();
-            JPAResourceManager* slot2 = (em != NULL) ? em->getResourceManager((u16)kTearRmSlot) : NULL;
-            char buf[176];
-            std::snprintf(
-                buf, sizeof(buf),
-                "[tear] getRM_ID res=0x%04X inSlot=%d sceneHas=%d supp=%d mng=%d slot2:res=%d tex=%d "
-                "slot2IsOurs=%d",
-                resID, (int)*rmID, sh ? 1 : 0, su ? 1 : 0, sTearResMng != NULL ? 1 : 0, resReg,
-                texReg, (slot2 != NULL && slot2 == sTearResMng) ? 1 : 0);
-            svc_log->info(mod_ctx, buf);
-        }
-    }
 
     if (sTearResMng == NULL) {
         return;
@@ -438,10 +292,7 @@ ModResult albw_tear_particles_init(ModError*) {
         return MOD_ERROR;
     }
     if (mods::hook::add_pre<TearDrawP>(on_draw_p_pre) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook JPAResource::drawP (tear diag)");
-    }
-    if (mods::hook::add_post<TearObjDropExec>(on_obj_drop_exec_post) != MOD_OK) {
-        svc_log->error(mod_ctx, "failed to hook daObjDrop_c::execute (tear emitter diag)");
+        svc_log->error(mod_ctx, "failed to hook JPAResource::drawP (tear crash guard)");
     }
     return MOD_OK;
 }

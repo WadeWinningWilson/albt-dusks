@@ -704,9 +704,7 @@ void on_mtd_execute_post(ModContext*, void* args, void*, void*) {
 ModResult albw_soul_of_light_build_panel(UiElementHandle panel, ModError*) {
     return albw_ui_add_toggle(
         panel, "Soul of Light",
-        "On death, lose half your rupees (round up) and spawn a Tear of Light at the death "
-        "spot. Pickup returns half of what was lost. Do not load dev.albt.soul_of_light "
-        "alongside this bundle — that standalone observes wallet loss instead of halving.",
+        "Halves Rupees on death and drops a tear of light behind ~May be buggy, in progress~",
         g_recovery_orb);
 }
 

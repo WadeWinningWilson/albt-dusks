@@ -42,6 +42,20 @@ int sGuardOpenFrames[kMaxArmed] = {};
 // bashed-reaction fires ONCE per parry (not every frame the window is open).
 bool sReactionPending[kMaxArmed] = {};
 
+// Per-actor DT compatibility profiles (registered at init, one per enemy type).
+constexpr int kMaxProfiles = 16;
+const DTProfile* sProfiles[kMaxProfiles] = {};
+int              sProfileCount = 0;
+
+const DTProfile* findProfile(short profName) {
+    for (int i = 0; i < sProfileCount; ++i) {
+        if (sProfiles[i] != NULL && sProfiles[i]->profName == profName) {
+            return sProfiles[i];
+        }
+    }
+    return NULL;
+}
+
 constexpr int kMaxOverrides = 8;
 struct HealthOverride {
     short profName;
@@ -211,6 +225,63 @@ bool dAlbwDevil_consumeOpenReaction(fopAc_ac_c* actor) {
         return false;
     }
     sReactionPending[i] = false;  // once per parry
+    return true;
+}
+
+// ============================================
+// Per-actor DT compatibility profile — the generic enforcement, driven by the
+// actor's registered profile. Front door (typed execute-POST today, one generic
+// actor dispatcher later) calls this once per frame; the caller owns the
+// re-entry latch because the redispatch re-enters the front door.
+// ============================================
+void dAlbwDevil_registerProfile(const DTProfile* profile) {
+    if (profile == NULL || sProfileCount >= kMaxProfiles) {
+        return;
+    }
+    for (int i = 0; i < sProfileCount; ++i) {
+        if (sProfiles[i]->profName == profile->profName) {
+            sProfiles[i] = profile;  // replace — one-time, order-independent
+            return;
+        }
+    }
+    sProfiles[sProfileCount++] = profile;
+}
+
+bool dAlbwDevil_execProfile(fopAc_ac_c* actor) {
+    if (!enabled() || actor == NULL) {
+        return false;  // fast early-out — this runs per candidate actor per frame
+    }
+    const DTProfile* p = findProfile(fopAcM_GetName(actor));
+    if (p == NULL) {
+        return false;
+    }
+
+    dAlbwDevil_tickActor(actor);           // arm at threshold (latched)
+    if (!dAlbwDevil_isArmed(actor)) {
+        return false;
+    }
+    if (p->isDead != NULL && p->isDead(actor)) {
+        dAlbwDevil_forget(actor);          // death overrides DT — never redispatch a dying actor
+        return false;
+    }
+    if (dAlbwDevil_isAttackLive(actor)) {
+        return false;                      // live swing — stock timing, stock hitbox
+    }
+    if (!p->redispatchSafe) {
+        if (p->fallbackTick != NULL) {
+            p->fallbackTick(actor);        // enemies proven unsafe to execute twice
+        }
+        return false;
+    }
+    if (p->preRedispatch != NULL) {
+        p->preRedispatch(actor);           // compat pre-pass
+    }
+    if (p->redispatch != NULL) {
+        p->redispatch(actor);              // THE second execute (re-enters front door)
+    }
+    if (p->postRedispatch != NULL) {
+        p->postRedispatch(actor);          // compat post-pass
+    }
     return true;
 }
 

@@ -148,8 +148,7 @@ HookAction on_lockon_camera_pre(ModContext*, void* args, void*, void*) {
 ModResult albw_stick_cycle_build_panel(UiElementHandle panel, ModError*) {
     return albw_ui_add_toggle(
         panel, "Stick Cycle Lock-on",
-        "While Z-targeting, flick the right stick left or right to cycle nearby battle "
-        "enemies. Lock-on camera orbit from that stick is suppressed.",
+        "While Z-Targeting, flick the right stick left or right to cycle nearby enemies",
         g_stick_cycle);
 }
 

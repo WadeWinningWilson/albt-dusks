@@ -795,6 +795,39 @@ bool btnHealthFraction(fopAc_ac_c* actor, float* outFraction) {
 // ============================================
 bool s_inSubStep = false;
 
+// ============================================
+// Darknut DT compatibility profile — the FIRST profile and the reference for
+// onboarding further enemies (Bokoblin next). The generic enforcement (arm ->
+// not-dead -> not-mid-swing -> second execute) now lives in devil_trigger's
+// dAlbwDevil_execProfile; this file supplies only the Darknut-specific pieces.
+// ============================================
+
+// Death predicate: the Darknut's terminal state. Re-running execute() through
+// ACT_ENDING let it survive a killing blow, so death must override DT.
+bool btnDtIsDead(fopAc_ac_c* a) {
+    return static_cast<daB_TN_c*>(a)->mActionMode1 == daB_TN_c::ACT_ENDING;
+}
+
+// Redispatch: THE second execute. Qualified AlbwBtn_c::execute reaches the real
+// body — an unqualified execute() would re-enter this module's own POST hook.
+void btnDtRedispatch(fopAc_ac_c* a) {
+    static_cast<AlbwBtn_c*>(a)->AlbwBtn_c::execute();
+}
+
+// redispatchSafe (the clean sub-step). No pre/post compat pass yet: the known
+// once-per-frame doublings are step-2 debt tracked in DEVIL-TRIGGER-SCOPE — NOT
+// introduced or changed by this refactor. Health reader stays registered
+// separately (btnHealthFraction) in init.
+const DTProfile s_btnDtProfile = {
+    fpcNm_B_TN_e,      // profName
+    true,              // redispatchSafe
+    btnDtIsDead,       // isDead
+    nullptr,           // preRedispatch
+    btnDtRedispatch,   // redispatch
+    nullptr,           // postRedispatch
+    nullptr,           // fallbackTick
+};
+
 void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     if (!s_featureReady || s_inSubStep) {
         return;
@@ -803,74 +836,11 @@ void on_btn_execute_post(ModContext*, void* args, void*, void*) {
     if (self == nullptr || self->mType != 0) {
         return;  // boss Darknut only, matching the parry port's own gate
     }
-
-    dAlbwDevil_tickActor(self);
-
-#if ALBW_DEVIL_PROBE
-    // ============================================
-    // HEARTBEAT. The first bring-up run produced ZERO devil lines and I could
-    // not tell why, because the only trace was on ARM: "the hook never fired",
-    // "it fired but never crossed 25%" and "it crossed but the policy refused"
-    // all look identical from silence. That is the same blind spot that cost a
-    // run earlier today, so the probe now reports the state it is deciding on.
-    //
-    // Throttled on CHANGE plus a slow floor, so a long fight does not flood
-    // the log but a still one still proves the hook is alive.
-    // ============================================
-    {
-        static int sLastPct = -1;
-        static u32 sLastFrame = 0;
-        const float frac = dAlbwDevil_healthFraction(self);
-        const int pct = frac >= 0.0f ? static_cast<int>(frac * 100.0f) : -1;
-        if (pct != sLastPct || (g_Counter.mCounter0 - sLastFrame) > 300) {
-            sLastPct = pct;
-            sLastFrame = g_Counter.mCounter0;
-            DuskLog.info("[devil] hb f={} pct={} taken={}/{} armed={} atLive={} act={}",
-                         g_Counter.mCounter0, pct, self->field_0x6fc, self->field_0x700,
-                         dAlbwDevil_isArmed(self) ? 1 : 0,
-                         dAlbwDevil_isAttackLive(self) ? 1 : 0, self->mActionMode1);
-        }
-    }
-#endif
-
-    // Computed here rather than after the armed gate: it is a MEASUREMENT as
-    // well as a decision, and gating it on armed meant the first run produced
-    // no signal data at all.
-    const bool attacking = dAlbwDevil_isAttackLive(self);
-
-#if ALBW_DEVIL_PROBE
-    // The measurement the whole design rests on: does the generic
-    // AT-registry answer agree with the Darknut action mode we already know?
-    // ACT_ATTACKH/ATTACKSHIELDH/ATTACKL/ATTACKSHIELDL are the ground truth.
-    const int m = self->mActionMode1;
-    const bool truth = (m == daB_TN_c::ACT_ATTACKH || m == daB_TN_c::ACT_ATTACKSHIELDH ||
-                        m == daB_TN_c::ACT_ATTACKL || m == daB_TN_c::ACT_ATTACKSHIELDL);
-    if (truth != attacking) {
-        DuskLog.warn("[devil] signal MISMATCH act={} atRegistry={} truth={}", m,
-                     attacking ? 1 : 0, truth ? 1 : 0);
-    }
-#endif
-
-    if (!dAlbwDevil_isArmed(self)) {
-        return;
-    }
-
-    // Death sequence: stop enraging. Re-running execute() through ACT_ENDING
-    // let the Darknut survive a killing blow ("persist for one more hit") -
-    // the extra frame re-touches the death path at the threshold boundary.
-    // Forget the actor so nothing here fires again, and let the real death
-    // play out at stock speed.
-    if (self->mActionMode1 == daB_TN_c::ACT_ENDING) {
-        dAlbwDevil_forget(self);
-        return;
-    }
-
-    if (attacking) {
-        return;  // a swing is live - stock timing, stock hitbox, no sub-step
-    }
-
+    // Generic DT enforcement via the profile. Latch around the whole call: the
+    // profile's redispatch (second execute) re-enters this hook, and the
+    // top-of-function s_inSubStep check absorbs that re-entry.
     s_inSubStep = true;
-    self->AlbwBtn_c::execute();
+    dAlbwDevil_execProfile(self);
     s_inSubStep = false;
 }
 
@@ -922,6 +892,11 @@ ModResult albw_btn_parry_init(ModError*) {
     // the override is a READING, not a behaviour, and the policy module gates
     // on the toggle itself.
     dAlbwDevil_registerHealthOverride(fpcNm_B_TN_e, btnHealthFraction);
+
+    // The Darknut is the first DT compatibility profile (§ profile abstraction).
+    // Registered unconditionally like the health override; the policy gates on the
+    // DT toggle. Onboarding the next enemy (Bokoblin) = register another profile.
+    dAlbwDevil_registerProfile(&s_btnDtProfile);
 
     s_featureReady = ok;
     if (!s_featureReady) {

@@ -213,29 +213,8 @@ void on_cc_at_check_post(ModContext*, void* args, void*, void*) {
         daPy_py_c* player = daPy_getPlayerActorClass();
         if (player != nullptr) {
             const int faCutType = player->getCutType();
-            const u16 faVanillaPower = info->mAttackPower;
             info->mAttackPower =
                 dFocusedArts_resolveMeleeDamage(info->mAttackPower, faCutType);
-            // ============================================
-            // TEMP DIAG — FA-HSDMG (hidden-skill damage scaling). STRIP before release.
-            // For each hidden-skill hit, logs the tier state and vanilla->resolved power so we
-            // can see whether the bank/tier decrease actually applies at the moment of the hit
-            // (tierSteps = s_bankCount while building, = maxBank during a spend/maintain window).
-            // ============================================
-            if (isHiddenSkillCutType(faCutType) && svc_log != nullptr) {
-                char faBuf[224];
-                std::snprintf(faBuf, sizeof(faBuf),
-                    "[FA-HSDMG] cut=%d insta=%d tierSteps=%d bank=%d maxBank=%d spend=%d "
-                    "maint=%d fnb=%d van=%u res=%u",
-                    faCutType, static_cast<int>(isInstaKillFinisherCutType(faCutType)),
-                    getDamageTierSteps(), static_cast<int>(s_bankCount),
-                    dFocusedArts_getMaxBank(), static_cast<int>(s_inSpendSequence),
-                    static_cast<int>(s_maintainStackedFrames),
-                    static_cast<int>(s_forceNewBaseDamage),
-                    static_cast<unsigned>(faVanillaPower),
-                    static_cast<unsigned>(info->mAttackPower));
-                svc_log->info(mod_ctx, faBuf);
-            }
 
             // --- Ending Blow -> Great Spin AOE: the ALINK atSph carries the AOE. ---
             if (dFocusedArts_isEndingBlowGreatSpinAoeActive()) {

@@ -570,7 +570,7 @@ const char* dFocusedArts_getShopTierName(int tier) {
     case 3:
         return "Focused Arts III";
     case kFlurryRushShopTier:
-        return "Focused Arts IV";
+        return "Flurry Rush";
     default:
         return "Focused Arts";
     }

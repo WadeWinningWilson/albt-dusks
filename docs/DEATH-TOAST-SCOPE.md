@@ -2,9 +2,9 @@
 
 > Status board / index: [CURRENT-STATE.md](CURRENT-STATE.md)
 
-**Target mod:** `dev.albt.albw` (`C:\Users\ryana\Documents\ALBT DUSKS STUFF`)
-**Fork (donor):** `C:\Users\ryana\Documents\dusklight`
-**Stock (baseline):** `C:\Users\ryana\Documents\dusklight-main`
+**Target mod:** `dev.albt.albw` (this repo)
+**Fork (donor):** the ALBT dusklight fork checkout
+**Stock (baseline):** the stock `dusklight-main` checkout
 **Status:** SCOPE ONLY — no code written, nothing built. Deliverable is this doc.
 
 **One-line verdict:** FEASIBLE, not blocked. The toast UI is reachable from a mod
@@ -117,7 +117,7 @@ Notes:
   toasted choice is 100% a fork addition.
 - **Fork** `dusklight/src/d/d_gameover.cpp`: adds slot 9
   `PROC_ALBW_WARP_CHOICE` + `warpChoice_init/_proc` + toast, as above.
-- **Mod** `ALBT DUSKS STUFF`: has the *destinations* and *context* helpers
+- **Mod** (`dev.albt.albw`, this repo): has the *destinations* and *context* helpers
   already ported but the *choice UI has no caller yet*:
   - `src/oocoo.cpp:113 albw_oocoo_on_warp_choice(int)` — DEFINED, **no caller in
     the mod** (grep: only decl + def). This is the dead seam the port fills.

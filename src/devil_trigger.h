@@ -70,5 +70,39 @@ bool dAlbwDevil_isGuardOpen(fopAc_ac_c* actor);
 // window is open. Fixes the "reacts 3 times" repeat.
 bool dAlbwDevil_consumeOpenReaction(fopAc_ac_c* actor);
 
+// ---- per-actor DT compatibility profile ----
+//
+// The generic DT enforcement (arm -> not-dead -> not-mid-swing -> second execute)
+// is identical for every enemy; only the ACTOR-SPECIFIC compat differs. A profile
+// packages that difference so onboarding a new enemy is "fill a struct," and the
+// eventual migration from typed per-actor hooks to one generic actor dispatcher
+// only swaps the FRONT DOOR (who calls dAlbwDevil_execProfile), not this system.
+// The health reader stays separate via dAlbwDevil_registerHealthOverride.
+//
+// See docs/DEVIL-TRIGGER-METHODS.md (profile abstraction) + CURRENT-STATE §6.
+struct DTProfile {
+    short profName;                        // fpcNm_* this profile applies to
+    bool  redispatchSafe;                  // true: run a second execute; false: fallbackTick only
+    bool  (*isDead)(fopAc_ac_c*);          // terminal/death state -> forget (null = never)
+    void  (*preRedispatch)(fopAc_ac_c*);   // compat pre-pass before the 2nd execute (null = none)
+    void  (*redispatch)(fopAc_ac_c*);      // THE second execute (required when redispatchSafe)
+    void  (*postRedispatch)(fopAc_ac_c*);  // compat post-pass after (null = none)
+    void  (*fallbackTick)(fopAc_ac_c*);    // per-frame treatment when !redispatchSafe (null = none)
+};
+
+// Register at init (idempotent-friendly; order-independent like the health table).
+void dAlbwDevil_registerProfile(const DTProfile* profile);
+
+// The generic DT enforcement, driven by the actor's profile. Call once per frame
+// from the front door (today: each actor's typed execute-POST hook; later: one
+// generic actor dispatcher). No-op for actors without a profile or when DT is off.
+// The caller owns the re-entry latch (the redispatch re-enters the front door).
+// Returns true iff it ran the second execute this frame (for the bring-up audit).
+bool dAlbwDevil_execProfile(fopAc_ac_c* actor);
+
 ModResult albw_devil_trigger_init(ModError* error);
 void albw_devil_trigger_reset();
+
+// Bokoblin (E_OC) DT profile — the second compatibility profile. Registers the
+// profile + its execute front door. Defined in bokoblin_dt.cpp.
+ModResult albw_bokoblin_dt_init(ModError* error);

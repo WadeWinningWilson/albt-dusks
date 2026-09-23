@@ -16,7 +16,7 @@
 //
 // MUST be 0 before any release (docs/RELEASE-PROCEDURE.md step 1).
 // ============================================
-#define ALBW_MAGICJAR_PROBE 1
+#define ALBW_MAGICJAR_PROBE 0
 
 #if ALBW_MAGICJAR_PROBE
 // Samples the meter for a few frames after a grant. No-op until armed.

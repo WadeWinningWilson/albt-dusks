@@ -246,48 +246,78 @@ ModResult albw_region_hp_shutdown(ModError*) {
 // Incoming-damage scaler options (index-aligned with albw_incoming_damage_scale_mult).
 static const char* const kIncomingDamageScales[] = {"0.5x", "1x", "2x", "4x"};
 
-// Region multipliers master gate: the HP and rupee axes are dependents — grey them
-// out (and they self-gate functionally) whenever the master is off. Fork parity:
-// regionMult is the master; regionDamage is standalone (no gate).
-static bool region_mult_master_off(ModContext*, void*) {
-    return !albw_cfg_bool(g_region_mult, false);
+// ============================================
+// Region Multipliers UI (fork parity — user 2026-09-22).
+//
+// One left-pane "Region Multipliers" group row opens the master + its two axes in
+// the right-hand DETAIL pane — the SDK equivalent of the fork's select-button ->
+// right-pane subpanel (dusklight/src/dusk/ui/settings.cpp). The axes are ALWAYS
+// shown; the master gates them FUNCTIONALLY at consumption time (no UI grey-out),
+// matching the fork. g_region_damage stays a standalone left toggle, independent
+// of the master. See docs/REGION-MULTIPLIERS-SCOPE.md.
+// ============================================
+static ModResult region_mult_build_subpanel(ModContext* ctx, UiElementHandle pane, void*,
+                                            ModError* out_error) {
+    const bool ok =
+        svc_ui->pane_add_section(ctx, pane, "Region Multipliers") == MOD_OK &&
+        svc_ui->pane_add_text(
+            ctx, pane,
+            "Scales enemy HP and enemy-death rupees by the same province/dungeon table as "
+            "Region Damage. Incoming damage to Link is the separate Region Damage setting. "
+            "Each axis toggles independently while the master is on.",
+            nullptr) == MOD_OK &&
+        albw_ui_add_toggle(pane, "Master",
+                           "Master switch for the region table on the HP and rupee axes.",
+                           g_region_mult) == MOD_OK &&
+        albw_ui_add_toggle(pane, "Health (enemy HP)",
+                           "Multiply spawn HP by the province/dungeon table after category HP.",
+                           g_region_hp) == MOD_OK &&
+        albw_ui_add_toggle(pane, "Rupees (enemy-death payouts)",
+                           "Scale enemy-death rupee grants by the region table.",
+                           g_region_mult_rupees) == MOD_OK;
+    if (!ok) {
+        if (out_error != nullptr) {
+            out_error->code = MOD_ERROR;
+        }
+        return MOD_ERROR;
+    }
+    return MOD_OK;
 }
 
-ModResult albw_region_hp_build_panel(UiElementHandle panel, ModError* error) {
-    if (albw_ui_add_number(panel, "Common HP",
+ModResult albw_region_hp_build_panel(UiElementHandle left, UiElementHandle right, ModError* error) {
+    if (albw_ui_add_number(left, "Common HP",
                            "True max-HP multiplier for ordinary enemies. 1x is vanilla.",
                            g_hp_normal, 1, 16) != MOD_OK ||
-        albw_ui_add_number(panel, "Mid-boss HP", "True max-HP for mid-bosses.", g_hp_midboss, 1,
+        albw_ui_add_number(left, "Mid-boss HP", "True max-HP for mid-bosses.", g_hp_midboss, 1,
                            16) != MOD_OK ||
-        albw_ui_add_number(panel, "Boss HP", "True max-HP for dungeon bosses.", g_hp_boss, 1, 16) !=
+        albw_ui_add_number(left, "Boss HP", "True max-HP for dungeon bosses.", g_hp_boss, 1, 16) !=
             MOD_OK ||
-        albw_ui_add_number(panel, "Final HP", "True max-HP for Ganondorf / Beast Ganon.", g_hp_final,
+        albw_ui_add_number(left, "Final HP", "True max-HP for Ganondorf / Beast Ganon.", g_hp_final,
                            1, 16) != MOD_OK ||
-        albw_ui_add_number(panel, "Link damage decrease",
+        albw_ui_add_number(left, "Link damage decrease",
                            "Divide the damage Link's own hits deal (1x = vanilla).",
                            g_link_damage_decrease, 1, 16) != MOD_OK ||
-        albw_ui_add_select(panel, "Incoming damage",
+        albw_ui_add_select(left, "Incoming damage",
                            "Scale the damage Link takes (0.5x easier ... 4x harder). Composes on "
                            "top of Outfit Stats and Region Damage. 1x is vanilla.",
                            g_incoming_damage_scale, kIncomingDamageScales,
                            sizeof(kIncomingDamageScales) / sizeof(kIncomingDamageScales[0])) !=
             MOD_OK ||
         // Region Damage: standalone (independent of the master), placed first per fork order.
-        albw_ui_add_toggle(panel, "Region damage",
+        albw_ui_add_toggle(left, "Region damage",
                            "Multiply incoming COVER damage to Link by the province/dungeon table.",
-                           g_region_damage) != MOD_OK ||
-        // Region Multipliers master, then its two dependent axes (greyed when master off).
-        albw_ui_add_toggle(panel, "Region multipliers (master)",
-                           "Master switch for the region table on the HP and rupee axes.",
-                           g_region_mult) != MOD_OK ||
-        albw_ui_add_toggle(panel, "Region HP",
-                           "Multiply spawn HP by the province/dungeon table after category HP. "
-                           "Requires the region master.",
-                           g_region_hp, &region_mult_master_off) != MOD_OK ||
-        albw_ui_add_toggle(panel, "Region rupees",
-                           "Scale enemy-death rupee grants by the region table (x3 extra when "
-                           "Region damage is on). Requires the region master.",
-                           g_region_mult_rupees, &region_mult_master_off) != MOD_OK) {
+                           g_region_damage) != MOD_OK) {
+        if (error != nullptr) {
+            error->code = MOD_ERROR;
+        }
+        return MOD_ERROR;
+    }
+
+    // Region Multipliers: one left group row -> right-pane subpanel (master + axes).
+    UiGroupDesc grp = UI_GROUP_DESC_INIT;
+    grp.label = "Region Multipliers";
+    grp.build = region_mult_build_subpanel;
+    if (svc_ui->pane_add_group(mod_ctx, left, right, &grp, nullptr) != MOD_OK) {
         if (error != nullptr) {
             error->code = MOD_ERROR;
         }

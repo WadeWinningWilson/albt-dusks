@@ -37,6 +37,7 @@ add_mod(albt_full_plugin
             src/albw_common.cpp
             src/albw_save_flags.cpp
             src/devil_trigger.cpp
+            src/bokoblin_dt.cpp
             src/albw_l1_input.cpp
             src/albw_settings_ui.cpp
             src/albw_stage.cpp
