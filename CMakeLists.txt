@@ -60,6 +60,8 @@ add_mod(albt_full_plugin
             src/soul_of_light.cpp
             src/enemy_rupees.cpp
             src/wolf_combat.cpp
+            src/wolf_guard.cpp
+            src/wolf_guard_hooks.cpp
             src/e_s1_hooks.cpp
             src/end_game_transform.cpp
             src/hurricane_spin.cpp

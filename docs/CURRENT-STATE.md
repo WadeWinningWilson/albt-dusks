@@ -34,8 +34,10 @@ off, so it ships dormant and does not block.
 
 ## 2. Release blockers (must clear before tagging)
 
-- Three probes ON, must go to 0: `ALBW_DARKNUT_PROBE` (btn_probe.h),
+- Three probes STILL ON, must go to 0: `ALBW_DARKNUT_PROBE` (btn_probe.h),
   `ALBW_MAGICJAR_PROBE` (magic_jar_probe.h), `ALBW_SOUL_PROBE` (soul_probe.h).
+  (Pulled 2026-09-22: `ALBW_DEVIL_PROBE` → 0, and the wolf-guard `[wguard]/[watk]`
+  diagnostics removed from source entirely.)
 - Bump `mod.json` past the untagged 0.2.8 to **0.2.9**.
 - Magic jars: grant chain proven working (meter +3633 = 1/3), but the "player
   doesn't SEE it on the bar" question is open - a HUD read, not the grant.
@@ -55,9 +57,15 @@ off, so it ships dormant and does not block.
   halved i-frames, damage-outside-window). These are STEP 2 - the SAFE fixes
   only (capture/restore i-frames, guard the window tick, `ClrTgHit` before the
   re-run; NONE touch collider registration, which is what crashed the hybrid).
-- **Planned (scope §7):** perfect-parry openings - a parry on a DT enemy
-  triggers its native `albwBeginGuardOpenWindow` with a longer window than a
-  bash. Bundled with step 2.
+- **Perfect-parry openings — ✅ BUILT + GENERALIZED + user-confirmed (scope §7).**
+  A parry on any ARMED enemy opens an elongated window (`dAlbwDevil_openGuardWindow`,
+  90f) in the generic DT policy module (`sGuardOpenFrames[]` + `sReactionPending[]`),
+  wired at the shared `dShield_onShieldHit` seam (human + wolf) — NOT Darknut-
+  specific. The Darknut consumes it via `dAlbwDevil_consumeOpenReaction` (once per
+  parry) to fire its **full native bashed reaction** — head-lock + `ACT_YOROKE`
+  (unarmored) / `ACT_GUARDH` (armored) + guard-open — bypassing only the bash-credit
+  gate (a parry earns the opening). User-confirmed the enemy reacts reliably. The
+  once-per-parry latch fixed the earlier 3× re-fire. DEVIL probe pulled (→0).
 - The three methods (sub-step / direct scaling / hybrid) and why each failed are
   fully recorded in DEVIL-TRIGGER-METHODS; the sub-step and direct-scaling
   recipes are preserved there for reuse.
@@ -67,18 +75,26 @@ off, so it ships dormant and does not block.
 ### 4a. Wolf charge on a GUARDED hit — the user's actual request
 > "Attacking an enemy that GUARDS still builds wolf charge."
 
-**Status: NEEDS INVESTIGATION - may be a bug, not a port.** A wolf bite awards
-charge via `cc_at_check` (mod `wolf_uty_port.inc:536`) gated on
-`mAttackPower > 0`. Guard is resolved TARGET-side (in the enemy's
-`damage_check`) AFTER `cc_at_check`, so in principle a guarded bite should
-already award charge in both trees. The wolf-charge diff
-(`staging/wolf-charge-guard/`) found **no separate fork mechanism** for a
-shield/no-connect bite. So the open question is: does our mod actually award on
-a guarded bite in-game? If not, is `mAttackPower` being zeroed before the wolf
-block, or does the shield deflect before `cc_at_check` runs at all?
-**NEXT: probe `cc_at_check` against a shielding enemy (Bokoblin/Bulblin) in
-wolf form; decide port vs bug vs new-feature from the result.** This is the one
-the user cares about - do NOT conflate with 4b.
+**Status: DEFERRED — approach identified, seam still unresolved.** Investigated
+in-game with probes (2026-09-22):
+- The wolf-charge grant lives in `albw_wolf_cc_at_check` (`wolf_uty_port.inc`,
+  called from wolf_combat's `cc_at_check` PRE hook), gated on `mAttackPower > 0`.
+- **A guarded/armored bite NEVER reaches `cc_at_check`** — the guard/armor absorbs
+  the wolf's AT before the enemy's attack-check runs (probe: biting a guarding
+  Darknut produced ZERO `cc_at_check` hits; only the soft scarecrow — an NPC,
+  correctly excluded — did). So the grant there can't fire for a guarded hit; the
+  clean-bite grant (3/15) is unaffected.
+- **The wolf's own AT flags don't help either:** `mAtCyl.ChkAtHit` and
+  `mAtCyl.ChkAtShieldHit` did NOT fire when biting the guarding Darknut (they fire
+  only on the soft scarecrow). So neither the enemy seam nor the wolf-AT-Tg seam
+  sees a guarded/armored hit.
+- **User direction:** make it WOLF-side and enemy-agnostic — "notice guards
+  universally," "any connecting hit." The grant fn is ready
+  (`dAlbwWolfCombat_onGuardedBite`, 1/15) but NOT wired.
+- **NEXT:** capture the `[watk]`-style dump (all wolf attack-collider flags:
+  mAtCyl/mAtSph × at/shield/co) on a guarding Darknut to find which flag/collider
+  actually registers the guarded connect, then wire the 1/15 grant to it. Do NOT
+  conflate with 4b.
 
 ### 4b. Wolf charge on HANG-BITE / chest-mash grabs — separate finding
 The diff found the mod ported the grab-charge path for `e_s1` (Shadow Beast)
@@ -94,6 +110,55 @@ Scoped: [DEATH-TOAST-SCOPE.md](DEATH-TOAST-SCOPE.md). FEASIBLE via SDK
 `UiService`; no save writes; fills the dead `albw_oocoo_on_warp_choice` seam.
 Decisions pending: dialog vs fork-literal toast; confirm a Shade Watcher NPC
 calls `dShadeRefuge_setRespawn`. Shade Watcher variant reuses `shade_refuge.cpp`.
+
+### 4d. Wolf guard / parry — Midna's Shield  [BUILT ✅ — user-confirmed]
+Scoped: [WOLF-GUARD-SCOPE.md](WOLF-GUARD-SCOPE.md). **Working in-game.** Files:
+`wolf_guard.{h,cpp}`, `wolf_guard_hooks.cpp`, `guardRaised` +
+`dShield_updateWolfGuardTracking` in shield.cpp, `dAlbwWolfCombat_onParry` (+1/15).
+Confirmed pieces:
+- **Timed parry** — reuses the shared parry engine via the generalized
+  `guardRaised` predicate; fires the DT parry-opening (§3) so the enemy reacts.
+- **Held guard** — blocks frontal hits at the `checkDamageAction` seam (SKIP + no-
+  damage), incl. Darknut guard-break swings; drains the equipped shield's
+  durability once per ~swing (24f cooldown; `dShield_onBlockHit` made wolf-aware).
+  Does NOT call `dShield_onFailedGuardBlock` (its `procGuardBreakInit` deforms/
+  kills the wolf — see §6 lessons).
+- **Parry SFX** — spark only (`dShield_playWolfParryFeedback`; clang removed per
+  user).
+- **Midna's Shield on her face** — the equipped shield is redirected from the
+  wolf's back to Midna's head joint during guard (POST hook on
+  `setWolfItemMatrix`, NOT the human `setItemMatrix`); flip+yaw+offset tuned. The
+  Midna body-lean anime was removed (pointless once the shield's on her face).
+- **Unlock** — config-backed shop purchase ("Midna's Shield", 100r, first-twilight
+  gate); True ALBW makes the row appear but does NOT auto-grant. No save writes.
+- **No toggle of its own** — part of Wolf Link combat.
+- **Deferred:** guarded-attack wolf-charge (§4a — seam unresolved).
+**Sibling save-write bug FIXED** — arm/howl/charge purchases moved to the
+`albw_save_flags` config allocator (`ALBW_FLAG_HOWL/ARM/CHARGE_PURCHASED`); no
+more save-bit writes (713/714 were event registers). Availability reads + True
+ALBW unchanged; existing owners re-unlock once. Wolf-form
+counterpart to the human ALBW shield — **block + timed parry (NO bash), one input
+(hold-R)**,
+visually Midna raising the equipped shield. **Grounds on native seams end to
+end:** wolf damage handler already reroutes on a wolf flag
+(`checkWolfBarrierHitReverse`/`field_0x3100`, `d_a_alink_damage.inc:570/984`), so
+NO human guard proc; parry reuses native `procFrontRollSuccessInit` + the
+`albwBeginGuardOpenWindow` outcome; raise/hold/stow visual is field Midna animes
+`ANM_S_TAKES/S_WAITS/S_PACKAWAY` (`daMidna_c`, NOT demo-locked — already the
+instance our Midna-arm art drives). **Inherits the human shield verbatim:**
+equipped shield parented to the wolf → per-shield durability
+(`dAlbwHP_applyDurabilityMult`), break, HUD bar, and Parry-Master chip-to-reclaim
+(`g_parry_master`) all for free. **Bash CUT** — a parry auto-opens a DT enemy
+as-if-bashed (unified human+wolf, DT §7), so no proactive bash is needed; feature
+is fully DT-independent. **One authored piece:** held-guard damage reduction =
+DN-10 step 2 at the damage seam (user: held-guard is IN). **Optional:** a parry
+adds 1/15 (mash-parity) to the wolf charge counter (`addWolfChargeSteps`,
+parry-only, easily cut). **Unlock:** shop purchase after Midna's arm, save-**check** like siblings
+(no writes), free under True ALBW, under wolf-combat toggle. Sequencing:
+parry-first → held-guard → visual (+ optional charge feed). Typed member hooks,
+no Linux/macOS-inert surface. Open at wire time: shield re-parent (wolf
+back→Midna hand), Midna service-mode drivability, and how sibling wolf arts
+persist a purchased unlock without a save write.
 
 ## 5. Cross-platform
 
@@ -127,6 +192,43 @@ calls `dShadeRefuge_setRespawn`. Shade Watcher variant reuses `shade_refuge.cpp`
 - **DN-10 donor-first**; **toggle off == provably stock**; **8 platforms via CI,
   local builds are compile checks.**
 
+### Wolf-form / enemy-reaction ports — generalizable lessons (DT + Midna's Shield)
+Hard-won this cycle; apply to any future wolf-combat or enemy-reaction feature.
+1. **NEVER drive a human proc (or a fn that calls one) on the wolf.**
+   `dShield_onFailedGuardBlock` → `link->procGuardBreakInit()` on the wolf =
+   model deform → voids out of the world → death. Same class as the Zora `al_face`
+   crash. Before calling any `dShield_*`/`daAlink_c` helper from wolf code, read it
+   for a proc/pose/`procXxxInit`/`setActionMode` call. Use numbers-only helpers
+   (`dShield_onBlockHit`, durability) or a wolf-safe variant.
+2. **Wolf ≠ human at the seam.** The wolf uses SEPARATE functions:
+   `setWolfItemMatrix` (not `setItemMatrix`) for item draw; no human guard proc, so
+   the parry rides `checkDamageAction` (the shared damage dispatch) not
+   `procGuardSlipInit`. Confirm the wolf path with a probe before hooking — a hook
+   on the human function silently never fires in wolf form (cost us a whole round).
+3. **Generalize a shared engine by widening ONE predicate**, not by duplicating.
+   The whole human parry engine accepted the wolf once `checkUpperGuardAnime()` was
+   swapped for `guardRaised()` (wolf flag OR human anime). Human path stays
+   byte-identical.
+4. **Policy module + per-actor enforcement = generic.** DT owns the state
+   (`sArmed[]`/`sGuardOpenFrames[]`/`sReactionPending[]`); each actor consults it
+   (`isGuardOpen`/`consumeOpenReaction`) and translates to its own native reaction.
+   New DT enemies inherit the parry-opening for free. Set once-per-event with a
+   consume-latch, never per-frame (the 3× re-fire bug).
+5. **Per-frame vs per-event.** A `checkDamageAction`/execute hook fires every frame
+   a swing overlaps — dedupe drains/reactions (durability cooldown; reaction latch)
+   or you drain a whole bar / react 3× in one hit.
+6. **Neutralize damage with SKIP_ORIGINAL + retval 0 AND clear the collider.**
+   Clearing alone (HOOK_CONTINUE) didn't reliably block; a dangling collider was
+   the DT crash. Do both.
+7. **Guard/armor absorbs before the enemy's `cc_at_check`.** A guarded/armored hit
+   never reaches the target's attack-check, and the wolf's own AT-Tg/AT-shield
+   flags don't fire either — so "did I hit a guarding enemy" needs a WOLF-side
+   any-connect detector, still unresolved (§4a).
+8. **Probe = loud + multi-hypothesis + verify the RIGHT seam.** Two rounds were
+   lost hooking the human function / wrong collider; one comprehensive dump
+   (all colliders × all flags) beats guessing. Enemy ids in logs are `fpcNm_*`
+   (0x213 = Darknut, 0x241 = scarecrow NPC) — decode before concluding.
+
 ## 7. Doc map
 
 | Doc | Covers |
@@ -136,6 +238,7 @@ calls `dShadeRefuge_setRespawn`. Shade Watcher variant reuses `shade_refuge.cpp`
 | [DEVIL-TRIGGER-SCOPE.md](DEVIL-TRIGGER-SCOPE.md) | DT design + parry openings (§7) |
 | [DEVIL-TRIGGER-METHODS.md](DEVIL-TRIGGER-METHODS.md) | DT sub-step/direct/hybrid post-mortem + recipes |
 | [DEATH-TOAST-SCOPE.md](DEATH-TOAST-SCOPE.md) | death Continue/Warp toast port scope |
+| [WOLF-GUARD-SCOPE.md](WOLF-GUARD-SCOPE.md) | wolf guard/parry (Midna's Shield) design scope |
 | [FLURRY-RUSH-PLAN.md](FLURRY-RUSH-PLAN.md) | Flurry Rush status + remaining steps |
 | [LINUX-HOOK-COVERAGE.md](LINUX-HOOK-COVERAGE.md) | Linux inert-hook plan (Routes 1-3) |
 | [UPSTREAM-LINUX-STATICS.md](UPSTREAM-LINUX-STATICS.md) | upstream bug report (symgen ELF statics) |

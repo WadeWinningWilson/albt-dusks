@@ -23,6 +23,8 @@
 #include "shield_adapt.h"
 #include "parry_master.h"
 #include "wolf_combat.h"
+#include "wolf_guard.h"
+#include "devil_trigger.h"
 #include "shield_mod.h"
 #include "shield_game.h"
 #include "f_op/f_op_actor.h"
@@ -548,11 +550,29 @@ void playBashDenySe() {
     Z2GetAudioMgr()->seStart(Z2SE_SY_ITEM_USE_CANCEL, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
 }
 
+// ============================================
+// NEW CODE — ALBW Port ("Midna's Shield" wolf guard)
+// The parry engine tests "is the guard raised?" through checkUpperGuardAnime(),
+// a human-only anime. Generalize that ONE predicate so the wolf's held-R guard
+// (dWolfGuard_isActive) drives the SAME engine — dShield_onShieldHit, the parry
+// window, tier/charge grant, durability, Parry Master — with no duplication. The
+// human path (!checkWolf) is byte-identical. See docs/WOLF-GUARD-SCOPE.md §8b.
+// ============================================
+bool guardRaised(const daAlink_c* i_link) {
+    if (i_link == NULL) {
+        return false;
+    }
+    if (i_link->checkWolf()) {
+        return dWolfGuard_isActive(i_link);
+    }
+    return i_link->checkUpperGuardAnime();
+}
+
 bool isGuardInputHeld(const daAlink_c* i_link) {
     if (albw_manual_shield_button(i_link)) {
         return true;
     }
-    return i_link->checkUpperGuardAnime();
+    return guardRaised(i_link);
 }
 
 bool isParryPressTrigger() {
@@ -1178,7 +1198,7 @@ void dShield_updateGuardTracking(daAlink_c* i_link) {
     logEquipTierIfChanged(i_link);
     sSimFrame++;
 
-    const bool guardActive = i_link->checkUpperGuardAnime() && isGuardInputHeld(i_link);
+    const bool guardActive = guardRaised(i_link) && isGuardInputHeld(i_link);
 
     if (dShield_isTestingParryReworkEnabled()) {
         if (guardActive && isParryPressTrigger()) {
@@ -1224,6 +1244,42 @@ void dShield_updateGuardTracking(daAlink_c* i_link) {
     }
 }
 
+// ============================================
+// NEW CODE — ALBW Port ("Midna's Shield" wolf guard) — parry-window bookkeeping
+// The human updateGuardTracking only runs from setShieldGuard (a human seam), so
+// in wolf form sSimFrame/sGuardOnsetFrame never advance and isInParryWindow()
+// would be dead. This minimal tracker mirrors the human onset logic keyed on the
+// wolf-guard flag. It is form-exclusive with the human tracker (setShieldGuard
+// does not run in wolf form), so the shared sSimFrame never double-advances. It
+// omits the human durability/helm/HUD block — those are step-2 held-guard
+// concerns, not the parry slice.
+// ============================================
+void dShield_updateWolfGuardTracking(daAlink_c* i_link) {
+    if (i_link == NULL || !dShield_isParryCombatEnabled() || !i_link->checkWolf()) {
+        return;
+    }
+
+    sSimFrame++;
+
+    const bool guardActive = dWolfGuard_isActive(i_link);
+    if (dShield_isTestingParryReworkEnabled()) {
+        if (guardActive && isParryPressTrigger()) {
+            sGuardOnsetFrame = sSimFrame;
+        } else if (!guardActive) {
+            sGuardOnsetFrame = 0;
+        }
+    } else {
+        if (guardActive && !sWasGuardActive) {
+            sGuardOnsetFrame = sSimFrame;
+        } else if (!guardActive) {
+            sGuardOnsetFrame = 0;
+        }
+    }
+
+    sWasGuardActive = guardActive;
+    clampChargesToTier(i_link);
+}
+
 bool dShield_onShieldHit(daAlink_c* i_link, int i_atSpl, fopAc_ac_c* i_attacker) {
     if (!dShield_isParryCombatEnabled()) {
         return false;
@@ -1231,7 +1287,7 @@ bool dShield_onShieldHit(daAlink_c* i_link, int i_atSpl, fopAc_ac_c* i_attacker)
 
     registerCombatEnemy(i_attacker);
 
-    if (!i_link->checkUpperGuardAnime() ||
+    if (!guardRaised(i_link) ||
         (isGuardBreakAttack(i_atSpl) && !dShield_shouldDeferGuardBreak(i_atSpl, i_attacker))) {
         return false;
     }
@@ -1267,6 +1323,11 @@ bool dShield_onShieldHit(daAlink_c* i_link, int i_atSpl, fopAc_ac_c* i_attacker)
 
     dParryMaster_onPerfectParry();
 
+    // Generalized DT parry-opening (DT §7): a parry on an enraged enemy opens an
+    // elongated window that lifts its enrage (as-if-bashed). Shared by human and
+    // wolf — both reach here. No-op unless the attacker is DT-armed.
+    dAlbwDevil_openGuardWindow(i_attacker);
+
     return true;
 }
 
@@ -1277,6 +1338,23 @@ void dShield_playParrySuccessFeedback(daAlink_c* i_link, const cXyz* i_hitPos) {
 
     albw_shield_game::set_hit_mark(2, i_link, i_hitPos, NULL, NULL, 0);
     Z2GetAudioMgr()->seStart(Z2SE_EN_TN_SHIELD_BND, i_hitPos, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
+}
+
+// ============================================
+// NEW CODE — ALBW Port ("Midna's Shield") — wolf parry feedback.
+// The human path's spark+clang above is behind kTestingParryReworkEnabled
+// (compiled OFF), so it is dead in normal play. The wolf parry wants that juice
+// now, so this is the same spark + metallic Z2SE_EN_TN_SHIELD_BND clang gated
+// only on parry combat — not the testing flag.
+// ============================================
+void dShield_playWolfParryFeedback(daAlink_c* i_link, const cXyz* i_hitPos) {
+    if (!dShield_isParryCombatEnabled() || i_link == NULL || i_hitPos == NULL) {
+        return;
+    }
+
+    // Spark only. The metallic clang (Z2SE_EN_TN_SHIELD_BND) was removed per user
+    // — the parry's charge-earn sound already reads well enough.
+    albw_shield_game::set_hit_mark(2, i_link, i_hitPos, NULL, NULL, 0);
 }
 
 void dShield_pollGuardAttackHit(daAlink_c* i_link) {
@@ -1294,7 +1372,14 @@ bool dShield_onBlockHit(daAlink_c* i_link, int i_atSpl, bool i_perfect, fopAc_ac
         return false;
     }
 
-    if (i_link->mEquipItem == dItemNo_IRONBALL_e || !i_link->checkShieldGet() || isGuardBreakAttack(i_atSpl)) {
+    // Wolf-aware (wolf guard): the wolf has no shield ITEM (checkShieldGet is
+    // false) and blocks guard-break swings too, so lift both of those gates for
+    // the wolf — it inherits Link's equipped shield, so the durability tier still
+    // resolves. Human path is unchanged.
+    const bool isWolf = i_link->checkWolf();
+    if (i_link->mEquipItem == dItemNo_IRONBALL_e ||
+        (!i_link->checkShieldGet() && !isWolf) ||
+        (isGuardBreakAttack(i_atSpl) && !isWolf)) {
         return false;
     }
 

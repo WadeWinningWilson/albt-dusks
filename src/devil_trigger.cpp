@@ -31,6 +31,17 @@ constexpr int kMaxArmed = 32;
 fpc_ProcID sArmed[kMaxArmed] = {};
 int        sArmedCount = 0;
 
+// Generalized "parry opens the enemy" window, parallel to sArmed[] (same slot).
+// A parry sets it; tickActor decrements it; DT-enforced actors lift enrage while
+// it is > 0. Not Darknut-specific — any armed enemy inherits the opening.
+constexpr int kDevilParryOpenFrames = 90;  // elongated vs a bash opener (~40)
+int sGuardOpenFrames[kMaxArmed] = {};
+
+// One-shot "a parry just opened this enemy" flag, parallel to sArmed[]. Set by
+// openGuardWindow, consumed exactly once by the actor's enforcement so the
+// bashed-reaction fires ONCE per parry (not every frame the window is open).
+bool sReactionPending[kMaxArmed] = {};
+
 constexpr int kMaxOverrides = 8;
 struct HealthOverride {
     short profName;
@@ -128,7 +139,11 @@ void dAlbwDevil_tickActor(fopAc_ac_c* actor) {
     if (!enabled() || actor == NULL) {
         return;
     }
-    if (armedIndex(fopAcM_GetID(actor)) >= 0) {
+    const int armedSlot = armedIndex(fopAcM_GetID(actor));
+    if (armedSlot >= 0) {
+        if (sGuardOpenFrames[armedSlot] > 0) {
+            sGuardOpenFrames[armedSlot]--;  // tick the parry-open window
+        }
         return;  // already armed - latched
     }
     if (!dAlbwDevil_isEligible(actor)) {
@@ -143,6 +158,8 @@ void dAlbwDevil_tickActor(fopAc_ac_c* actor) {
         return;  // full: fail closed, never overwrite another actor's slot
     }
 
+    sGuardOpenFrames[sArmedCount] = 0;
+    sReactionPending[sArmedCount] = false;
     sArmed[sArmedCount++] = fopAcM_GetID(actor);
 #if ALBW_DEVIL_PROBE
     DuskLog.info("[devil] ARM name={} frac={} armed={}/{}", (int)fopAcM_GetName(actor), frac,
@@ -159,10 +176,50 @@ void dAlbwDevil_forget(fopAc_ac_c* actor) {
         return;
     }
     sArmed[i] = sArmed[sArmedCount - 1];
+    sGuardOpenFrames[i] = sGuardOpenFrames[sArmedCount - 1];  // keep the window parallel
+    sReactionPending[i] = sReactionPending[sArmedCount - 1];
     --sArmedCount;
 #if ALBW_DEVIL_PROBE
     DuskLog.info("[devil] FORGET name={} armed={}", (int)fopAcM_GetName(actor), sArmedCount);
 #endif
+}
+
+// ============================================
+// Generalized parry-opening (DT §7). openGuardWindow is called from the shared
+// parry seam (dShield_onShieldHit) for whatever enemy was parried — human or
+// wolf. Only an armed (enraged) enemy has an opening to force; on anyone else it
+// is a no-op. isGuardOpen is consulted by each DT-enforced actor to lift enrage.
+// ============================================
+void dAlbwDevil_openGuardWindow(fopAc_ac_c* actor) {
+    if (!enabled() || actor == NULL) {
+        return;
+    }
+    const int i = armedIndex(fopAcM_GetID(actor));
+    if (i < 0) {
+        return;  // not enraged — nothing to open
+    }
+    sGuardOpenFrames[i] = kDevilParryOpenFrames;
+    sReactionPending[i] = true;  // arm the one-shot bashed-reaction for this parry
+}
+
+bool dAlbwDevil_consumeOpenReaction(fopAc_ac_c* actor) {
+    if (!enabled() || actor == NULL) {
+        return false;
+    }
+    const int i = armedIndex(fopAcM_GetID(actor));
+    if (i < 0 || !sReactionPending[i]) {
+        return false;
+    }
+    sReactionPending[i] = false;  // once per parry
+    return true;
+}
+
+bool dAlbwDevil_isGuardOpen(fopAc_ac_c* actor) {
+    if (!enabled() || actor == NULL) {
+        return false;
+    }
+    const int i = armedIndex(fopAcM_GetID(actor));
+    return i >= 0 && sGuardOpenFrames[i] > 0;
 }
 
 // ============================================

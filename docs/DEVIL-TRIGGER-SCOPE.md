@@ -216,12 +216,42 @@ and it would look like the feature "working" right up until nothing dies.
 
 ---
 
-## 7. Perfect-parry openings (user design, planned — no code)
+## 7. Perfect-parry openings — ✅ BUILT (generalized, not Darknut-specific)
+
+**Implemented as a generic DT policy primitive (`devil_trigger.{h,cpp}`), green,
+check_hooks clean.** A per-armed-enemy guard-open window (`sGuardOpenFrames[]`,
+parallel to `sArmed[]`, `kDevilParryOpenFrames = 90`, ticked down in
+`dAlbwDevil_tickActor`). `dAlbwDevil_openGuardWindow(actor)` sets it (no-op unless
+the enemy is armed); `dAlbwDevil_isGuardOpen(actor)` reads it.
+
+- **Set from the shared parry seam:** `dShield_onShieldHit` (which BOTH human and
+  wolf parries call) opens the window on the parried enemy. One wiring point,
+  human + wolf covered, and generic to any enemy.
+- **Consumed per DT-enforced actor:** each actor lifts its enrage while the window
+  is open. The Darknut (`btn_parry.cpp`) adds `!dAlbwDevil_isGuardOpen(self)` to
+  its no-flinch condition, so during the window stagger transitions
+  (ACT_YOROKE/DAMAGEH/DAMAGEL) are allowed again — the enemy reacts to hits, i.e.
+  opens. Future DT-enforced enemies inherit the window for free; they just consult
+  `isGuardOpen` in their own enrage enforcement. **Nothing calls the B_TN-only
+  `albwBeginGuardOpenWindow` from the shared path — that was the un-generalized
+  version this replaces.**
+
+This is the piece that makes a wolf/human parry *visibly do something* to an
+enraged enemy (the WOLF-GUARD test dependency).
 
 An enraged enemy is harder to open: the bash guard-window is shorter under
 Devil Trigger (the sub-step ticks `field_0xaa2` twice, 90 -> 45). The user's
 answer is not only to fix that halving but to add a **skill-rewarded counter**:
-a perfect parry against a DT enemy creates a new opening.
+a perfect parry against a DT enemy **automatically** makes it react as if
+bashed, creating a new, *elongated* opening (the user: "elongated by one of our
+three ways to do that" — pick the widening approach here).
+
+> **Unified for human AND wolf, and automatic.** Against a DT enemy, a parry
+> *automatically* makes the enemy react as if it had been bashed — it fires the
+> (elongated) guard-open window itself. Human Link and wolf Link
+> ([WOLF-GUARD-SCOPE.md](WOLF-GUARD-SCOPE.md)) share this one rule. This is *why*
+> the wolf needs no bash (WOLF-GUARD §6b): the reactive parry already delivers
+> the opening in every case, so there is no proactive-bash job left to do.
 
 **This reuses a native seam we already ported — it is not a new system.** The
 Darknut already has `albwBeginGuardOpenWindow(u8 frames)` and

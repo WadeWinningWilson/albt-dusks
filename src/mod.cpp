@@ -28,6 +28,7 @@
 #include "parry_hooks.h"
 #include "wolf_arts.h"
 #include "wolf_combat.h"
+#include "wolf_guard.h"
 #include "end_game_transform.h"
 #include "hurricane_spin.h"
 #include "deku_leaf.h"
@@ -221,6 +222,7 @@ MOD_EXPORT ModResult mod_initialize(ModError* error) {
         albw_sim_time_scale_hooks_init(error) != MOD_OK ||
         albw_flurry_init(error) != MOD_OK ||
         albw_wolf_combat_init(error) != MOD_OK ||
+        albw_wolf_guard_init(error) != MOD_OK ||
         albw_e_s1_wolf_pack_init(error) != MOD_OK ||
         albw_wolf_charge_art_init(error) != MOD_OK ||
         albw_wolf_howl_combat_init(error) != MOD_OK ||

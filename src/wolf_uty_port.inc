@@ -530,9 +530,10 @@ fopAc_ac_c* albw_wolf_cc_at_check(fopAc_ac_c* i_enemy, dCcU_AtInfo* i_AtInfo) {
                     !albw_wolf_combat_howl_active() &&  // [PORT-TRANSLATED] fork mWolfCombatHowlActive
                     i_AtInfo->mAttackPower > 0)
                 {
-                    // Tally lives in dAlbwWolfCombat_onBiteConnect (alpha cleanup:
-                    // extracted so hang-bite/chest-mash paths that bypass
-                    // albw_wolf_cc_at_check can award the same economy).
+                    // Clean bite = 3/15. (A GUARDED bite never reaches here — the
+                    // guard/armor absorbs it before the enemy's cc_at_check runs — so
+                    // §4a's guarded-bite charge is awarded from the wolf-AT poll in
+                    // wolf_guard_hooks instead, deduped against this frame tag.)
                     dAlbwWolfCombat_onBiteConnect();
                 }
 

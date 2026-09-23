@@ -14,6 +14,7 @@
 #include "potion.h"
 #include "shade_refuge.h"
 #include "wolf_combat.h"
+#include "wolf_guard.h"
 #include "outfit.h"
 #include "wardrobe.h"
 #include "sumo_test.h"
@@ -65,6 +66,7 @@ enum VisibleKind {
     VISIBLE_WOLF_HOWL,        // fork d_albw_rental.cpp:306
     VISIBLE_MIDNA_ARM,        // fork d_albw_rental.cpp:307
     VISIBLE_WOLF_CHARGE,      // fork d_albw_rental.cpp:308
+    VISIBLE_WOLF_GUARD,       // "Midna's Shield" — wolf guard/parry (mod-added)
 };
 
 struct ALBWRentalEntry {
@@ -558,7 +560,7 @@ bool categoryHasContent(ALBWShopCategory cat) {
         }
         // fork d_albw_rental.cpp:730/:740/:752
         if (dAlbwWolfArts_shouldShowHowlShopRow() || dAlbwWolfArts_shouldShowArmShopRow() ||
-            dAlbwWolfArts_shouldShowChargeShopRow()) {
+            dAlbwWolfArts_shouldShowChargeShopRow() || dWolfGuard_shouldShowShopRow()) {
             return true;
         }
         if (albw_oocoo_can_show_in_shop()) {
@@ -676,6 +678,10 @@ void rebuildVisibleList() {
         // fork d_albw_rental.cpp:752 - 3rd wolf charge pip (after Master Sword).
         if (dAlbwWolfArts_shouldShowChargeShopRow()) {
             appendVisible(VISIBLE_WOLF_CHARGE, -1, true);
+        }
+        // "Midna's Shield" — wolf guard/parry, available as soon as the shop opens.
+        if (dWolfGuard_shouldShowShopRow()) {
+            appendVisible(VISIBLE_WOLF_GUARD, -1, true);
         }
 
         // fork d_albw_rental.cpp:853 - "Return to Last Shade Watcher" sits
@@ -878,6 +884,30 @@ void tryPurchase(int visIdx) {
                         : row.kind == VISIBLE_MIDNA_ARM ? dAlbwWolfArts_tryPurchaseArm()
                                                         : dAlbwWolfArts_tryPurchaseChargeUpgrade();
         if (!ok) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        setRupees((u16)(rupees - (u16)price));
+        sPurchasedThisSession = true;
+        sJustPurchased = true;
+        rebuildActivePages();
+        rebuildVisibleList();
+        return;
+    }
+
+    // "Midna's Shield" — wolf guard/parry. Same state-purchase shape; the unlock
+    // persists in config.json (dWolfGuard_tryPurchase), never the save file.
+    if (row.kind == VISIBLE_WOLF_GUARD) {
+        const int price = dWolfGuard_getShopPrice();
+        if (price <= 0) {
+            return;
+        }
+        const u16 rupees = getRupees();
+        if (rupees < (u16)price) {
+            sJustFailedPurchase = true;
+            return;
+        }
+        if (!dWolfGuard_tryPurchase()) {
             sJustFailedPurchase = true;
             return;
         }
@@ -1358,6 +1388,14 @@ const dALBWVisibleEntry* dALBWRental_getVisibleList(int* outCount) {
             pub.desc = dAlbwWolfArts_getChargeShopDesc();
             pub.itemNo = 0xFD;
             pub.customIconName = "wolf_howl";  // reuse wolf silhouette until dedicated art
+            pub.showNameWhenSoldOut = true;
+        } else if (row.kind == VISIBLE_WOLF_GUARD) {
+            pub.name = dWolfGuard_getShopName();
+            pub.price = row.purchasable ? dWolfGuard_getShopPrice() : 0;
+            pub.purchasable = row.purchasable;
+            pub.desc = dWolfGuard_getShopDesc();
+            pub.itemNo = 0xFD;
+            pub.customIconName = "midna_arm";  // reuse Midna silhouette until dedicated art
             pub.showNameWhenSoldOut = true;
         } else if (row.kind == VISIBLE_DEITY) {
             // fork d_albw_rental.cpp:1814

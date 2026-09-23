@@ -12,6 +12,8 @@ bool dAlbwWolfCombat_isEnabled();
 
 void dAlbwWolfCombat_onBiteConnect();
 void dAlbwWolfCombat_onChestMashHit();
+void dAlbwWolfCombat_onParry();  // "Midna's Shield": a wolf parry feeds charge (1/15)
+void dAlbwWolfCombat_onGuardedBite();  // §4a (DEFERRED): guarded-attack charge grant (1/15)
 void dAlbwWolfCombat_fillCharges();
 
 u8 albw_wolf_get_charge_count();

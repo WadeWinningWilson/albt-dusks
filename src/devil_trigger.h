@@ -54,5 +54,21 @@ void dAlbwDevil_forget(fopAc_ac_c* actor);  // death / delete
 // Trigger (a safe failure, but one that silently excludes it).
 bool dAlbwDevil_isAttackLive(fopAc_ac_c* actor);
 
+// ---- generalized parry-opening (DT §7) ----
+//
+// A parry on an ARMED (enraged) enemy opens an elongated guard window. This is
+// the GENERIC primitive — not Darknut-specific: dShield_onShieldHit calls
+// openGuardWindow for whatever enemy was parried, and each DT-enforced actor
+// consults isGuardOpen to lift its enrage for the window's duration (the Darknut
+// lifts its no-flinch immunity, so hits stagger it — the opening). No-op on an
+// unarmed enemy: only an enraged one has an opening to force.
+void dAlbwDevil_openGuardWindow(fopAc_ac_c* actor);
+bool dAlbwDevil_isGuardOpen(fopAc_ac_c* actor);
+
+// True exactly ONCE per parry (per openGuardWindow call): the actor's enforcement
+// calls this to fire the bashed-reaction a single time, not every frame the
+// window is open. Fixes the "reacts 3 times" repeat.
+bool dAlbwDevil_consumeOpenReaction(fopAc_ac_c* actor);
+
 ModResult albw_devil_trigger_init(ModError* error);
 void albw_devil_trigger_reset();

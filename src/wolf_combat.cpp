@@ -19,6 +19,7 @@
 
 #include "wolf_combat.h"
 #include "wolf_charge_hud.h"
+#include "albw_save_flags.h"
 #include "focused_arts.h"  // dFocusedArts_isMdForcedWolfActive (charge-heal parity)
 #include "albw_game.h"
 #include "albw_common.h"
@@ -667,7 +668,7 @@ u8 albw_wolf_get_charge_count() {
 }
 
 u8 albw_wolf_get_max_charges() {
-    return albw_game::is_event_bit(dSv_event_flag_c::F_0814) ? 3 : 2;
+    return albw_save_flag_get(ALBW_FLAG_CHARGE_PURCHASED) ? 3 : 2;
 }
 
 void albw_wolf_spend_charge(u8 amount) {
@@ -688,16 +689,17 @@ void albw_wolf_spend_charge(u8 amount) {
 // docs/wolf-combat-layers-research.md §R0).
 // ============================================
 namespace {
-constexpr int kWolfHowlUnlockedBit = 713;  // per-save event bit (714/715 reserved: punch/giant)
 constexpr int kWolfHowlShopPrice   = 100;
 }  // namespace
 
+// Purchase persists in config.json (ALBW_FLAG_HOWL_PURCHASED), NEVER the save —
+// the old saveBitLabels[713] write was into the 710-714 event-REGISTER range.
 bool dAlbwWolfArts_isHowlUnlocked() {
-    return albw_game::is_event_bit(dSv_event_flag_c::saveBitLabels[kWolfHowlUnlockedBit]);
+    return albw_save_flag_get(ALBW_FLAG_HOWL_PURCHASED);
 }
 
 void dAlbwWolfArts_unlockHowl() {
-    albw_game::on_event_bit(dSv_event_flag_c::saveBitLabels[kWolfHowlUnlockedBit]);
+    albw_save_flag_set(ALBW_FLAG_HOWL_PURCHASED, true);
 }
 
 bool dAlbwWolfArts_shouldShowHowlShopRow() {
@@ -738,16 +740,17 @@ bool dAlbwWolfArts_tryPurchaseHowl() {
 // TODO until that milestone's flag is pinned (docs/wolf-combat-layers-research.md §R0).
 // ============================================
 namespace {
-constexpr int kMidnaArmUnlockedBit = 714;  // per-save event bit (715 reserved: giant)
 constexpr int kMidnaArmShopPrice   = 100;
 }  // namespace
 
+// Purchase persists in config.json (ALBW_FLAG_ARM_PURCHASED), NEVER the save —
+// the old saveBitLabels[714] write was into the 710-714 event-REGISTER range.
 bool dAlbwWolfArts_isArmUnlocked() {
-    return albw_game::is_event_bit(dSv_event_flag_c::saveBitLabels[kMidnaArmUnlockedBit]);
+    return albw_save_flag_get(ALBW_FLAG_ARM_PURCHASED);
 }
 
 void dAlbwWolfArts_unlockArm() {
-    albw_game::on_event_bit(dSv_event_flag_c::saveBitLabels[kMidnaArmUnlockedBit]);
+    albw_save_flag_set(ALBW_FLAG_ARM_PURCHASED, true);
 }
 
 bool dAlbwWolfArts_shouldShowArmShopRow() {
@@ -768,9 +771,9 @@ const char* dAlbwWolfArts_getArmShopName() {
 }
 
 const char* dAlbwWolfArts_getArmShopDesc() {
-    return "It can't be real, it can't be...I h-had one of those dreams again. This time, "
-           "I swear to you, a snake slithered and loomed over me. It told me to gift a "
-           "blessing to a being of Twilight...please take this.";
+    // Resized (user 2026-09-22) to fit the shop page.
+    return "It c-cant be...I swear to you, this time I dreamt a giant snake loomed over me. "
+           "It told me to gift a blessing to a being of Twilight...please take this.";
 }
 
 bool dAlbwWolfArts_tryPurchaseArm() {
@@ -789,12 +792,14 @@ namespace {
 constexpr int kWolfChargeShopPrice = 100;
 }
 
+// Purchase persists in config.json (ALBW_FLAG_CHARGE_PURCHASED), NEVER the save —
+// the old F_0814 write touched the player's save file for mod-owned state.
 bool dAlbwWolfArts_isChargeUpgradeUnlocked() {
-    return albw_game::is_event_bit(dSv_event_flag_c::F_0814);
+    return albw_save_flag_get(ALBW_FLAG_CHARGE_PURCHASED);
 }
 
 void dAlbwWolfArts_unlockChargeUpgrade() {
-    albw_game::on_event_bit(dSv_event_flag_c::F_0814);
+    albw_save_flag_set(ALBW_FLAG_CHARGE_PURCHASED, true);
 }
 
 bool dAlbwWolfArts_shouldShowChargeShopRow() {
@@ -976,6 +981,25 @@ void dAlbwWolfCombat_onBiteConnect() {
 
 void dAlbwWolfCombat_onChestMashHit() {
     addWolfChargeSteps(kWolfChargeMashSteps);
+}
+
+// ============================================
+// NEW CODE — ALBW Port ("Midna's Shield") — a successful wolf PARRY feeds the
+// charge counter at mash-parity (1/15). Parry-only and skill-gated; a held block
+// never feeds it (turtle-farm guard). See docs/WOLF-GUARD-SCOPE.md §6c.
+// ============================================
+void dAlbwWolfCombat_onParry() {
+    addWolfChargeSteps(kWolfChargeMashSteps);
+}
+
+// ============================================
+// NEW CODE — ALBW Port (§4a, DEFERRED) — the grant for a guarded attack (1/15,
+// weaker than a clean bite's 3/15). Kept ready for when §4a is wired to a
+// wolf-side "any connecting hit" detector; not currently called (the guard-detect
+// seam is unresolved — see CURRENT-STATE §4a).
+// ============================================
+void dAlbwWolfCombat_onGuardedBite() {
+    addWolfChargeSteps(kWolfChargeMashSteps);  // 1/15
 }
 
 void dAlbwWolfCombat_fillCharges() {

@@ -13,4 +13,4 @@
 //
 // MUST be 0 before any release (docs/RELEASE-PROCEDURE.md step 1).
 // ============================================
-#define ALBW_DEVIL_PROBE 1
+#define ALBW_DEVIL_PROBE 0

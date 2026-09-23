@@ -506,6 +506,38 @@ HookAction on_btn_action_pre(ModContext*, void* args, void*, void*) {
     AlbwBtn_c* self = self_of(args);
     if (self != nullptr) {
         self->AlbwBtn_c::albwTickGuardOpenWindow();
+        // ============================================
+        // Generalized DT parry-opening (DT §7): when a parry set the DT window on
+        // this enraged Darknut, make it REACT AS IF BASHED. This is the native
+        // reaction from albwTryApplyBashGuardBreakFromHit — head-lock + a
+        // phase-appropriate stagger (ACT_YOROKE unarmored / ACT_GUARDH armored) +
+        // the guard-open window — but WITHOUT its bash-credit gate
+        // (dShield_tryGrantHelmPunishCredit needs a recent bash SPEND, which a
+        // parry has not made). A parry earns the opening directly, so the gate is
+        // the one omission. Fires ~once per parry (gated on field_0xaa2 == 0, so it
+        // re-arms only after the previous open decays). setActionMode via the
+        // AlbwBtn_c:: qualified call — the same path the bash reaction uses.
+        // ============================================
+        // Fire the bashed-reaction exactly ONCE per parry — consumeOpenReaction
+        // is true only on the frame a parry set the window (fixes the prior
+        // field_0xaa2==0 gate re-firing it 2-3 times as the window decayed).
+        if (dAlbwDevil_consumeOpenReaction(self) &&
+            self->mActionMode1 != daB_TN_c::ACT_CHANGEDEMO &&
+            self->mActionMode1 != daB_TN_c::ACT_ENDING)
+        {
+            self->setSwordAtBit(0);
+            self->onHeadLockFlg();
+            if (self->albwIsUnarmoredPhase()) {
+                self->AlbwBtn_c::albwBeginGuardOpenWindow(75);
+                self->AlbwBtn_c::setActionMode(daB_TN_c::ACT_YOROKE, daB_TN_c::ACTION2_0_e);
+            } else {
+                self->AlbwBtn_c::albwBeginGuardOpenWindow(90);
+                self->AlbwBtn_c::setActionMode(daB_TN_c::ACT_GUARDH, daB_TN_c::ACTION2_0_e);
+            }
+#if ALBW_DEVIL_PROBE
+            self->albwDebugLogEvent("dt_parry_react");
+#endif
+        }
     }
     return HOOK_CONTINUE;
 }
@@ -621,7 +653,7 @@ HookAction on_btn_set_action_mode_pre(ModContext*, void* args, void*, void*) {
     // the one that would look like it working until nothing died.
     // ============================================
     const int mode = mods::arg<int>(args, 1);
-    if (dAlbwDevil_isArmed(self) &&
+    if (dAlbwDevil_isArmed(self) && !dAlbwDevil_isGuardOpen(self) &&
         (mode == daB_TN_c::ACT_YOROKE || mode == daB_TN_c::ACT_DAMAGEH ||
          mode == daB_TN_c::ACT_DAMAGEL))
     {

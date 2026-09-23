@@ -20,6 +20,10 @@ void dShield_resetSession();
 
 void dShield_updateGuardTracking(daAlink_c* i_link);
 
+// "Midna's Shield" (wolf guard): advances the shared parry window in wolf form,
+// where the human updateGuardTracking never runs. See WOLF-GUARD-SCOPE.md §8b.
+void dShield_updateWolfGuardTracking(daAlink_c* i_link);
+
 // Called after mGuardAtCps is registered (collision runs after procGuardAttack).
 void dShield_pollGuardAttackHit(daAlink_c* i_link);
 
@@ -50,6 +54,9 @@ f32 dShield_getDurabilityMeterWidthScale();
 bool dShield_onShieldHit(daAlink_c* i_link, int i_atSpl, fopAc_ac_c* i_attacker);
 
 void dShield_playParrySuccessFeedback(daAlink_c* i_link, const cXyz* i_hitPos);
+
+// Wolf parry feedback: spark + metallic clang, un-gated (see shield.cpp).
+void dShield_playWolfParryFeedback(daAlink_c* i_link, const cXyz* i_hitPos);
 
 // Guard-break tier (AtSpl 9/10/11): defer vanilla instant break for parry-eligible enemies.
 // Mount/spear actors (King Bulblin, horseback Ganondorf) keep vanilla behavior.

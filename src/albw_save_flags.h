@@ -83,6 +83,22 @@ enum AlbwSaveFlag {
     // persists HERE, not in the save, like every other mod-owned flag.
     ALBW_FLAG_FLURRY_TIER,
 
+    // Wolf guard (Midna's Shield) shop purchase. Config-backed like every other
+    // mod-owned unlock — NEVER a save event bit. Shop availability reads a story
+    // gate (no write); True ALBW overrides. See docs/WOLF-GUARD-SCOPE.md §8.
+    ALBW_FLAG_WOLF_GUARD_PURCHASED,
+
+    // Wolf-art shop PURCHASES, moved off the save file. These used to write save
+    // event bits — howl saveBitLabels[713] and arm [714] are in the 710-714
+    // EVENT-REGISTER range this allocator exists to keep us out of (corrupting in
+    // both directions), and charge wrote F_0814. Availability still reads the
+    // story gate (is_dark_clear_lv / F_0264) — a read is fine; only the purchase
+    // moved here. Existing owners re-unlock once (registers can't be migrated
+    // reliably). See docs/WOLF-GUARD-SCOPE.md §8.
+    ALBW_FLAG_HOWL_PURCHASED,
+    ALBW_FLAG_ARM_PURCHASED,
+    ALBW_FLAG_CHARGE_PURCHASED,
+
     ALBW_FLAG_COUNT,
 };
 
